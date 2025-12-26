@@ -1,64 +1,388 @@
-import Image from "next/image";
+'use client';
+
+import { useMemo, useState, useEffect } from 'react';
+import { useLocalStorage } from 'primereact/hooks';
+import DataTableComponent from '@/components/DataTable';
+import DataTableControls from '@/components/DataTableControls';
+import { useCollaboration } from '@/lib/collaboration';
+import { uniq, flatMap, keys, isEmpty } from 'lodash';
+
+// Custom hook for localStorage with proper JSON serialization for booleans
+function useLocalStorageBoolean(key, defaultValue) {
+  const [value, setValue] = useState(() => {
+    if (typeof window === 'undefined') return defaultValue;
+    try {
+      const item = window.localStorage.getItem(key);
+      if (item === null || item === undefined) return defaultValue;
+      const parsed = JSON.parse(item);
+      return typeof parsed === 'boolean' ? parsed : defaultValue;
+    } catch (error) {
+      try {
+        window.localStorage.removeItem(key);
+      } catch { }
+      return defaultValue;
+    }
+  });
+
+  // Sync with localStorage on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const item = window.localStorage.getItem(key);
+      if (item !== null && item !== undefined) {
+        const parsed = JSON.parse(item);
+        if (typeof parsed === 'boolean') {
+          setValue(parsed);
+        }
+      }
+    } catch (error) {
+      // Ignore errors during sync
+    }
+  }, [key]);
+
+  const setStoredValue = (newValue) => {
+    try {
+      if (typeof newValue === 'boolean') {
+        const serialized = JSON.stringify(newValue);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(key, serialized);
+        }
+        setValue(newValue);
+      } else {
+        console.warn(`Attempted to set non-boolean value for "${key}":`, newValue);
+      }
+    } catch (error) {
+      console.error(`Error setting localStorage key "${key}":`, error);
+    }
+  };
+
+  return [value, setStoredValue];
+}
+
+// Custom hook for localStorage with proper JSON serialization for arrays
+function useLocalStorageArray(key, defaultValue) {
+  const [value, setValue] = useState(() => {
+    if (typeof window === 'undefined') return defaultValue;
+    try {
+      const item = window.localStorage.getItem(key);
+      if (item === null || item === undefined) return defaultValue;
+      const parsed = JSON.parse(item);
+      return Array.isArray(parsed) ? parsed : defaultValue;
+    } catch (error) {
+      // If parsing fails, try to clean up invalid data
+      try {
+        window.localStorage.removeItem(key);
+      } catch { }
+      return defaultValue;
+    }
+  });
+
+  // Sync with localStorage on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const item = window.localStorage.getItem(key);
+      if (item !== null && item !== undefined) {
+        const parsed = JSON.parse(item);
+        if (Array.isArray(parsed)) {
+          setValue(parsed);
+        }
+      }
+    } catch (error) {
+      // Ignore errors during sync
+    }
+  }, [key]);
+
+  const setStoredValue = (newValue) => {
+    try {
+      if (Array.isArray(newValue)) {
+        const serialized = JSON.stringify(newValue);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(key, serialized);
+        }
+        setValue(newValue);
+      } else {
+        console.warn(`Attempted to set non-array value for "${key}":`, newValue);
+      }
+    } catch (error) {
+      console.error(`Error setting localStorage key "${key}":`, error);
+    }
+  };
+
+  return [value, setStoredValue];
+}
 
 export default function Home() {
+  const { 
+    data: collaborationData, 
+    availableTeams, 
+    availableHqs, 
+    selection, 
+    status, 
+    peers, 
+    actions 
+  } = useCollaboration();
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [enableSort, setEnableSort] = useLocalStorageBoolean('datatable-enableSort', true);
+  const [enableFilter, setEnableFilter] = useLocalStorageBoolean('datatable-enableFilter', true);
+  const [enableSummation, setEnableSummation] = useLocalStorageBoolean('datatable-enableSummation', true);
+  const [rowsPerPageOptionsRaw, setRowsPerPageOptionsRaw] = useLocalStorageArray('datatable-rowsPerPageOptions', [5, 10, 25, 50, 100, 200]);
+  const [textFilterColumnsRaw, setTextFilterColumnsRaw] = useLocalStorageArray('datatable-textFilterColumns', []);
+  const [redFieldsRaw, setRedFieldsRaw] = useLocalStorageArray('datatable-redFields', []);
+  const [greenFieldsRaw, setGreenFieldsRaw] = useLocalStorageArray('datatable-greenFields', []);
+
+  // Mark as loaded after first render to allow localStorage values to initialize
+  useEffect(() => {
+    // Check if we're in the browser and localStorage is available
+    if (typeof window !== 'undefined' && window.localStorage) {
+      // Clean up any corrupted data
+      try {
+        // Clean up boolean values that might be stored incorrectly
+        const booleanKeys = ['datatable-enableSort', 'datatable-enableFilter', 'datatable-enableSummation'];
+        booleanKeys.forEach(key => {
+          try {
+            const item = window.localStorage.getItem(key);
+            if (item) {
+              const parsed = JSON.parse(item);
+              // If it's not a boolean, remove it
+              if (typeof parsed !== 'boolean') {
+                window.localStorage.removeItem(key);
+              }
+            }
+          } catch (error) {
+            // If parsing fails, remove the corrupted item
+            window.localStorage.removeItem(key);
+          }
+        });
+
+        const arrayKeys = {
+          'datatable-rowsPerPageOptions': { defaultValue: [5, 10, 25, 50, 100, 200], isColumnList: false },
+          'datatable-textFilterColumns': { defaultValue: [], isColumnList: true },
+          'datatable-redFields': { defaultValue: [], isColumnList: true },
+          'datatable-greenFields': { defaultValue: [], isColumnList: true }
+        };
+
+        // Check each key and validate its content
+        Object.entries(arrayKeys).forEach(([key, config]) => {
+          try {
+            const item = window.localStorage.getItem(key);
+            if (item) {
+              const parsed = JSON.parse(item);
+
+              // If it's not an array, remove it
+              if (!Array.isArray(parsed)) {
+                window.localStorage.removeItem(key);
+                return;
+              }
+
+              // If rowsPerPageOptions contains non-numbers or column-like strings, reset it
+              if (key === 'datatable-rowsPerPageOptions') {
+                const hasInvalidValues = parsed.some(v =>
+                  typeof v !== 'number' ||
+                  (typeof v === 'string' && v.includes('__'))
+                );
+                if (hasInvalidValues) {
+                  window.localStorage.removeItem(key);
+                }
+              }
+
+              // If column lists contain numbers, reset them
+              if (config.isColumnList) {
+                const hasNumbers = parsed.some(v => typeof v === 'number');
+                if (hasNumbers) {
+                  window.localStorage.removeItem(key);
+                }
+              }
+            }
+          } catch (error) {
+            // If parsing fails, remove the corrupted item
+            window.localStorage.removeItem(key);
+          }
+        });
+      } catch (error) {
+        // Ignore cleanup errors
+        console.warn('Error during localStorage cleanup:', error);
+      }
+
+      // Use requestAnimationFrame to ensure localStorage values are read after render      
+      requestAnimationFrame(() => {
+        setIsLoading(false);
+      });
+    } else {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Ensure rowsPerPageOptions is always an array
+  const rowsPerPageOptions = useMemo(() => {
+    if (!Array.isArray(rowsPerPageOptionsRaw)) {
+      return [5, 10, 25, 50, 100, 200];
+    }
+    return rowsPerPageOptionsRaw;
+  }, [rowsPerPageOptionsRaw]);
+
+  // Ensure textFilterColumns is always an array
+  const textFilterColumns = useMemo(() => {
+    if (!Array.isArray(textFilterColumnsRaw)) {
+      return [];
+    }
+    return textFilterColumnsRaw;
+  }, [textFilterColumnsRaw]);
+
+  // Ensure redFields is always an array
+  const redFields = useMemo(() => {
+    if (!Array.isArray(redFieldsRaw)) {
+      return [];
+    }
+    return redFieldsRaw;
+  }, [redFieldsRaw]);
+
+  // Ensure greenFields is always an array
+  const greenFields = useMemo(() => {
+    if (!Array.isArray(greenFieldsRaw)) {
+      return [];
+    }
+    return greenFieldsRaw;
+  }, [greenFieldsRaw]);
+
+  const setRowsPerPageOptions = (value) => {
+    if (Array.isArray(value)) {
+      setRowsPerPageOptionsRaw(value);
+    }
+  };
+
+  const setTextFilterColumns = (value) => {
+    if (Array.isArray(value)) {
+      setTextFilterColumnsRaw(value);
+    }
+  };
+
+  const setRedFields = (value) => {
+    if (Array.isArray(value)) {
+      setRedFieldsRaw(value);
+    }
+  };
+
+  const setGreenFields = (value) => {
+    if (Array.isArray(value)) {
+      setGreenFieldsRaw(value);
+    }
+  };
+
+  // Extract column names from data
+  const columns = useMemo(() => {
+    if (!Array.isArray(collaborationData) || isEmpty(collaborationData)) return [];
+    return uniq(flatMap(collaborationData, (item) =>
+      item && typeof item === 'object' ? keys(item) : []
+    ));
+  }, [collaborationData]);
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.js file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Data Table Component</h1>
+            <p className="text-xs sm:text-sm text-gray-600 mt-1">Primereact Datatable Component Playground</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 ${
+              status && status.includes('Online') ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+            }`}>
+              <div className={`w-2 h-2 rounded-full ${status && status.includes('Online') ? 'bg-green-500 animate-pulse' : 'bg-amber-500'}`}></div>
+              {status} {peers > 0 && `(${peers} peer${peers !== 1 ? 's' : ''})`}
+            </div>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+      </header>
+
+      <main className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 md:py-8">
+        {isLoading ? (
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-300 border-t-blue-600 mb-4"></div>
+              <p className="text-sm text-gray-600">Loading your preferences...</p>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 md:p-6">
+            {/* Scoped Collaboration Controls */}
+            {/* <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Month</label>
+                <select 
+                  value={selection.month} 
+                  onChange={(e) => actions.setMonth(e.target.value)}
+                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  <option value="2025-12">December 2025</option>
+                  <option value="2025-11">November 2025</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Team</label>
+                <select 
+                  value={selection.team || ''} 
+                  onChange={(e) => actions.setTeam(e.target.value)}
+                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  <option value="" disabled>Select Team</option>
+                  {availableTeams.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">HQ</label>
+                <select 
+                  value={selection.hq || ''} 
+                  onChange={(e) => actions.setHq(e.target.value)}
+                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  <option value="" disabled>Select HQ</option>
+                  {availableHqs.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
+            </div> */}
+
+            <div className="mb-4 sm:mb-6">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2">Data Table</h2>
+              <p className="text-xs sm:text-sm text-gray-600">
+                View, filter, sort, and analyze your data with advanced table controls
+              </p>
+            </div>
+
+            <DataTableControls
+              enableSort={enableSort}
+              enableFilter={enableFilter}
+              enableSummation={enableSummation}
+              rowsPerPageOptions={rowsPerPageOptions}
+              columns={columns}
+              textFilterColumns={textFilterColumns}
+              redFields={redFields}
+              greenFields={greenFields}
+              onSortChange={setEnableSort}
+              onFilterChange={setEnableFilter}
+              onSummationChange={setEnableSummation}
+              onRowsPerPageOptionsChange={setRowsPerPageOptions}
+              onTextFilterColumnsChange={setTextFilterColumns}
+              onRedFieldsChange={setRedFields}
+              onGreenFieldsChange={setGreenFields}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+
+            <DataTableComponent
+              data={collaborationData}
+              rowsPerPageOptions={rowsPerPageOptions}
+              defaultRows={rowsPerPageOptions[0] || 5}
+              scrollable={true}
+              enableSort={enableSort}
+              enableFilter={enableFilter}
+              enableSummation={enableSummation}
+              textFilterColumns={textFilterColumns}
+              redFields={redFields}
+              greenFields={greenFields}
+            />
+          </div>
+        )}
       </main>
     </div>
   );
