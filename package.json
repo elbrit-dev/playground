@@ -8,14 +8,18 @@
     "start": "next start"
   },
   "dependencies": {
-    "firebase": "^12.7.0",
+    "@plasmicapp/loader-nextjs": "^1.0.380",
+    "@plasmicapp/react-web": "^0.2.149",
+    "firebase": "^11.1.0",
     "lodash": "^4.17.21",
-    "next": "16.0.10",
+    "next": "15.1.0",
     "primeicons": "^7.0.0",
     "primereact": "^10.9.7",
-    "react": "19.2.1",
-    "react-dom": "19.2.1",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
     "xlsx": "^0.18.5",
+    "y-indexeddb": "^9.0.12",
+    "y-webrtc": "^10.3.0",
     "yjs": "^13.6.28"
   },
   "devDependencies": {

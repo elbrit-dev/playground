@@ -3,7 +3,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useLocalStorage } from 'primereact/hooks';
 import DataTableComponent from '@/components/DataTable';
-import DataTableControls from '@/components/DataTableControls';
 import data from '@/resource/data';
 import { uniq, flatMap, keys, isEmpty } from 'lodash';
 
@@ -294,24 +293,6 @@ export default function Home() {
               </p>
             </div>
 
-            <DataTableControls
-              enableSort={enableSort}
-              enableFilter={enableFilter}
-              enableSummation={enableSummation}
-              rowsPerPageOptions={rowsPerPageOptions}
-              columns={columns}
-              textFilterColumns={textFilterColumns}
-              redFields={redFields}
-              greenFields={greenFields}
-              onSortChange={setEnableSort}
-              onFilterChange={setEnableFilter}
-              onSummationChange={setEnableSummation}
-              onRowsPerPageOptionsChange={setRowsPerPageOptions}
-              onTextFilterColumnsChange={setTextFilterColumns}
-              onRedFieldsChange={setRedFields}
-              onGreenFieldsChange={setGreenFields}
-            />
-
             <DataTableComponent
               data={data}
               rowsPerPageOptions={rowsPerPageOptions}
@@ -323,6 +304,7 @@ export default function Home() {
               textFilterColumns={textFilterColumns}
               redFields={redFields}
               greenFields={greenFields}
+              // Add props to handle changes if needed, but DataTable handles local state now
             />
           </div>
         )}
