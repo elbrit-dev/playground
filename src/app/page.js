@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { useLocalStorage } from 'primereact/hooks';
 import DataTableComponent from '@/components/DataTable';
 import DataTableControls from '@/components/DataTableControls';
-import { useCollaboration } from '@/lib/collaboration';
+import data from '@/resource/data';
 import { uniq, flatMap, keys, isEmpty } from 'lodash';
 
 // Custom hook for localStorage with proper JSON serialization for booleans
@@ -113,16 +113,6 @@ function useLocalStorageArray(key, defaultValue) {
 }
 
 export default function Home() {
-  const { 
-    data: collaborationData, 
-    availableTeams, 
-    availableHqs, 
-    selection, 
-    status, 
-    peers, 
-    actions 
-  } = useCollaboration();
-
   const [isLoading, setIsLoading] = useState(true);
   const [enableSort, setEnableSort] = useLocalStorageBoolean('datatable-enableSort', true);
   const [enableFilter, setEnableFilter] = useLocalStorageBoolean('datatable-enableFilter', true);
@@ -272,28 +262,18 @@ export default function Home() {
 
   // Extract column names from data
   const columns = useMemo(() => {
-    if (!Array.isArray(collaborationData) || isEmpty(collaborationData)) return [];
-    return uniq(flatMap(collaborationData, (item) =>
+    if (!Array.isArray(data) || isEmpty(data)) return [];
+    return uniq(flatMap(data, (item) =>
       item && typeof item === 'object' ? keys(item) : []
     ));
-  }, [collaborationData]);
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Data Table Component</h1>
-            <p className="text-xs sm:text-sm text-gray-600 mt-1">Primereact Datatable Component Playground</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 ${
-              status && status.includes('Online') ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-            }`}>
-              <div className={`w-2 h-2 rounded-full ${status && status.includes('Online') ? 'bg-green-500 animate-pulse' : 'bg-amber-500'}`}></div>
-              {status} {peers > 0 && `(${peers} peer${peers !== 1 ? 's' : ''})`}
-            </div>
-          </div>
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4">
+          <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Data Table Component</h1>
+          <p className="text-xs sm:text-sm text-gray-600 mt-1">Primereact Datatable Component Playground</p>
         </div>
       </header>
 
@@ -307,43 +287,6 @@ export default function Home() {
           </div>
         ) : (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 md:p-6">
-            {/* Scoped Collaboration Controls */}
-            {/* <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Month</label>
-                <select 
-                  value={selection.month} 
-                  onChange={(e) => actions.setMonth(e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                >
-                  <option value="2025-12">December 2025</option>
-                  <option value="2025-11">November 2025</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Team</label>
-                <select 
-                  value={selection.team || ''} 
-                  onChange={(e) => actions.setTeam(e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                >
-                  <option value="" disabled>Select Team</option>
-                  {availableTeams.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">HQ</label>
-                <select 
-                  value={selection.hq || ''} 
-                  onChange={(e) => actions.setHq(e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                >
-                  <option value="" disabled>Select HQ</option>
-                  {availableHqs.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-              </div>
-            </div> */}
-
             <div className="mb-4 sm:mb-6">
               <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2">Data Table</h2>
               <p className="text-xs sm:text-sm text-gray-600">
@@ -370,7 +313,7 @@ export default function Home() {
             />
 
             <DataTableComponent
-              data={collaborationData}
+              data={data}
               rowsPerPageOptions={rowsPerPageOptions}
               defaultRows={rowsPerPageOptions[0] || 5}
               scrollable={true}

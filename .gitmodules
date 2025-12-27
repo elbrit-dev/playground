@@ -1,0 +1,3 @@
+[submodule "src/shared/components"]
+	path = src/shared/components
+	url = https://github.com/VICTORVICKIE/datatable-component.git
