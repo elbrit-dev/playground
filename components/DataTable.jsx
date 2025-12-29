@@ -493,15 +493,25 @@ const DataTableWrapper = (props) => {
       const endpointName = endpoint?.name; // 'UAT' or 'ERP'
       
       // Determine which token to use based on the endpoint name
-      let authToken = DEFAULT_AUTH_TOKEN;
+      let authToken = process.env.NEXT_PUBLIC_GRAPHQL_AUTH_TOKEN;
       if (endpointName === 'UAT' && process.env.NEXT_PUBLIC_GRAPHQL_AUTH_TOKEN_UAT) {
         authToken = process.env.NEXT_PUBLIC_GRAPHQL_AUTH_TOKEN_UAT;
       } else if (endpointName === 'ERP' && process.env.NEXT_PUBLIC_GRAPHQL_AUTH_TOKEN_ERP) {
         authToken = process.env.NEXT_PUBLIC_GRAPHQL_AUTH_TOKEN_ERP;
       }
 
+      console.log(`Executing Query on ${endpointName}:`, {
+        endpoint: endpointUrl,
+        hasToken: !!authToken,
+        tokenPreview: authToken ? `${authToken.substring(0, 5)}...` : 'none'
+      });
+
       if (!endpointUrl) {
-        throw new Error('GraphQL endpoint URL is not configured. Check your environment variables.');
+        throw new Error(`GraphQL endpoint URL for ${endpointName} is not configured.`);
+      }
+
+      if (!authToken) {
+        throw new Error(`No authentication token found for ${endpointName}. Please check your .env.local file.`);
       }
 
       let parsedVariables = {};
@@ -513,11 +523,19 @@ const DataTableWrapper = (props) => {
         }
       }
 
+      // Format the Authorization header. 
+      // Frappe sometimes uses "token key:secret" instead of "Bearer token"
+      const authHeader = authToken.includes(':') && !authToken.toLowerCase().startsWith('token ')
+        ? `token ${authToken}`
+        : (authToken.toLowerCase().startsWith('bearer ') || authToken.toLowerCase().startsWith('token ') 
+            ? authToken 
+            : `Bearer ${authToken}`);
+
       const response = await fetch(endpointUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(authToken && { 'Authorization': authToken.startsWith('Bearer ') ? authToken : `Bearer ${authToken}` }),
+          'Authorization': authHeader,
         },
         body: JSON.stringify({
           query: body,
