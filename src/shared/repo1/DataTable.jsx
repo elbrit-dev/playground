@@ -118,17 +118,76 @@ function parseToDate(value) {
 }
 
 /**
- * Format a date for display
+ * Format a date for display (includes time, seconds, and milliseconds if present)
  */
 function formatDateValue(value) {
   if (isNil(value) || value === '' || value === 0 || value === '0') return '';
   const date = parseToDate(value);
   if (!date) return String(value ?? '');
-  return date.toLocaleDateString('en-US', {
+  
+  // Check what time components are present in the original value
+  let hasTime = false;
+  let hasSeconds = false;
+  let hasMilliseconds = false;
+  
+  if (isString(value)) {
+    const trimmed = trim(value);
+    // Check for milliseconds (ISO format with milliseconds: .123 or .123Z)
+    hasMilliseconds = /\.\d{1,3}Z?$/.test(trimmed) || /\.\d{1,3}[+-]/.test(trimmed);
+    // Check for seconds
+    hasSeconds = /:\d{2}(\.|Z|[+-]|$)/.test(trimmed) || /:\d{2}:\d{2}/.test(trimmed);
+    // Check for time (hours:minutes)
+    hasTime = /T\d{2}:\d{2}/.test(trimmed) || /\d{1,2}:\d{2}/.test(trimmed);
+  } else {
+    // For numbers and Date objects, check actual time components
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    const seconds = date.getSeconds();
+    const milliseconds = date.getMilliseconds();
+    
+    hasTime = hours !== 0 || minutes !== 0 || seconds !== 0 || milliseconds !== 0;
+    hasSeconds = seconds !== 0 || milliseconds !== 0;
+    hasMilliseconds = milliseconds !== 0;
+  }
+  
+  if (!hasTime) {
+    // Format with date only
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  }
+  
+  // Build format options based on what's present
+  const formatOptions = {
     year: 'numeric',
     month: 'short',
-    day: 'numeric'
-  });
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  };
+  
+  if (hasSeconds) {
+    formatOptions.second = '2-digit';
+  }
+  
+  // Format with date and time (seconds included if present)
+  let formatted = date.toLocaleString('en-US', formatOptions);
+  
+  // Add milliseconds if present (toLocaleString doesn't support milliseconds directly)
+  if (hasMilliseconds) {
+    const ms = date.getMilliseconds();
+    // Insert milliseconds after seconds
+    if (hasSeconds) {
+      formatted = formatted.replace(/(:\d{2})/, `$1.${String(ms).padStart(3, '0')}`);
+    } else {
+      formatted += `.${String(ms).padStart(3, '0')}`;
+    }
+  }
+  
+  return formatted;
 }
 
 /**
@@ -872,6 +931,7 @@ export default function DataTableComponent({
   targetInnerGroupField = null, // Field in target data that maps to innerGroupField
   targetValueField = null, // Field in target data that contains the target value
   actualValueField = null, // Field in data that contains the actual value to compare
+  enableFullscreenDialog = true, // Enable/disable fullscreen dialog feature
 }) {
   const [first, setFirst] = useState(0);
   const [rows, setRows] = useState(defaultRows);
@@ -1026,6 +1086,39 @@ export default function DataTableComponent({
     return outerGroupField && innerGroupField && targetData && targetOuterGroupField && targetInnerGroupField && targetValueField && actualValueField && targetLookup.size > 0;
   }, [outerGroupField, innerGroupField, targetData, targetOuterGroupField, targetInnerGroupField, targetValueField, actualValueField, targetLookup]);
 
+  // Helper function to get computed value for target columns
+  const getTargetColumnValue = useCallback((rowData, col) => {
+    if (col === TARGET_PERCENTAGE_COL || col === TARGET_TARGET_COL || col === TARGET_ACTUAL_COL) {
+      // Get actual value from rowData
+      const actualValue = get(rowData, actualValueField);
+      const actualNum = isNumber(actualValue) ? actualValue : (isNil(actualValue) ? null : toNumber(actualValue));
+
+      // Get target value from lookup
+      const outerKey = get(rowData, outerGroupField);
+      const innerKey = get(rowData, innerGroupField);
+      let targetValue = null;
+      if (!isNil(outerKey) && !isNil(innerKey)) {
+        const lookupKey = `${String(outerKey)}__${String(innerKey)}`;
+        targetValue = targetLookup.get(lookupKey);
+      }
+
+      // Calculate percentage
+      let percentage = null;
+      if (!isNil(targetValue) && !isNil(actualNum) && !_isNaN(targetValue) && !_isNaN(actualNum) && _isFinite(targetValue) && _isFinite(actualNum) && targetValue !== 0) {
+        percentage = (actualNum / targetValue) * 100;
+      }
+
+      if (col === TARGET_PERCENTAGE_COL) {
+        return percentage;
+      } else if (col === TARGET_TARGET_COL) {
+        return targetValue;
+      } else if (col === TARGET_ACTUAL_COL) {
+        return actualNum;
+      }
+    }
+    return null;
+  }, [targetLookup, outerGroupField, innerGroupField, actualValueField]);
+
   const orderedColumns = useMemo(() => {
     if (isEmpty(columns)) return [];
 
@@ -1166,13 +1259,94 @@ export default function DataTableComponent({
     return multiselectCols;
   }, [columns, columnTypes, textFilterColumns]);
 
-  // Compute unique values for multiselect columns
+  // Compute unique values for multiselect columns based on filtered data
+  // (excluding the current column's filter to show available options)
   const optionColumnValues = useMemo(() => {
     const values = {};
     if (isEmpty(safeData) || isEmpty(multiselectColumns)) return values;
 
     multiselectColumns.forEach((col) => {
-      const uniqueVals = compact(uniq(safeData.map((row) => get(row, col))));
+      // Filter data excluding the current column's filter
+      const filteredForColumn = filter(safeData, (row) => {
+        if (!row || typeof row !== 'object') return false;
+
+        // Apply all filters except the current column
+        const regularColumnsPass = every(columns, (filterCol) => {
+          // Skip the current column - we want all its values
+          if (filterCol === col) return true;
+
+          const filterObj = get(filters, filterCol);
+          if (!filterObj || isNil(filterObj.value) || filterObj.value === '') return true;
+
+          // Handle empty arrays for multiselect
+          if (isArray(filterObj.value) && isEmpty(filterObj.value)) return true;
+
+          const cellValue = get(row, filterCol);
+          const filterValue = filterObj.value;
+          const colType = get(columnTypes, filterCol);
+          const isMultiselectColumn = includes(multiselectColumns, filterCol);
+
+          // Multiselect filter (multiselect columns)
+          if (isMultiselectColumn && isArray(filterValue)) {
+            return some(filterValue, (v) => v === cellValue || String(v) === String(cellValue));
+          }
+
+          // Boolean filter (handles true/false and 1/0)
+          if (get(colType, 'isBoolean')) {
+            const cellIsTruthy = cellValue === true || cellValue === 1 || cellValue === '1';
+            const cellIsFalsy = cellValue === false || cellValue === 0 || cellValue === '0';
+
+            if (filterValue === true) {
+              return cellIsTruthy;
+            } else if (filterValue === false) {
+              return cellIsFalsy;
+            }
+            return true;
+          }
+
+          // Date range filter
+          if (get(colType, 'isDate')) {
+            return applyDateFilter(cellValue, filterValue);
+          }
+
+          // Numeric filter with operators
+          if (get(colType, 'isNumeric')) {
+            const parsedFilter = parseNumericFilter(filterValue);
+            return applyNumericFilter(cellValue, parsedFilter);
+          }
+
+          // Text filter (default)
+          const strCell = toLower(String(cellValue ?? ''));
+          const strFilter = toLower(String(filterValue));
+          return includes(strCell, strFilter);
+        });
+
+        if (!regularColumnsPass) return false;
+
+        // Check target columns if active (excluding current column)
+        if (isTargetDataActive && col !== TARGET_PERCENTAGE_COL && col !== TARGET_TARGET_COL && col !== TARGET_ACTUAL_COL) {
+          const targetColumns = [TARGET_PERCENTAGE_COL, TARGET_TARGET_COL, TARGET_ACTUAL_COL];
+          return every(targetColumns, (targetCol) => {
+            const filterObj = get(filters, targetCol);
+            if (!filterObj || isNil(filterObj.value) || filterObj.value === '') return true;
+
+            // Handle empty arrays for multiselect
+            if (isArray(filterObj.value) && isEmpty(filterObj.value)) return true;
+
+            const cellValue = getTargetColumnValue(row, targetCol);
+            const filterValue = filterObj.value;
+
+            // Use numeric filter for target columns
+            const parsedFilter = parseNumericFilter(filterValue);
+            return applyNumericFilter(cellValue, parsedFilter);
+          });
+        }
+
+        return true;
+      });
+
+      // Get unique values from the filtered data for this column
+      const uniqueVals = compact(uniq(filteredForColumn.map((row) => get(row, col))));
       values[col] = orderBy(uniqueVals).map((val) => ({
         label: String(val),
         value: val,
@@ -1180,60 +1354,59 @@ export default function DataTableComponent({
     });
 
     return values;
-  }, [safeData, multiselectColumns]);
+  }, [safeData, multiselectColumns, filters, columns, columnTypes, isTargetDataActive, getTargetColumnValue]);
 
   useEffect(() => {
-    if (enableFilter && !isEmpty(columns)) {
-      const newFilters = { ...filters };
+    if (!enableFilter) {
+      if (!isEmpty(filters)) {
+        setFilters({});
+      }
+      return;
+    }
 
-      columns.forEach((col) => {
+    if (isEmpty(columns)) return;
+
+    const newFilters = { ...filters };
+    let changed = false;
+
+    columns.forEach((col) => {
+      const colType = get(columnTypes, col);
+      const isMultiselectColumn = includes(multiselectColumns, col);
+
+      const desiredMatchMode =
+        isMultiselectColumn ? 'in'
+          : get(colType, 'isBoolean') ? 'equals'
+            : get(colType, 'isDate') ? 'dateRange'
+              : 'contains';
+
+      if (!newFilters[col]) {
+        newFilters[col] = { value: null, matchMode: desiredMatchMode };
+        changed = true;
+      } else if (newFilters[col].matchMode !== desiredMatchMode) {
+        newFilters[col] = { ...newFilters[col], matchMode: desiredMatchMode };
+        changed = true;
+      }
+    });
+
+    if (isTargetDataActive) {
+      [TARGET_PERCENTAGE_COL, TARGET_TARGET_COL, TARGET_ACTUAL_COL].forEach((col) => {
         if (!newFilters[col]) {
-          const colType = get(columnTypes, col);
-          const isMultiselectColumn = includes(multiselectColumns, col);
-
-          if (isMultiselectColumn) {
-            newFilters[col] = { value: null, matchMode: 'in' };
-          } else if (get(colType, 'isBoolean')) {
-            newFilters[col] = { value: null, matchMode: 'equals' };
-          } else if (get(colType, 'isDate')) {
-            newFilters[col] = { value: null, matchMode: 'dateRange' };
-          } else {
-            newFilters[col] = { value: null, matchMode: 'contains' };
-          }
-        } else {
-          // Update matchMode if column type changed
-          const colType = get(columnTypes, col);
-          const isMultiselectColumn = includes(multiselectColumns, col);
-          const currentFilter = newFilters[col];
-
-          // Update matchMode if needed, but preserve the value
-          if (isMultiselectColumn && currentFilter.matchMode !== 'in') {
-            newFilters[col] = { ...currentFilter, matchMode: 'in' };
-          } else if (get(colType, 'isBoolean') && currentFilter.matchMode !== 'equals') {
-            newFilters[col] = { ...currentFilter, matchMode: 'equals' };
-          } else if (get(colType, 'isDate') && currentFilter.matchMode !== 'dateRange') {
-            newFilters[col] = { ...currentFilter, matchMode: 'dateRange' };
-          } else if (!isMultiselectColumn && !get(colType, 'isBoolean') && !get(colType, 'isDate') && currentFilter.matchMode !== 'contains') {
-            newFilters[col] = { ...currentFilter, matchMode: 'contains' };
-          }
+          newFilters[col] = { value: null, matchMode: 'contains' };
+          changed = true;
         }
       });
-
-      // Initialize filters for target columns if active
-      if (isTargetDataActive) {
-        const targetColumns = [TARGET_PERCENTAGE_COL, TARGET_TARGET_COL, TARGET_ACTUAL_COL];
-        targetColumns.forEach((col) => {
-          if (!newFilters[col]) {
-            newFilters[col] = { value: null, matchMode: 'contains' }; // Numeric filter uses 'contains' matchMode
-          }
-        });
-      }
-
-      setFilters(newFilters);
-    } else if (!enableFilter) {
-      setFilters({});
     }
-  }, [columns, enableFilter, columnTypes, multiselectColumns, textFilterColumns, isTargetDataActive]);
+
+    if (changed) {
+      setFilters(newFilters);
+    }
+  }, [
+    columns,
+    enableFilter,
+    columnTypes,
+    multiselectColumns,
+    isTargetDataActive
+  ]);
 
   const calculateColumnWidths = useMemo(() => {
     const widths = {};
@@ -1290,58 +1463,25 @@ export default function DataTableComponent({
     return widths;
   }, [safeData, columns, enableSort, formatHeaderName, formatCellValue, columnTypes]);
 
-  // Helper function to get computed value for target columns
-  const getTargetColumnValue = useCallback((rowData, col) => {
-    if (col === TARGET_PERCENTAGE_COL || col === TARGET_TARGET_COL || col === TARGET_ACTUAL_COL) {
-      // Get actual value from rowData
-      const actualValue = get(rowData, actualValueField);
-      const actualNum = isNumber(actualValue) ? actualValue : (isNil(actualValue) ? null : toNumber(actualValue));
-
-      // Get target value from lookup
-      const outerKey = get(rowData, outerGroupField);
-      const innerKey = get(rowData, innerGroupField);
-      let targetValue = null;
-      if (!isNil(outerKey) && !isNil(innerKey)) {
-        const lookupKey = `${String(outerKey)}__${String(innerKey)}`;
-        targetValue = targetLookup.get(lookupKey);
-      }
-
-      // Calculate percentage
-      let percentage = null;
-      if (!isNil(targetValue) && !isNil(actualNum) && !_isNaN(targetValue) && !_isNaN(actualNum) && _isFinite(targetValue) && _isFinite(actualNum) && targetValue !== 0) {
-        percentage = (actualNum / targetValue) * 100;
-      }
-
-      if (col === TARGET_PERCENTAGE_COL) {
-        return percentage;
-      } else if (col === TARGET_TARGET_COL) {
-        return targetValue;
-      } else if (col === TARGET_ACTUAL_COL) {
-        return actualNum;
-      }
-    }
-    return null;
-  }, [targetLookup, outerGroupField, innerGroupField, actualValueField]);
-
   // Custom sort function for target columns
   const getTargetColumnSortFunction = useCallback((col) => {
     return (rowData1, rowData2) => {
       const val1 = getTargetColumnValue(rowData1, col);
       const val2 = getTargetColumnValue(rowData2, col);
-      
+
       // Handle null/undefined values
       if (isNil(val1) && isNil(val2)) return 0;
       if (isNil(val1)) return 1; // null values go to end
       if (isNil(val2)) return -1;
-      
+
       // Compare numeric values
       const num1 = isNumber(val1) ? val1 : toNumber(val1);
       const num2 = isNumber(val2) ? val2 : toNumber(val2);
-      
+
       if (_isNaN(num1) && _isNaN(num2)) return 0;
       if (_isNaN(num1)) return 1;
       if (_isNaN(num2)) return -1;
-      
+
       return num1 - num2;
     };
   }, [getTargetColumnValue]);
@@ -2182,7 +2322,8 @@ export default function DataTableComponent({
     controlsRowClassName = "",
     onClose,
     onMaximizeToggle,
-    isMaximized: maximized = false
+    isMaximized: maximized = false,
+    enableFullscreenDialog = true
   }) => (
     <div className={`mb-4 flex items-center justify-between gap-4 flex-wrap ${controlsRowClassName}`}>
       {/* Left side: Visibility Control and Lock button */}
@@ -2223,7 +2364,7 @@ export default function DataTableComponent({
         >
           <i className="pi pi-file-excel"></i>
         </button>
-        {showFullscreenButton && (
+        {showFullscreenButton && enableFullscreenDialog && (
           <button
             onClick={() => setIsFullscreen(true)}
             className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center"
@@ -2389,18 +2530,25 @@ export default function DataTableComponent({
   );
 
   // Reusable Paginator Wrapper Component
-  const PaginatorWrapper = ({ className = "" }) => (
-    <div className={`mt-4 ${className}`}>
-      <Paginator
-        first={first}
-        rows={rows}
-        totalRecords={sortedData.length}
-        rowsPerPageOptions={rowsPerPageOptions}
-        onPageChange={onPageChange}
-        template="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
-      />
-    </div>
-  );
+  const PaginatorWrapper = useCallback(({ className = "" }) => {
+    // Use sortedData.length which reflects filtered and sorted data
+    const totalRecords = sortedData.length;
+    return (
+      <div className={`mt-4 flex items-center justify-center gap-4 flex-wrap ${className}`}>
+        <Paginator
+          first={first}
+          rows={rows}
+          totalRecords={totalRecords}
+          rowsPerPageOptions={rowsPerPageOptions}
+          onPageChange={onPageChange}
+          template="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
+        />
+        <div className="text-sm text-gray-600 font-medium">
+          out of {totalRecords.toLocaleString('en-US')}
+        </div>
+      </div>
+    );
+  }, [sortedData, first, rows, rowsPerPageOptions, onPageChange]);
 
   // Reusable Feature Status Indicators Component
   const FeatureStatusIndicators = ({ className = "" }) => {
@@ -2478,12 +2626,13 @@ export default function DataTableComponent({
   return (
     <div className="w-full">
       <FeatureStatusIndicators />
-      <TableControls showFullscreenButton={true} />
+      <TableControls showFullscreenButton={true} enableFullscreenDialog={enableFullscreenDialog} />
       <FilterChips />
       <TableView scrollHeight={scrollHeightValue} />
       <PaginatorWrapper />
 
       {/* Fullscreen Dialog */}
+      {enableFullscreenDialog && (
       <Dialog
         ref={dialogRef}
         visible={isFullscreen}
@@ -2508,6 +2657,7 @@ export default function DataTableComponent({
           <TableControls
             showFullscreenButton={false}
             controlsRowClassName="shrink-0"
+            enableFullscreenDialog={enableFullscreenDialog}
             onClose={() => {
               setIsFullscreen(false);
               setIsMaximized(false);
@@ -2527,6 +2677,7 @@ export default function DataTableComponent({
           <PaginatorWrapper className="shrink-0" />
         </div>
       </Dialog>
+      )}
     </div>
   );
 }
