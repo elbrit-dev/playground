@@ -274,14 +274,12 @@ const DataTableWrapper = (props) => {
     targetValueField: propTargetValueField,
     actualValueField: propActualValueField,
     targetData: propTargetData,
-    dataSource: propDataSource,
-    selectedQueryKey: propSelectedQueryKey,
   } = props;
 
   const toast = useRef(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [dataSourceState, setDataSource] = useLocalStorageString('datatable-dataSource', 'offline');
-  const [selectedQueryKeyState, setSelectedQueryKey] = useLocalStorageString('datatable-selectedQueryKey', null);
+  const [dataSource, setDataSource] = useLocalStorageString('datatable-dataSource', 'offline');
+  const [selectedQueryKey, setSelectedQueryKey] = useLocalStorageString('datatable-selectedQueryKey', null);
   const [savedQueries, setSavedQueries] = useState([]);
   const [loadingQueries, setLoadingQueries] = useState(false);
   const [executingQuery, setExecutingQuery] = useState(false);
@@ -289,10 +287,6 @@ const DataTableWrapper = (props) => {
   const [processedData, setProcessedData] = useState(null);
   const [selectedFlattenField, setSelectedFlattenField] = useState(null);
 
-  // Derived values that prefer props over localStorage state
-  const dataSource = propDataSource !== undefined ? propDataSource : dataSourceState;
-  const selectedQueryKey = propSelectedQueryKey !== undefined ? propSelectedQueryKey : selectedQueryKeyState;
-  
   const [enableSortState, setEnableSort] = useLocalStorageBoolean('datatable-enableSort', true);
   const [enableFilterState, setEnableFilter] = useLocalStorageBoolean('datatable-enableFilter', true);
   const [enableSummationState, setEnableSummation] = useLocalStorageBoolean('datatable-enableSummation', true);
