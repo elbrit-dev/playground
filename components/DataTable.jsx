@@ -490,7 +490,15 @@ const DataTableWrapper = (props) => {
 
       const endpoint = getInitialEndpoint();
       const endpointUrl = endpoint?.code;
-      const authToken = DEFAULT_AUTH_TOKEN;
+      const endpointName = endpoint?.name; // 'UAT' or 'ERP'
+      
+      // Determine which token to use based on the endpoint name
+      let authToken = DEFAULT_AUTH_TOKEN;
+      if (endpointName === 'UAT' && process.env.NEXT_PUBLIC_GRAPHQL_AUTH_TOKEN_UAT) {
+        authToken = process.env.NEXT_PUBLIC_GRAPHQL_AUTH_TOKEN_UAT;
+      } else if (endpointName === 'ERP' && process.env.NEXT_PUBLIC_GRAPHQL_AUTH_TOKEN_ERP) {
+        authToken = process.env.NEXT_PUBLIC_GRAPHQL_AUTH_TOKEN_ERP;
+      }
 
       if (!endpointUrl) {
         throw new Error('GraphQL endpoint URL is not configured. Check your environment variables.');
