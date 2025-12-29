@@ -273,6 +273,7 @@ const DataTableWrapper = (props) => {
     targetInnerGroupField: propTargetInnerGroupField,
     targetValueField: propTargetValueField,
     actualValueField: propActualValueField,
+    targetData: propTargetData,
     dataSource: propDataSource,
     selectedQueryKey: propSelectedQueryKey,
   } = props;
