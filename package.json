@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "copy-shared": "npx degit VICTORVICKIE/datatable-component/src/components src/share --force"
   },
   "dependencies": {
     "@plasmicapp/loader-nextjs": "^1.0.380",
