@@ -2,8 +2,8 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@shared/*": ["./src/shared/components/src/*"]
+      "@/*": ["./*"],
+      "@shared/*": ["./shared/components/src/*"]
     }
   },
   "exclude": ["node_modules", ".next"]

@@ -1,8 +1,4 @@
 import { Geist, Geist_Mono } from "next/font/google";
-import "primereact/resources/themes/lara-light-cyan/theme.css";
-import "primereact/resources/primereact.min.css";
-import "primeicons/primeicons.css";
-import "./globals.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,8 +11,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Data Table Component",
-  description: "Primereact Datatable Component Playground",
+  title: "Component Playground",
+  description: "Component Playground",
 };
 
 export default function RootLayout({ children }) {
@@ -30,3 +26,4 @@ export default function RootLayout({ children }) {
     </html>
   );
 }
+

@@ -1,0 +1,688 @@
+'use client';
+
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { Toast } from 'primereact/toast';
+import { Dropdown } from 'primereact/dropdown';
+import DataTableComponent from '../share/DataTable';
+import DataTableControls from '../share/DataTableControls';
+import data from '../resource/data';
+import { uniq, flatMap, keys, isEmpty, startCase } from 'lodash';
+
+// We'll import these dynamically or use them in a way that doesn't break SSR
+let firestoreService;
+let extractDataFromResponse;
+let flattenParentItems;
+let removeIndexKeys;
+let getInitialEndpoint;
+let DEFAULT_AUTH_TOKEN;
+
+const loadGqlUtils = async () => {
+  if (firestoreService) return;
+  const firestoreModule = await import('../share/graphql-playground/services/firestoreService');
+  firestoreService = firestoreModule.firestoreService;
+  
+  const extractorModule = await import('../share/graphql-playground/utils/data-extractor');
+  extractDataFromResponse = extractorModule.extractDataFromResponse;
+  
+  const flattenerModule = await import('../share/graphql-playground/utils/data-flattener');
+  flattenParentItems = flattenerModule.flattenParentItems;
+  removeIndexKeys = flattenerModule.removeIndexKeys;
+  
+  const constantsModule = await import('../share/graphql-playground/constants');
+  getInitialEndpoint = constantsModule.getInitialEndpoint;
+  DEFAULT_AUTH_TOKEN = constantsModule.DEFAULT_AUTH_TOKEN;
+};
+
+// Fallback for missing target data
+const Target = [];
+
+// Custom hook for localStorage with proper JSON serialization for booleans
+function useLocalStorageBoolean(key, defaultValue) {
+  const [value, setValue] = useState(() => {
+    if (typeof window === 'undefined') return defaultValue;
+    try {
+      const item = window.localStorage.getItem(key);
+      if (item === null || item === undefined) return defaultValue;
+      const parsed = JSON.parse(item);
+      return typeof parsed === 'boolean' ? parsed : defaultValue;
+    } catch (error) {
+      try {
+        window.localStorage.removeItem(key);
+      } catch { }
+      return defaultValue;
+    }
+  });
+
+  // Sync with localStorage on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const item = window.localStorage.getItem(key);
+      if (item !== null && item !== undefined) {
+        const parsed = JSON.parse(item);
+        if (typeof parsed === 'boolean') {
+          setValue(parsed);
+        }
+      }
+    } catch (error) {
+      // Ignore errors during sync
+    }
+  }, [key]);
+
+  const setStoredValue = (newValue) => {
+    try {
+      if (typeof newValue === 'boolean') {
+        const serialized = JSON.stringify(newValue);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(key, serialized);
+        }
+        setValue(newValue);
+      } else {
+        console.warn(`Attempted to set non-boolean value for "${key}":`, newValue);
+      }
+    } catch (error) {
+      console.error(`Error setting localStorage key "${key}":`, error);
+    }
+  };
+
+  return [value, setStoredValue];
+}
+
+// Custom hook for localStorage with proper JSON serialization for arrays
+function useLocalStorageArray(key, defaultValue) {
+  const [value, setValue] = useState(() => {
+    if (typeof window === 'undefined') return defaultValue;
+    try {
+      const item = window.localStorage.getItem(key);
+      if (item === null || item === undefined) return defaultValue;
+      const parsed = JSON.parse(item);
+      return Array.isArray(parsed) ? parsed : defaultValue;
+    } catch (error) {
+      // If parsing fails, try to clean up invalid data
+      try {
+        window.localStorage.removeItem(key);
+      } catch { }
+      return defaultValue;
+    }
+  });
+
+  // Sync with localStorage on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const item = window.localStorage.getItem(key);
+      if (item !== null && item !== undefined) {
+        const parsed = JSON.parse(item);
+        if (Array.isArray(parsed)) {
+          setValue(parsed);
+        }
+      }
+    } catch (error) {
+      // Ignore errors during sync
+    }
+  }, [key]);
+
+  const setStoredValue = (newValue) => {
+    try {
+      if (Array.isArray(newValue)) {
+        const serialized = JSON.stringify(newValue);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(key, serialized);
+        }
+        setValue(newValue);
+      } else {
+        console.warn(`Attempted to set non-array value for "${key}":`, newValue);
+      }
+    } catch (error) {
+      console.error(`Error setting localStorage key "${key}":`, error);
+    }
+  };
+
+  return [value, setStoredValue];
+}
+
+// Custom hook for localStorage with proper JSON serialization for string/null values
+function useLocalStorageString(key, defaultValue) {
+  const [value, setValue] = useState(() => {
+    if (typeof window === 'undefined') return defaultValue;
+    try {
+      const item = window.localStorage.getItem(key);
+      if (item === null || item === undefined) return defaultValue;
+      const parsed = JSON.parse(item);
+      // Accept string or null values
+      return (typeof parsed === 'string' || parsed === null) ? parsed : defaultValue;
+    } catch (error) {
+      // If parsing fails, try to clean up invalid data
+      try {
+        window.localStorage.removeItem(key);
+      } catch { }
+      return defaultValue;
+    }
+  });
+
+  // Sync with localStorage on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const item = window.localStorage.getItem(key);
+      if (item !== null && item !== undefined) {
+        const parsed = JSON.parse(item);
+        if (typeof parsed === 'string' || parsed === null) {
+          setValue(parsed);
+        }
+      }
+    } catch (error) {
+      // Ignore errors during sync
+    }
+  }, [key]);
+
+  const setStoredValue = (newValue) => {
+    try {
+      // Accept string or null values
+      if (typeof newValue === 'string' || newValue === null) {
+        const serialized = JSON.stringify(newValue);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(key, serialized);
+        }
+        setValue(newValue);
+      } else {
+        console.warn(`Attempted to set non-string/null value for "${key}":`, newValue);
+      }
+    } catch (error) {
+      console.error(`Error setting localStorage key "${key}":`, error);
+    }
+  };
+
+  return [value, setStoredValue];
+}
+
+// Custom hook for localStorage with proper JSON serialization for numbers
+function useLocalStorageNumber(key, defaultValue) {
+  const [value, setValue] = useState(() => {
+    if (typeof window === 'undefined') return defaultValue;
+    try {
+      const item = window.localStorage.getItem(key);
+      if (item === null || item === undefined) return defaultValue;
+      const parsed = JSON.parse(item);
+      // Accept number values
+      return (typeof parsed === 'number' && !isNaN(parsed) && parsed > 0) ? parsed : defaultValue;
+    } catch (error) {
+      // If parsing fails, try to clean up invalid data
+      try {
+        window.localStorage.removeItem(key);
+      } catch { }
+      return defaultValue;
+    }
+  });
+
+  // Sync with localStorage on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const item = window.localStorage.getItem(key);
+      if (item !== null && item !== undefined) {
+        const parsed = JSON.parse(item);
+        if (typeof parsed === 'number' && !isNaN(parsed) && parsed > 0) {
+          setValue(parsed);
+        }
+      }
+    } catch (error) {
+      // Ignore errors during sync
+    }
+  }, [key]);
+
+  const setStoredValue = (newValue) => {
+    try {
+      // Accept number values
+      if (typeof newValue === 'number' && !isNaN(newValue) && newValue > 0) {
+        const serialized = JSON.stringify(newValue);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(key, serialized);
+        }
+        setValue(newValue);
+      } else {
+        console.warn(`Attempted to set invalid number value for "${key}":`, newValue);
+      }
+    } catch (error) {
+      console.error(`Error setting localStorage key "${key}":`, error);
+    }
+  };
+
+  return [value, setStoredValue];
+}
+
+const DataTableWrapper = (props) => {
+  const { className } = props;
+  const toast = useRef(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [dataSource, setDataSource] = useLocalStorageString('datatable-dataSource', 'offline');
+  const [selectedQueryKey, setSelectedQueryKey] = useLocalStorageString('datatable-selectedQueryKey', null);
+  const [savedQueries, setSavedQueries] = useState([]);
+  const [loadingQueries, setLoadingQueries] = useState(false);
+  const [executingQuery, setExecutingQuery] = useState(false);
+  const [responseData, setResponseData] = useState(null);
+  const [processedData, setProcessedData] = useState(null);
+  const [selectedFlattenField, setSelectedFlattenField] = useState(null);
+  
+  const [enableSort, setEnableSort] = useLocalStorageBoolean('datatable-enableSort', true);
+  const [enableFilter, setEnableFilter] = useLocalStorageBoolean('datatable-enableFilter', true);
+  const [enableSummation, setEnableSummation] = useLocalStorageBoolean('datatable-enableSummation', true);
+  const [enableCellEdit, setEnableCellEdit] = useLocalStorageBoolean('datatable-enableCellEdit', false);
+  const [rowsPerPageOptionsRaw, setRowsPerPageOptionsRaw] = useLocalStorageArray('datatable-rowsPerPageOptions', [10, 25, 50, 100]);
+  const [defaultRowsRaw, setDefaultRowsRaw] = useLocalStorageNumber('datatable-defaultRows', 10);
+  const [textFilterColumnsRaw, setTextFilterColumnsRaw] = useLocalStorageArray('datatable-textFilterColumns', []);
+  const [visibleColumnsRaw, setVisibleColumnsRaw] = useLocalStorageArray('datatable-visibleColumns', []);
+  const [redFieldsRaw, setRedFieldsRaw] = useLocalStorageArray('datatable-redFields', []);
+  const [greenFieldsRaw, setGreenFieldsRaw] = useLocalStorageArray('datatable-greenFields', []);
+  const [outerGroupFieldRaw, setOuterGroupFieldRaw] = useLocalStorageString('datatable-outerGroupField', null);
+  const [innerGroupFieldRaw, setInnerGroupFieldRaw] = useLocalStorageString('datatable-innerGroupField', null);
+  const [nonEditableColumnsRaw, setNonEditableColumnsRaw] = useLocalStorageArray('datatable-nonEditableColumns', []);
+  const [enableTargetDataRaw, setEnableTargetDataRaw] = useLocalStorageBoolean('datatable-enableTargetData', false);
+  const [targetOuterGroupFieldRaw, setTargetOuterGroupFieldRaw] = useLocalStorageString('datatable-targetOuterGroupField', null);
+  const [targetInnerGroupFieldRaw, setTargetInnerGroupFieldRaw] = useLocalStorageString('datatable-targetInnerGroupField', null);
+  const [targetValueFieldRaw, setTargetValueFieldRaw] = useLocalStorageString('datatable-targetValueField', null);
+  const [actualValueFieldRaw, setActualValueFieldRaw] = useLocalStorageString('datatable-actualValueField', null);
+
+  // Load saved queries on mount
+  useEffect(() => {
+    const loadSavedQueries = async () => {
+      setLoadingQueries(true);
+      try {
+        await loadGqlUtils();
+        const queries = await firestoreService.getAllQueries();
+        setSavedQueries(queries);
+      } catch (error) {
+        console.error('Error loading saved queries:', error);
+        toast.current?.show({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to load saved queries',
+          life: 3000
+        });
+      } finally {
+        setLoadingQueries(false);
+      }
+    };
+    loadSavedQueries();
+  }, []);
+
+  // Execute query when data source changes to a saved query
+  useEffect(() => {
+    if (dataSource && dataSource !== 'offline') {
+      executeSavedQuery(dataSource);
+    } else if (dataSource === 'offline') {
+      setResponseData(null);
+      setProcessedData(null);
+      setSelectedFlattenField(null);
+      setSelectedQueryKey(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataSource]);
+
+  // Get available query keys from processedData
+  const availableQueryKeys = useMemo(() => {
+    if (!processedData || dataSource === 'offline') return [];
+    return Object.keys(processedData).filter(key => 
+      processedData[key] && 
+      processedData[key].length > 0
+    );
+  }, [processedData, dataSource]);
+
+  // Reset selectedQueryKey if it's not in available keys or if processedData changes
+  useEffect(() => {
+    if (dataSource !== 'offline' && processedData) {
+      if (selectedQueryKey && !availableQueryKeys.includes(selectedQueryKey)) {
+        if (availableQueryKeys.length > 0) {
+          setSelectedQueryKey(availableQueryKeys[0]);
+        } else {
+          setSelectedQueryKey(null);
+        }
+      } else if (!selectedQueryKey && availableQueryKeys.length > 0) {
+        setSelectedQueryKey(availableQueryKeys[0]);
+      }
+    }
+  }, [processedData, availableQueryKeys, selectedQueryKey, dataSource, setSelectedQueryKey]);
+
+  // Process data when responseData or selectedFlattenField changes
+  useEffect(() => {
+    if (!responseData) {
+      setProcessedData(null);
+      return;
+    }
+
+    const queryKeys = Object.keys(responseData).filter(key => responseData[key] && responseData[key].length > 0);
+    if (queryKeys.length === 0) {
+      setProcessedData(null);
+      return;
+    }
+
+    const processed = {};
+    for (const queryKey of queryKeys) {
+      const data = responseData[queryKey];
+
+      if (selectedFlattenField && data && data.length > 0) {
+        processed[queryKey] = flattenParentItems(data, selectedFlattenField);
+      } else {
+        processed[queryKey] = data;
+      }
+    }
+
+    const cleanedProcessed = {};
+    for (const [key, value] of Object.entries(processed)) {
+      cleanedProcessed[key] = removeIndexKeys(value);
+    }
+
+    setProcessedData(cleanedProcessed);
+  }, [responseData, selectedFlattenField]);
+
+  // Execute saved query
+  const executeSavedQuery = useCallback(async (queryId) => {
+    setExecutingQuery(true);
+    try {
+      await loadGqlUtils();
+      const queryDoc = await firestoreService.loadQuery(queryId);
+      if (!queryDoc) {
+        throw new Error('Query not found');
+      }
+
+      const { body, variables, flattenField } = queryDoc;
+      if (!body || !body.trim()) {
+        throw new Error('Query body is empty');
+      }
+
+      if (flattenField) {
+        setSelectedFlattenField(flattenField);
+      } else {
+        setSelectedFlattenField(null);
+      }
+
+      const endpoint = getInitialEndpoint();
+      const endpointUrl = endpoint?.code;
+      const authToken = DEFAULT_AUTH_TOKEN;
+
+      if (!endpointUrl) {
+        throw new Error('GraphQL endpoint URL is not set');
+      }
+
+      let parsedVariables = {};
+      if (variables && variables.trim()) {
+        try {
+          parsedVariables = JSON.parse(variables);
+        } catch (e) {
+          console.warn('Failed to parse variables:', e);
+        }
+      }
+
+      const response = await fetch(endpointUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken && { 'Authorization': authToken }),
+        },
+        body: JSON.stringify({
+          query: body,
+          variables: parsedVariables,
+        }),
+      });
+
+      const jsonResponse = await response.json();
+      if (jsonResponse.errors) {
+        throw new Error(JSON.stringify(jsonResponse.errors));
+      }
+
+      const extractedData = extractDataFromResponse(jsonResponse, body);
+      setResponseData(extractedData);
+
+      toast.current?.show({
+        severity: 'success',
+        summary: 'Success',
+        detail: 'Query executed successfully',
+        life: 3000
+      });
+    } catch (error) {
+      console.error('Error executing query:', error);
+      toast.current?.show({
+        severity: 'error',
+        summary: 'Error',
+        detail: error.message || 'Failed to execute query',
+        life: 5000
+      });
+      setResponseData(null);
+      setProcessedData(null);
+    } finally {
+      setExecutingQuery(false);
+    }
+  }, []);
+
+  // Sync and Clean up localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const booleanKeys = ['datatable-enableSort', 'datatable-enableFilter', 'datatable-enableSummation', 'datatable-enableCellEdit'];
+        booleanKeys.forEach(key => {
+          try {
+            const item = window.localStorage.getItem(key);
+            if (item) {
+              const parsed = JSON.parse(item);
+              if (typeof parsed !== 'boolean') window.localStorage.removeItem(key);
+            }
+          } catch { window.localStorage.removeItem(key); }
+        });
+
+        const arrayKeys = {
+          'datatable-rowsPerPageOptions': { defaultValue: [10, 25, 50, 100], isColumnList: false },
+          'datatable-textFilterColumns': { defaultValue: [], isColumnList: true },
+          'datatable-visibleColumns': { defaultValue: [], isColumnList: true },
+          'datatable-redFields': { defaultValue: [], isColumnList: true },
+          'datatable-greenFields': { defaultValue: [], isColumnList: true },
+          'datatable-nonEditableColumns': { defaultValue: [], isColumnList: true }
+        };
+
+        Object.entries(arrayKeys).forEach(([key, config]) => {
+          try {
+            const item = window.localStorage.getItem(key);
+            if (item) {
+              const parsed = JSON.parse(item);
+              if (!Array.isArray(parsed)) {
+                window.localStorage.removeItem(key);
+                return;
+              }
+              if (key === 'datatable-rowsPerPageOptions') {
+                const hasInvalidValues = parsed.some(v => typeof v !== 'number');
+                if (hasInvalidValues) window.localStorage.removeItem(key);
+              }
+            }
+          } catch { window.localStorage.removeItem(key); }
+        });
+      } catch (error) {
+        console.warn('Error during localStorage cleanup:', error);
+      }
+      
+      requestAnimationFrame(() => setIsLoading(false));
+    } else {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const rowsPerPageOptions = useMemo(() => Array.isArray(rowsPerPageOptionsRaw) ? rowsPerPageOptionsRaw : [10, 25, 50, 100], [rowsPerPageOptionsRaw]);
+  
+  const defaultRows = useMemo(() => {
+    if (typeof defaultRowsRaw !== 'number' || isNaN(defaultRowsRaw) || defaultRowsRaw <= 0) {
+      return rowsPerPageOptions[0] || 10;
+    }
+    return rowsPerPageOptions.includes(defaultRowsRaw) ? defaultRowsRaw : rowsPerPageOptions[0] || 10;
+  }, [defaultRowsRaw, rowsPerPageOptions]);
+
+  useEffect(() => {
+    if (Array.isArray(rowsPerPageOptions) && rowsPerPageOptions.length > 0) {
+      if (!rowsPerPageOptions.includes(defaultRowsRaw)) {
+        setDefaultRowsRaw(rowsPerPageOptions[0]);
+      }
+    }
+  }, [rowsPerPageOptions, defaultRowsRaw, setDefaultRowsRaw]);
+
+  // Determine table data
+  const tableData = useMemo(() => {
+    if (dataSource !== 'offline' && processedData && selectedQueryKey) {
+      return processedData[selectedQueryKey] || [];
+    }
+    return props.data || data || [];
+  }, [dataSource, processedData, selectedQueryKey, props.data]);
+
+  // Extract columns
+  const columns = useMemo(() => {
+    if (!Array.isArray(tableData) || isEmpty(tableData)) return [];
+    return uniq(flatMap(tableData, (item) => item && typeof item === 'object' ? keys(item) : []));
+  }, [tableData]);
+
+  const targetColumns = useMemo(() => {
+    if (!Array.isArray(Target) || isEmpty(Target)) return [];
+    return uniq(flatMap(Target, (item) => item && typeof item === 'object' ? keys(item) : []));
+  }, []);
+
+  const handleCellEditComplete = (e) => {
+    const { rowData, newValue, field, oldValue } = e;
+    const columnName = startCase(field.split('__').join(' ').split('_').join(' '));
+    toast.current?.show({
+      severity: 'success',
+      summary: 'Cell Updated',
+      detail: `Column: ${columnName} | Previous: ${oldValue} → Current: ${newValue}`,
+      life: 5000
+    });
+  };
+
+  const handleOuterGroupClick = (rowData, column, value) => {
+    const columnName = startCase(column.split('__').join(' ').split('_').join(' '));
+    toast.current?.show({ severity: 'info', summary: 'Outer Group Clicked', detail: `Column: ${columnName} | Value: ${value}`, life: 5000 });
+  };
+
+  const handleInnerGroupClick = (rowData, column, value) => {
+    const columnName = startCase(column.split('__').join(' ').split('_').join(' '));
+    toast.current?.show({ severity: 'info', summary: 'Inner Group Clicked', detail: `Column: ${columnName} | Value: ${value}`, life: 5000 });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-300 border-t-blue-600 mb-4"></div>
+          <p className="text-sm text-gray-600">Loading your preferences...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`flex flex-col gap-4 ${className}`}>
+      <Toast ref={toast} />
+      
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div className="mb-6">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Data Source</label>
+              <Dropdown
+                value={dataSource}
+                onChange={(e) => setDataSource(e.value)}
+                options={[{ label: 'Offline', value: 'offline' }, ...savedQueries.map(q => ({ label: q.name, value: q.id }))]}
+                optionLabel="label"
+                optionValue="value"
+                placeholder="Select Data Source"
+                className="w-full"
+                loading={loadingQueries}
+                disabled={executingQuery}
+              />
+            </div>
+
+            {dataSource !== 'offline' && availableQueryKeys.length > 0 && (
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Query Key</label>
+                <Dropdown
+                  value={selectedQueryKey}
+                  onChange={(e) => setSelectedQueryKey(e.value)}
+                  options={availableQueryKeys.map(key => ({ label: startCase(key.split('__').join(' ').split('_').join(' ')), value: key }))}
+                  optionLabel="label"
+                  optionValue="value"
+                  placeholder="Select Query Key"
+                  className="w-full"
+                  disabled={executingQuery || !processedData}
+                />
+              </div>
+            )}
+          </div>
+          {executingQuery && <div className="mt-2 text-sm text-gray-600"><i className="pi pi-spin pi-spinner mr-2"></i>Executing query...</div>}
+        </div>
+
+        <DataTableControls
+          enableSort={enableSort}
+          enableFilter={enableFilter}
+          enableSummation={enableSummation}
+          enableCellEdit={enableCellEdit}
+          rowsPerPageOptions={rowsPerPageOptions}
+          defaultRows={defaultRows}
+          columns={columns}
+          textFilterColumns={textFilterColumnsRaw}
+          visibleColumns={visibleColumnsRaw}
+          redFields={redFieldsRaw}
+          greenFields={greenFieldsRaw}
+          outerGroupField={outerGroupFieldRaw}
+          innerGroupField={innerGroupFieldRaw}
+          nonEditableColumns={nonEditableColumnsRaw}
+          enableTargetData={enableTargetDataRaw}
+          targetColumns={targetColumns}
+          targetOuterGroupField={targetOuterGroupFieldRaw}
+          targetInnerGroupField={targetInnerGroupFieldRaw}
+          targetValueField={targetValueFieldRaw}
+          actualValueField={actualValueFieldRaw}
+          onSortChange={setEnableSort}
+          onFilterChange={setEnableFilter}
+          onSummationChange={setEnableSummation}
+          onCellEditChange={setEnableCellEdit}
+          onRowsPerPageOptionsChange={setRowsPerPageOptionsRaw}
+          onDefaultRowsChange={setDefaultRowsRaw}
+          onTextFilterColumnsChange={setTextFilterColumnsRaw}
+          onVisibleColumnsChange={setVisibleColumnsRaw}
+          onRedFieldsChange={setRedFieldsRaw}
+          onGreenFieldsChange={setGreenFieldsRaw}
+          onOuterGroupFieldChange={setOuterGroupFieldRaw}
+          onInnerGroupFieldChange={setInnerGroupFieldRaw}
+          onNonEditableColumnsChange={setNonEditableColumnsRaw}
+          onEnableTargetDataChange={setEnableTargetDataRaw}
+          onTargetOuterGroupFieldChange={setTargetOuterGroupFieldRaw}
+          onTargetInnerGroupFieldChange={setTargetInnerGroupFieldRaw}
+          onTargetValueFieldChange={setTargetValueFieldRaw}
+          onActualValueFieldChange={setActualValueFieldRaw}
+        />
+
+        <DataTableComponent
+          data={tableData}
+          rowsPerPageOptions={rowsPerPageOptions}
+          defaultRows={defaultRows}
+          scrollable={true}
+          enableSort={enableSort}
+          enableFilter={enableFilter}
+          enableSummation={enableSummation}
+          textFilterColumns={textFilterColumnsRaw}
+          visibleColumns={visibleColumnsRaw}
+          onVisibleColumnsChange={setVisibleColumnsRaw}
+          redFields={redFieldsRaw}
+          greenFields={greenFieldsRaw}
+          outerGroupField={outerGroupFieldRaw}
+          innerGroupField={innerGroupFieldRaw}
+          enableCellEdit={enableCellEdit}
+          nonEditableColumns={nonEditableColumnsRaw}
+          onCellEditComplete={handleCellEditComplete}
+          onOuterGroupClick={handleOuterGroupClick}
+          onInnerGroupClick={handleInnerGroupClick}
+          targetData={enableTargetDataRaw ? Target : null}
+          targetOuterGroupField={enableTargetDataRaw ? targetOuterGroupFieldRaw : null}
+          targetInnerGroupField={enableTargetDataRaw ? targetInnerGroupFieldRaw : null}
+          targetValueField={enableTargetDataRaw ? targetValueFieldRaw : null}
+          actualValueField={enableTargetDataRaw ? actualValueFieldRaw : null}
+        />
+      </div>
+    </div>
+  );
+};
+
+export default DataTableWrapper;
