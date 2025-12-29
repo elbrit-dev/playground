@@ -369,10 +369,7 @@ const DataTableWrapper = (props) => {
   // Get available query keys from processedData
   const availableQueryKeys = useMemo(() => {
     if (!processedData || dataSource === 'offline') return [];
-    return Object.keys(processedData).filter(key => 
-      processedData[key] && 
-      processedData[key].length > 0
-    );
+    return Object.keys(processedData).filter(key => processedData[key] !== undefined);
   }, [processedData, dataSource]);
 
   // Reset selectedQueryKey if it's not in available keys or if processedData changes
@@ -422,6 +419,54 @@ const DataTableWrapper = (props) => {
     setProcessedData(cleanedProcessed);
   }, [responseData, selectedFlattenField]);
 
+  const flexibleExtractData = useCallback((jsonResponse, queryBody) => {
+    // 1. Try the shared extractor first
+    let data = null;
+    try {
+      data = extractDataFromResponse(jsonResponse, queryBody);
+    } catch (e) {
+      console.warn('Shared extractor failed:', e);
+    }
+
+    if (data && Object.keys(data).length > 0) {
+      return data;
+    }
+
+    // 2. Fallback: Manually look for arrays in the response data
+    if (!jsonResponse || !jsonResponse.data) return null;
+    
+    const gqlData = jsonResponse.data;
+    const extracted = {};
+    let hasAny = false;
+
+    for (const [key, value] of Object.entries(gqlData)) {
+      // Case 1: Direct array (e.g., { data: { SalesInvoices: [...] } })
+      if (Array.isArray(value)) {
+        extracted[key] = value;
+        hasAny = true;
+      } 
+      // Case 2: Nested array (e.g., { data: { getInvoices: { items: [...] } } })
+      else if (value && typeof value === 'object') {
+        for (const [subKey, subValue] of Object.entries(value)) {
+          if (Array.isArray(subValue)) {
+            // Use a combined key name
+            const combinedKey = subKey === 'items' || subKey === 'nodes' || subKey === 'data' 
+              ? key 
+              : `${key}__${subKey}`;
+            
+            // Avoid duplicates
+            if (!extracted[combinedKey] || subValue.length > 0) {
+              extracted[combinedKey] = subValue;
+              hasAny = true;
+            }
+          }
+        }
+      }
+    }
+
+    return hasAny ? extracted : null;
+  }, []);
+
   // Execute saved query
   const executeSavedQuery = useCallback(async (queryId) => {
     setExecutingQuery(true);
@@ -429,7 +474,7 @@ const DataTableWrapper = (props) => {
       await loadGqlUtils();
       const queryDoc = await firestoreService.loadQuery(queryId);
       if (!queryDoc) {
-        throw new Error('Query not found');
+        throw new Error('Query not found in database');
       }
 
       const { body, variables, flattenField } = queryDoc;
@@ -448,7 +493,7 @@ const DataTableWrapper = (props) => {
       const authToken = DEFAULT_AUTH_TOKEN;
 
       if (!endpointUrl) {
-        throw new Error('GraphQL endpoint URL is not set');
+        throw new Error('GraphQL endpoint URL is not configured. Check your environment variables.');
       }
 
       let parsedVariables = {};
@@ -464,7 +509,7 @@ const DataTableWrapper = (props) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(authToken && { 'Authorization': authToken }),
+          ...(authToken && { 'Authorization': authToken.startsWith('Bearer ') ? authToken : `Bearer ${authToken}` }),
         },
         body: JSON.stringify({
           query: body,
@@ -472,25 +517,45 @@ const DataTableWrapper = (props) => {
         }),
       });
 
-      const jsonResponse = await response.json();
-      if (jsonResponse.errors) {
-        throw new Error(JSON.stringify(jsonResponse.errors));
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API Error (${response.status}): ${errorText.slice(0, 100)}`);
       }
 
-      const extractedData = extractDataFromResponse(jsonResponse, body);
+      const jsonResponse = await response.json();
+      console.log('GraphQL Response:', jsonResponse);
+
+      if (jsonResponse.errors) {
+        throw new Error(jsonResponse.errors[0]?.message || JSON.stringify(jsonResponse.errors));
+      }
+
+      const extractedData = flexibleExtractData(jsonResponse, body);
+      
+      if (!extractedData) {
+        console.warn('Could not extract any data keys from response:', jsonResponse);
+        toast.current?.show({
+          severity: 'warn',
+          summary: 'No Data Found',
+          detail: 'The query executed but no displayable data keys were found in the response.',
+          life: 5000
+        });
+      }
+
       setResponseData(extractedData);
 
-      toast.current?.show({
-        severity: 'success',
-        summary: 'Success',
-        detail: 'Query executed successfully',
-        life: 3000
-      });
+      if (extractedData) {
+        toast.current?.show({
+          severity: 'success',
+          summary: 'Success',
+          detail: 'Data fetched successfully',
+          life: 3000
+        });
+      }
     } catch (error) {
       console.error('Error executing query:', error);
       toast.current?.show({
         severity: 'error',
-        summary: 'Error',
+        summary: 'Query Failed',
         detail: error.message || 'Failed to execute query',
         life: 5000
       });
@@ -499,7 +564,7 @@ const DataTableWrapper = (props) => {
     } finally {
       setExecutingQuery(false);
     }
-  }, []);
+  }, [flexibleExtractData]);
 
   // Sync and Clean up localStorage
   useEffect(() => {
