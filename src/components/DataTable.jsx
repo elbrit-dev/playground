@@ -2,8 +2,8 @@
 
 import React, { useState, useMemo } from 'react';
 import { uniq, flatMap, keys, isEmpty } from 'lodash';
-import DataTableComponent from '../shared/components/src/components/DataTable';
-import DataTableControls from '../shared/components/src/components/DataTableControls';
+import DataTableComponent from '../shared/repo1/DataTable';
+import DataTableControls from '../shared/repo1/DataTableControls';
 
 const DataTableWrapper = (props) => {
   const { 
