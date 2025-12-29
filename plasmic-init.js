@@ -17,8 +17,17 @@ PLASMIC.registerComponent(DataTable, {
   props: {
     data: {
       type: "object",
-      description: "The array of data to display in the table",
+      description: "The array of data to display in the table (Offline mode)",
       defaultValue: [],
+    },
+    dataSource: {
+      type: "string",
+      description: "ID of the saved query to use as data source ('offline' for static data)",
+      defaultValue: "offline",
+    },
+    selectedQueryKey: {
+      type: "string",
+      description: "The specific key from the GraphQL response to display (e.g. 'users')",
     },
     showControls: {
       type: "boolean",

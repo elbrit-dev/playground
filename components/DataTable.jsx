@@ -252,36 +252,85 @@ function useLocalStorageNumber(key, defaultValue) {
 }
 
 const DataTableWrapper = (props) => {
-  const { className } = props;
+  const {
+    className,
+    showControls = true,
+    enableSort: propEnableSort,
+    enableFilter: propEnableFilter,
+    enableSummation: propEnableSummation,
+    enableCellEdit: propEnableCellEdit,
+    rowsPerPageOptions: propRowsPerPageOptions,
+    defaultRows: propDefaultRows,
+    textFilterColumns: propTextFilterColumns,
+    visibleColumns: propVisibleColumns,
+    redFields: propRedFields,
+    greenFields: propGreenFields,
+    outerGroupField: propOuterGroupField,
+    innerGroupField: propInnerGroupField,
+    nonEditableColumns: propNonEditableColumns,
+    enableTargetData: propEnableTargetData,
+    targetOuterGroupField: propTargetOuterGroupField,
+    targetInnerGroupField: propTargetInnerGroupField,
+    targetValueField: propTargetValueField,
+    actualValueField: propActualValueField,
+    dataSource: propDataSource,
+    selectedQueryKey: propSelectedQueryKey,
+  } = props;
+
   const toast = useRef(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [dataSource, setDataSource] = useLocalStorageString('datatable-dataSource', 'offline');
-  const [selectedQueryKey, setSelectedQueryKey] = useLocalStorageString('datatable-selectedQueryKey', null);
+  const [dataSourceState, setDataSource] = useLocalStorageString('datatable-dataSource', 'offline');
+  const [selectedQueryKeyState, setSelectedQueryKey] = useLocalStorageString('datatable-selectedQueryKey', null);
   const [savedQueries, setSavedQueries] = useState([]);
   const [loadingQueries, setLoadingQueries] = useState(false);
   const [executingQuery, setExecutingQuery] = useState(false);
   const [responseData, setResponseData] = useState(null);
   const [processedData, setProcessedData] = useState(null);
   const [selectedFlattenField, setSelectedFlattenField] = useState(null);
+
+  // Derived values that prefer props over localStorage state
+  const dataSource = propDataSource !== undefined ? propDataSource : dataSourceState;
+  const selectedQueryKey = propSelectedQueryKey !== undefined ? propSelectedQueryKey : selectedQueryKeyState;
   
-  const [enableSort, setEnableSort] = useLocalStorageBoolean('datatable-enableSort', true);
-  const [enableFilter, setEnableFilter] = useLocalStorageBoolean('datatable-enableFilter', true);
-  const [enableSummation, setEnableSummation] = useLocalStorageBoolean('datatable-enableSummation', true);
-  const [enableCellEdit, setEnableCellEdit] = useLocalStorageBoolean('datatable-enableCellEdit', false);
-  const [rowsPerPageOptionsRaw, setRowsPerPageOptionsRaw] = useLocalStorageArray('datatable-rowsPerPageOptions', [10, 25, 50, 100]);
-  const [defaultRowsRaw, setDefaultRowsRaw] = useLocalStorageNumber('datatable-defaultRows', 10);
-  const [textFilterColumnsRaw, setTextFilterColumnsRaw] = useLocalStorageArray('datatable-textFilterColumns', []);
-  const [visibleColumnsRaw, setVisibleColumnsRaw] = useLocalStorageArray('datatable-visibleColumns', []);
-  const [redFieldsRaw, setRedFieldsRaw] = useLocalStorageArray('datatable-redFields', []);
-  const [greenFieldsRaw, setGreenFieldsRaw] = useLocalStorageArray('datatable-greenFields', []);
-  const [outerGroupFieldRaw, setOuterGroupFieldRaw] = useLocalStorageString('datatable-outerGroupField', null);
-  const [innerGroupFieldRaw, setInnerGroupFieldRaw] = useLocalStorageString('datatable-innerGroupField', null);
-  const [nonEditableColumnsRaw, setNonEditableColumnsRaw] = useLocalStorageArray('datatable-nonEditableColumns', []);
-  const [enableTargetDataRaw, setEnableTargetDataRaw] = useLocalStorageBoolean('datatable-enableTargetData', false);
-  const [targetOuterGroupFieldRaw, setTargetOuterGroupFieldRaw] = useLocalStorageString('datatable-targetOuterGroupField', null);
-  const [targetInnerGroupFieldRaw, setTargetInnerGroupFieldRaw] = useLocalStorageString('datatable-targetInnerGroupField', null);
-  const [targetValueFieldRaw, setTargetValueFieldRaw] = useLocalStorageString('datatable-targetValueField', null);
-  const [actualValueFieldRaw, setActualValueFieldRaw] = useLocalStorageString('datatable-actualValueField', null);
+  const [enableSortState, setEnableSort] = useLocalStorageBoolean('datatable-enableSort', true);
+  const [enableFilterState, setEnableFilter] = useLocalStorageBoolean('datatable-enableFilter', true);
+  const [enableSummationState, setEnableSummation] = useLocalStorageBoolean('datatable-enableSummation', true);
+  const [enableCellEditState, setEnableCellEdit] = useLocalStorageBoolean('datatable-enableCellEdit', false);
+  const [rowsPerPageOptionsRawState, setRowsPerPageOptionsRaw] = useLocalStorageArray('datatable-rowsPerPageOptions', [10, 25, 50, 100]);
+  const [defaultRowsRawState, setDefaultRowsRaw] = useLocalStorageNumber('datatable-defaultRows', 10);
+  const [textFilterColumnsRawState, setTextFilterColumnsRaw] = useLocalStorageArray('datatable-textFilterColumns', []);
+  const [visibleColumnsRawState, setVisibleColumnsRaw] = useLocalStorageArray('datatable-visibleColumns', []);
+  const [redFieldsRawState, setRedFieldsRaw] = useLocalStorageArray('datatable-redFields', []);
+  const [greenFieldsRawState, setGreenFieldsRaw] = useLocalStorageArray('datatable-greenFields', []);
+  const [outerGroupFieldRawState, setOuterGroupFieldRaw] = useLocalStorageString('datatable-outerGroupField', null);
+  const [innerGroupFieldRawState, setInnerGroupFieldRaw] = useLocalStorageString('datatable-innerGroupField', null);
+  const [nonEditableColumnsRawState, setNonEditableColumnsRaw] = useLocalStorageArray('datatable-nonEditableColumns', []);
+  const [enableTargetDataRawState, setEnableTargetDataRaw] = useLocalStorageBoolean('datatable-enableTargetData', false);
+  const [targetOuterGroupFieldRawState, setTargetOuterGroupFieldRaw] = useLocalStorageString('datatable-targetOuterGroupField', null);
+  const [targetInnerGroupFieldRawState, setTargetInnerGroupFieldRaw] = useLocalStorageString('datatable-targetInnerGroupField', null);
+  const [targetValueFieldRawState, setTargetValueFieldRaw] = useLocalStorageString('datatable-targetValueField', null);
+  const [actualValueFieldRawState, setActualValueFieldRaw] = useLocalStorageString('datatable-actualValueField', null);
+
+  // Derived values that prefer props over localStorage state
+  const enableSort = propEnableSort !== undefined ? propEnableSort : enableSortState;
+  const enableFilter = propEnableFilter !== undefined ? propEnableFilter : enableFilterState;
+  const enableSummation = propEnableSummation !== undefined ? propEnableSummation : enableSummationState;
+  const enableCellEdit = propEnableCellEdit !== undefined ? propEnableCellEdit : enableCellEditState;
+  const rowsPerPageOptionsRaw = propRowsPerPageOptions !== undefined ? propRowsPerPageOptions : rowsPerPageOptionsRawState;
+  const defaultRowsRaw = propDefaultRows !== undefined ? propDefaultRows : defaultRowsRawState;
+  const textFilterColumnsRaw = propTextFilterColumns !== undefined ? propTextFilterColumns : textFilterColumnsRawState;
+  const visibleColumnsRaw = propVisibleColumns !== undefined ? propVisibleColumns : visibleColumnsRawState;
+  const redFieldsRaw = propRedFields !== undefined ? propRedFields : redFieldsRawState;
+  const greenFieldsRaw = propGreenFields !== undefined ? propGreenFields : greenFieldsRawState;
+  const outerGroupFieldRaw = propOuterGroupField !== undefined ? propOuterGroupField : outerGroupFieldRawState;
+  const innerGroupFieldRaw = propInnerGroupField !== undefined ? propInnerGroupField : innerGroupFieldRawState;
+  const nonEditableColumnsRaw = propNonEditableColumns !== undefined ? propNonEditableColumns : nonEditableColumnsRawState;
+  const enableTargetDataRaw = propEnableTargetData !== undefined ? propEnableTargetData : enableTargetDataRawState;
+  const targetOuterGroupFieldRaw = propTargetOuterGroupField !== undefined ? propTargetOuterGroupField : targetOuterGroupFieldRawState;
+  const targetInnerGroupFieldRaw = propTargetInnerGroupField !== undefined ? propTargetInnerGroupField : targetInnerGroupFieldRawState;
+  const targetValueFieldRaw = propTargetValueField !== undefined ? propTargetValueField : targetValueFieldRawState;
+  const actualValueFieldRaw = propActualValueField !== undefined ? propActualValueField : actualValueFieldRawState;
+  const targetData = propTargetData !== undefined ? propTargetData : Target;
 
   // Load saved queries on mount
   useEffect(() => {
@@ -309,6 +358,9 @@ const DataTableWrapper = (props) => {
   // Execute query when data source changes to a saved query
   useEffect(() => {
     if (dataSource && dataSource !== 'offline') {
+      // Clear old data while fetching new one to show fallback/static data
+      setResponseData(null);
+      setProcessedData(null);
       executeSavedQuery(dataSource);
     } else if (dataSource === 'offline') {
       setResponseData(null);
@@ -577,82 +629,92 @@ const DataTableWrapper = (props) => {
       <Toast ref={toast} />
       
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <div className="mb-6">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Data Source</label>
-              <Dropdown
-                value={dataSource}
-                onChange={(e) => setDataSource(e.value)}
-                options={[{ label: 'Offline', value: 'offline' }, ...savedQueries.map(q => ({ label: q.name, value: q.id }))]}
-                optionLabel="label"
-                optionValue="value"
-                placeholder="Select Data Source"
-                className="w-full"
-                loading={loadingQueries}
-                disabled={executingQuery}
-              />
+        {showControls && (
+          <>
+            <div className="mb-6">
+              <div className="mb-4">
+                <h2 className="text-xl font-bold text-gray-900">Data Table</h2>
+                <p className="text-sm text-gray-500">View, filter, sort, and analyze your data with advanced table controls</p>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex-1">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Data Source</label>
+                  <Dropdown
+                    value={dataSource}
+                    onChange={(e) => setDataSource(e.value)}
+                    options={[{ label: 'Offline', value: 'offline' }, ...savedQueries.map(q => ({ label: q.name, value: q.id }))]}
+                    optionLabel="label"
+                    optionValue="value"
+                    placeholder="Select Data Source"
+                    className="w-full"
+                    loading={loadingQueries}
+                    disabled={executingQuery}
+                  />
+                </div>
+
+                {dataSource !== 'offline' && (
+                  <div className="flex-1">
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Query Key</label>
+                    <Dropdown
+                      value={selectedQueryKey}
+                      onChange={(e) => setSelectedQueryKey(e.value)}
+                      options={availableQueryKeys.map(key => ({ label: startCase(key.split('__').join(' ').split('_').join(' ')), value: key }))}
+                      optionLabel="label"
+                      optionValue="value"
+                      placeholder="Select Query Key"
+                      className="w-full"
+                      disabled={executingQuery || !processedData}
+                      loading={executingQuery && availableQueryKeys.length === 0}
+                    />
+                  </div>
+                )}
+              </div>
+              {executingQuery && <div className="mt-2 text-sm text-gray-600"><i className="pi pi-spin pi-spinner mr-2"></i>Executing query...</div>}
             </div>
 
-            {dataSource !== 'offline' && availableQueryKeys.length > 0 && (
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Query Key</label>
-                <Dropdown
-                  value={selectedQueryKey}
-                  onChange={(e) => setSelectedQueryKey(e.value)}
-                  options={availableQueryKeys.map(key => ({ label: startCase(key.split('__').join(' ').split('_').join(' ')), value: key }))}
-                  optionLabel="label"
-                  optionValue="value"
-                  placeholder="Select Query Key"
-                  className="w-full"
-                  disabled={executingQuery || !processedData}
-                />
-              </div>
-            )}
-          </div>
-          {executingQuery && <div className="mt-2 text-sm text-gray-600"><i className="pi pi-spin pi-spinner mr-2"></i>Executing query...</div>}
-        </div>
-
-        <DataTableControls
-          enableSort={enableSort}
-          enableFilter={enableFilter}
-          enableSummation={enableSummation}
-          enableCellEdit={enableCellEdit}
-          rowsPerPageOptions={rowsPerPageOptions}
-          defaultRows={defaultRows}
-          columns={columns}
-          textFilterColumns={textFilterColumnsRaw}
-          visibleColumns={visibleColumnsRaw}
-          redFields={redFieldsRaw}
-          greenFields={greenFieldsRaw}
-          outerGroupField={outerGroupFieldRaw}
-          innerGroupField={innerGroupFieldRaw}
-          nonEditableColumns={nonEditableColumnsRaw}
-          enableTargetData={enableTargetDataRaw}
-          targetColumns={targetColumns}
-          targetOuterGroupField={targetOuterGroupFieldRaw}
-          targetInnerGroupField={targetInnerGroupFieldRaw}
-          targetValueField={targetValueFieldRaw}
-          actualValueField={actualValueFieldRaw}
-          onSortChange={setEnableSort}
-          onFilterChange={setEnableFilter}
-          onSummationChange={setEnableSummation}
-          onCellEditChange={setEnableCellEdit}
-          onRowsPerPageOptionsChange={setRowsPerPageOptionsRaw}
-          onDefaultRowsChange={setDefaultRowsRaw}
-          onTextFilterColumnsChange={setTextFilterColumnsRaw}
-          onVisibleColumnsChange={setVisibleColumnsRaw}
-          onRedFieldsChange={setRedFieldsRaw}
-          onGreenFieldsChange={setGreenFieldsRaw}
-          onOuterGroupFieldChange={setOuterGroupFieldRaw}
-          onInnerGroupFieldChange={setInnerGroupFieldRaw}
-          onNonEditableColumnsChange={setNonEditableColumnsRaw}
-          onEnableTargetDataChange={setEnableTargetDataRaw}
-          onTargetOuterGroupFieldChange={setTargetOuterGroupFieldRaw}
-          onTargetInnerGroupFieldChange={setTargetInnerGroupFieldRaw}
-          onTargetValueFieldChange={setTargetValueFieldRaw}
-          onActualValueFieldChange={setActualValueFieldRaw}
-        />
+            <DataTableControls
+              enableSort={enableSort}
+              enableFilter={enableFilter}
+              enableSummation={enableSummation}
+              enableCellEdit={enableCellEdit}
+              rowsPerPageOptions={rowsPerPageOptions}
+              defaultRows={defaultRows}
+              columns={columns}
+              textFilterColumns={textFilterColumnsRaw}
+              visibleColumns={visibleColumnsRaw}
+              redFields={redFieldsRaw}
+              greenFields={greenFieldsRaw}
+              outerGroupField={outerGroupFieldRaw}
+              innerGroupField={innerGroupFieldRaw}
+              nonEditableColumns={nonEditableColumnsRaw}
+              enableTargetData={enableTargetDataRaw}
+              targetColumns={targetColumns}
+              targetOuterGroupField={targetOuterGroupFieldRaw}
+              targetInnerGroupField={targetInnerGroupFieldRaw}
+              targetValueField={targetValueFieldRaw}
+              actualValueField={actualValueFieldRaw}
+              onSortChange={setEnableSort}
+              onFilterChange={setEnableFilter}
+              onSummationChange={setEnableSummation}
+              onCellEditChange={setEnableCellEdit}
+              onRowsPerPageOptionsChange={setRowsPerPageOptionsRaw}
+              onDefaultRowsChange={setDefaultRowsRaw}
+              onTextFilterColumnsChange={setTextFilterColumnsRaw}
+              onVisibleColumnsChange={setVisibleColumnsRaw}
+              onRedFieldsChange={setRedFieldsRaw}
+              onGreenFieldsChange={setGreenFieldsRaw}
+              onOuterGroupFieldChange={setOuterGroupFieldRaw}
+              onInnerGroupFieldChange={setInnerGroupFieldRaw}
+              onNonEditableColumnsChange={setNonEditableColumnsRaw}
+              onEnableTargetDataChange={setEnableTargetDataRaw}
+              onTargetOuterGroupFieldChange={setTargetOuterGroupFieldRaw}
+              onTargetInnerGroupFieldChange={setTargetInnerGroupFieldRaw}
+              onTargetValueFieldChange={setTargetValueFieldRaw}
+              onActualValueFieldChange={setActualValueFieldRaw}
+            />
+          </>
+        )}
 
         <DataTableComponent
           data={tableData}
@@ -664,7 +726,7 @@ const DataTableWrapper = (props) => {
           enableSummation={enableSummation}
           textFilterColumns={textFilterColumnsRaw}
           visibleColumns={visibleColumnsRaw}
-          onVisibleColumnsChange={setVisibleColumnsRaw}
+          onVisibleColumnsChange={showControls ? setVisibleColumnsRaw : null}
           redFields={redFieldsRaw}
           greenFields={greenFieldsRaw}
           outerGroupField={outerGroupFieldRaw}
@@ -674,11 +736,12 @@ const DataTableWrapper = (props) => {
           onCellEditComplete={handleCellEditComplete}
           onOuterGroupClick={handleOuterGroupClick}
           onInnerGroupClick={handleInnerGroupClick}
-          targetData={enableTargetDataRaw ? Target : null}
+          targetData={enableTargetDataRaw ? targetData : null}
           targetOuterGroupField={enableTargetDataRaw ? targetOuterGroupFieldRaw : null}
           targetInnerGroupField={enableTargetDataRaw ? targetInnerGroupFieldRaw : null}
           targetValueField={enableTargetDataRaw ? targetValueFieldRaw : null}
           actualValueField={enableTargetDataRaw ? actualValueFieldRaw : null}
+          enableFullscreenDialog={showControls}
         />
       </div>
     </div>
