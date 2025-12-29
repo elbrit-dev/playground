@@ -576,11 +576,19 @@ const DataTableWrapper = (props) => {
 
   // Determine table data
   const tableData = useMemo(() => {
+    // 1. If we are in live query mode and have results, use those
     if (dataSource !== 'offline' && processedData && selectedQueryKey) {
       return processedData[selectedQueryKey] || [];
     }
+    
+    // 2. If we are in query mode but still loading, show empty to avoid flickering
+    if (dataSource !== 'offline' && executingQuery) {
+      return [];
+    }
+
+    // 3. Fallback to Offline mode data (Plasmic prop data)
     return props.data || data || [];
-  }, [dataSource, processedData, selectedQueryKey, props.data]);
+  }, [dataSource, processedData, selectedQueryKey, props.data, executingQuery]);
 
   // Extract columns
   const columns = useMemo(() => {
