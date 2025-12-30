@@ -45,7 +45,6 @@ export function GraphiQLResponseExtractor({ tableMode, onDataExtracted, flattenR
       }
 
       if (!jsonData) {
-        console.log('No JSON data found in response');
         onDataExtracted(null);
         return;
       }

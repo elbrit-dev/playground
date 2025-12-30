@@ -10,11 +10,11 @@ import 'graphiql/style.css';
 import Link from 'next/link';
 import { ConfirmDialog } from 'primereact/confirmdialog';
 import { Dropdown } from 'primereact/dropdown';
-import React, { useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useCallback, useState } from 'react';
 // Import extracted modules
 import './styles/graphql-playground.css';
 import { getEndpointOptions, MONACO_EDITOR_CDN_URL } from './constants';
-import { flattenResponse as flattenResponseUtil } from './utils/data-flattener';
+import { extractDataFromResponse } from './utils/data-extractor';
 import { useAppStore } from './stores';
 import {
   ToolbarPlaceholder,
@@ -22,7 +22,8 @@ import {
   createHistoryPlugin,
   GraphiQLWrapper,
   TableDialog,
-  GraphiQLResponseExtractor
+  TabChangeDetector,
+  ActiveTabTracker
 } from './components';
 
 export default function GraphQLPlayground() {
@@ -37,28 +38,41 @@ export default function GraphQLPlayground() {
     setSelectedEndpoint,
     tableMode,
     setTableMode,
-    responseData,
-    setResponseData,
     isTableDialogOpen,
     setIsTableDialogOpen,
+    setTabData,
   } = useAppStore();
 
   const saveControlsRef = useRef(null);
-
-  // Memoized callback for data extraction to prevent infinite loops
-  const handleDataExtracted = useCallback((data) => {
-    setResponseData(data);
-  }, [setResponseData]);
-
-  // Auto-open dialog when data is extracted and table mode is enabled
+  const currentTabIndexRef = useRef(0);
+  const [activeTabIndex, setActiveTabIndex] = useState(0);
+  
+  // Get tab data for current tab (reactive to store changes)
+  // Subscribe to entire tabData object to avoid selector closure issues
+  const tabData = useAppStore((state) => state.tabData);
+  const currentTabData = tabData[activeTabIndex] || { hasSuccessfulQuery: false, transformedData: null };
+  const hasSuccessfulQuery = currentTabData.hasSuccessfulQuery;
+  const transformedData = currentTabData.transformedData;
+  
+  // Update ref when tab changes
   useEffect(() => {
-    if (tableMode && responseData) {
-      const queryKeys = Object.keys(responseData).filter(key => responseData[key] && responseData[key].length > 0);
+    currentTabIndexRef.current = activeTabIndex;
+  }, [activeTabIndex]);
+  
+  // Callback to update active tab index from ActiveTabTracker
+  const handleTabIndexChange = useCallback((tabIndex) => {
+    setActiveTabIndex(tabIndex);
+  }, []);
+
+  // Auto-open dialog when data is available and table mode is enabled
+  useEffect(() => {
+    if (tableMode && transformedData) {
+      const queryKeys = Object.keys(transformedData).filter(key => transformedData[key] && transformedData[key].length > 0);
       if (queryKeys.length > 0 && !isTableDialogOpen) {
         setIsTableDialogOpen(true);
       }
     }
-  }, [tableMode, responseData, isTableDialogOpen, setIsTableDialogOpen]);
+  }, [tableMode, transformedData, isTableDialogOpen, setIsTableDialogOpen]);
 
   // Endpoint options - UAT and ERP (using extracted constant)
   const endpointOptions = useMemo(() => getEndpointOptions(), []);
@@ -104,15 +118,8 @@ export default function GraphQLPlayground() {
 
   const explorer = useMemo(() => explorerPlugin(), []);
   const historyPlugin = useMemo(() => {
-    const plugin = createHistoryPlugin();
-    console.log('History plugin created:', plugin);
-    return plugin;
+    return createHistoryPlugin();
   }, []);
-
-  // flattenResponse is now imported from utils/data-flattener as flattenResponseUtil
-  const flattenResponse = flattenResponseUtil;
-
-
 
   // Dynamic fetcher that uses the current endpoint URL
   const fetcher = useMemo(() => {
@@ -120,6 +127,16 @@ export default function GraphQLPlayground() {
       if (!endpointUrl) {
         throw new Error('GraphQL endpoint URL is not set');
       }
+
+      // Get current tab index at execution time from ref
+      const currentTabIndex = currentTabIndexRef.current;
+
+      // Check if this is an IntrospectionQuery
+      const isIntrospectionQuery = 
+        graphQLParams.query?.includes('__schema') || 
+        graphQLParams.query?.includes('IntrospectionQuery') ||
+        graphQLParams.operationName === 'IntrospectionQuery';
+
       const data = await fetch(endpointUrl, {
         method: 'POST',
         headers: {
@@ -128,9 +145,38 @@ export default function GraphQLPlayground() {
         },
         body: JSON.stringify(graphQLParams),
       });
-      return data.json().catch(() => data.text());
+      
+      const response = await data.json().catch(() => data.text());
+
+      // Process and store data for non-introspection queries and successful responses
+      if (!isIntrospectionQuery && data.ok) {
+        // Check if response has GraphQL errors
+        const hasErrors = response && typeof response === 'object' && response.errors && response.errors.length > 0;
+        
+        if (!hasErrors) {
+          // Process and transform the response data
+          const queryString = graphQLParams.query || '';
+          const transformedData = extractDataFromResponse(response, queryString);
+          
+          // Store both success state and transformed data for this tab
+          setTabData(currentTabIndex, {
+            hasSuccessfulQuery: true,
+            transformedData: transformedData,
+          });
+          
+          console.log('Query Response:', response);
+        } else {
+          // Query failed - reset tab data
+          setTabData(currentTabIndex, {
+            hasSuccessfulQuery: false,
+            transformedData: null,
+          });
+        }
+      }
+      
+      return response;
     };
-  }, [endpointUrl, authToken]);
+  }, [endpointUrl, authToken, setTabData]);
 
 
   return (
@@ -245,6 +291,7 @@ export default function GraphQLPlayground() {
                 <ToolbarButton
                   label="Table View"
                   onClick={() => {
+                    if (!hasSuccessfulQuery) return; // Disable if no successful query
                     const newTableMode = !tableMode;
                     setTableMode(newTableMode);
                     // Close dialog when table mode is disabled
@@ -252,9 +299,15 @@ export default function GraphQLPlayground() {
                       setIsTableDialogOpen(false);
                     }
                   }}
-                  title={tableMode ? "Switch to JSON view" : "Switch to table view"}
+                  title={
+                    !hasSuccessfulQuery 
+                      ? "Execute a query first to enable table view" 
+                      : tableMode 
+                        ? "Switch to JSON view" 
+                        : "Switch to table view"
+                  }
                 >
-                  <i className={`pi pi-table graphiql-toolbar-icon mt-1 text-center text-lg ${tableMode ? 'text-blue-600' : ''}`} aria-hidden="true" />
+                  <i className={`pi pi-table graphiql-toolbar-icon mt-1 text-center text-lg ${tableMode ? 'text-blue-600' : ''} ${!hasSuccessfulQuery ? 'opacity-50' : ''}`} aria-hidden="true" />
                 </ToolbarButton>
                 <ToolbarButton
                   label="Save"
@@ -272,10 +325,13 @@ export default function GraphQLPlayground() {
               </>
             )}
           </ToolbarPlaceholder>
-          <GraphiQLResponseExtractor
-            tableMode={tableMode}
-            onDataExtracted={handleDataExtracted}
-            flattenResponse={flattenResponse}
+          <ActiveTabTracker onTabIndexChange={handleTabIndexChange} />
+          <TabChangeDetector
+            onTabChange={(tabInfo) => {
+              console.log('Tab changed:', tabInfo);
+              // Tab change detected - state is now per-tab, so no need to reset
+              // The hasSuccessfulQuery will be checked based on the new activeTabIndex
+            }}
           />
           <TableDialog
             visible={isTableDialogOpen}
@@ -283,7 +339,7 @@ export default function GraphQLPlayground() {
               setIsTableDialogOpen(false);
               setTableMode(false);
             }}
-            responseData={responseData}
+            responseData={transformedData}
           />
         </GraphiQLWrapper>
       </div>

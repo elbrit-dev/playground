@@ -30,7 +30,7 @@ export function GraphiQLWrapper({ children, ...props }) {
     try {
       processedProps.initialVariables = JSON.stringify(processedProps.initialVariables);
     } catch (e) {
-      console.warn('Failed to stringify initialVariables:', e);
+      // Failed to stringify initialVariables, using as is
     }
   }
 

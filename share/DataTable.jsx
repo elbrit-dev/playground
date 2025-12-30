@@ -1639,8 +1639,42 @@ export default function DataTableComponent({
         }).filter(Boolean);
       }
 
-      // Create a summary row for the outer group
-      const summaryRow = { ...rows[0] };
+      // Create a summary row for the outer group by aggregating innerData
+      const summaryRow = {};
+      
+      // Get the first row/item from innerData for structure
+      const firstItem = innerData[0];
+      if (!firstItem) return null;
+
+      // Aggregate data from innerData
+      columns.forEach((col) => {
+        const colType = get(columnTypes, col, {});
+
+        // For the outer group field, use the group value
+        if (col === outerGroupField) {
+          summaryRow[col] = groupKey === '__null__' ? null : groupKey;
+        }
+        // For the inner group field, set to null (summary represents all inner groups)
+        else if (col === innerGroupField) {
+          summaryRow[col] = null;
+        }
+        // For numeric columns, sum them across all inner data
+        else if (get(colType, 'isNumeric')) {
+          const sum = sumBy(innerData, (row) => {
+            const val = get(row, col);
+            if (isNil(val)) return 0;
+            const numVal = isNumber(val) ? val : toNumber(val);
+            return _isNaN(numVal) ? 0 : numVal;
+          });
+          summaryRow[col] = sum;
+        }
+        // For other columns, take the first non-null value or first value
+        else {
+          const firstNonNull = innerData.find(row => !isNil(get(row, col)));
+          summaryRow[col] = firstNonNull ? get(firstNonNull, col) : get(firstItem, col);
+        }
+      });
+
       // Use groupKey as the unique identifier (it's already a string from the grouping)
       summaryRow.__groupKey__ = groupKey;
       summaryRow.__groupRows__ = innerData;
@@ -2492,7 +2526,7 @@ export default function DataTableComponent({
               body={getBodyTemplate(col)}
               editor={getCellEditor(col)}
               onCellEditComplete={enableCellEdit && getCellEditor(col) ? handleCellEditComplete : undefined}
-              align="right"
+              align={isNumericCol ? 'right' : 'left'}
             />
           );
         })}
@@ -2521,7 +2555,7 @@ export default function DataTableComponent({
               body={getBodyTemplate(col)}
               editor={getCellEditor(col)}
               onCellEditComplete={enableCellEdit && getCellEditor(col) ? handleCellEditComplete : undefined}
-              align="right"
+              align={isNumericCol ? 'right' : 'left'}
             />
           );
         })}

@@ -29,7 +29,6 @@ export function TableDialog({ visible, onHide, responseData }) {
     if (queryKeys.length === 0 || activeTab >= queryKeys.length || !responseData) return [];
     const originalData = responseData[queryKeys[activeTab]];
     const fields = detectArrayOfObjectFields(originalData);
-    console.log('Detected array-of-object fields:', fields, 'from data:', originalData?.slice(0, 2));
     return fields;
   }, [responseData, queryKeys, activeTab]);
 
@@ -74,16 +73,14 @@ export function TableDialog({ visible, onHide, responseData }) {
     }
   }, [visible, reset]);
 
-  // Wrapper to log when field is selected via SingleFieldSelector
+  // Wrapper to handle field selection via SingleFieldSelector
   const handleFlattenFieldChange = useCallback((field) => {
-    console.log('[TableDialog] handleFlattenFieldChange called from SingleFieldSelector:', field);
     setSelectedFlattenField(field);
   }, [setSelectedFlattenField]);
 
   // Clear selected field if it doesn't exist in the current tab's available fields
   useEffect(() => {
     if (selectedFlattenField && arrayOfObjectFields.length > 0 && !arrayOfObjectFields.includes(selectedFlattenField)) {
-      console.log('[TableDialog] Clearing selectedFlattenField - field not in available fields:', selectedFlattenField, 'available:', arrayOfObjectFields);
       setSelectedFlattenField(null);
     }
   }, [arrayOfObjectFields, selectedFlattenField, setSelectedFlattenField]);
@@ -114,6 +111,9 @@ export function TableDialog({ visible, onHide, responseData }) {
       }
       style={{ width: '90vw', height: '90vh' }}
       contentStyle={{
+        paddingRight: '1rem',
+        paddingLeft: '1rem',
+        paddingTop: '0',
         paddingBottom: '0',
         overflow: 'hidden',
         display: 'flex',
@@ -129,64 +129,70 @@ export function TableDialog({ visible, onHide, responseData }) {
       breakpoints={{ '960px': '95vw', '640px': '98vw' }}
       className="table-dialog"
     >
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-        {/* Flatten Field Selector */}
-        <div className="mb-3 px-1 flex items-center gap-3 flex-wrap">
-          <label className="text-xs font-medium text-gray-700 whitespace-nowrap">
-            Flatten Array Field:
-          </label>
-          {arrayOfObjectFields.length > 0 ? (
-            <div className="flex-1 min-w-50">
-              <SingleFieldSelector
-                columns={arrayOfObjectFields}
-                selectedField={selectedFlattenField}
-                onSelectionChange={handleFlattenFieldChange}
-                formatFieldName={formatFieldName}
-                placeholder="Select field to flatten..."
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'row', overflow: 'hidden', minHeight: 0, gap: '1rem' }}>
+        {/* Left side: Table/TabView (80%) */}
+        <div style={{ flex: '0 0 80%', display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+          {queryKeys.length > 1 ? (
+            <TabView
+              activeIndex={activeTab}
+              onTabChange={(e) => {
+                setActiveTab(e.index);
+              }}
+              className="flex-1 flex flex-col overflow-hidden"
+              style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}
+            >
+              {queryKeys.map((queryKey) => (
+                <TabPanel key={queryKey} header={queryKey}>
+                  <div className="h-full overflow-auto" style={{ height: '100%', overflow: 'auto', flex: 1, minHeight: 0, padding: '0.5rem' }}>
+                    <DataTableComponent
+                      data={processedData ? processedData[queryKey] : responseData[queryKey]}
+                      enableFullscreenDialog={false}
+                    />
+                  </div>
+                </TabPanel>
+              ))}
+            </TabView>
+          ) : (
+            <div className="h-full overflow-auto" style={{ height: '100%', overflow: 'auto', flex: 1, minHeight: 0, padding: '0.5rem' }}>
+              <DataTableComponent
+                data={processedData ? processedData[queryKeys[0]] : responseData[queryKeys[0]]}
+                enableFullscreenDialog={false}
               />
             </div>
-          ) : (
-            <div className="flex-1 min-w-[200px]">
-              <div className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50 text-gray-500">
-                No array-of-object fields available
-              </div>
-            </div>
-          )}
-          {arrayOfObjectFields.length === 0 && (
-            <span className="text-xs text-orange-600 whitespace-nowrap">
-              No array-of-object fields detected
-            </span>
           )}
         </div>
 
-        {queryKeys.length > 1 ? (
-          <TabView
-            activeIndex={activeTab}
-            onTabChange={(e) => {
-              setActiveTab(e.index);
-            }}
-            className="flex-1 flex flex-col overflow-hidden"
-            style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}
-          >
-            {queryKeys.map((queryKey) => (
-              <TabPanel key={queryKey} header={queryKey}>
-                <div className="h-full overflow-auto" style={{ height: '100%', overflow: 'auto', flex: 1, minHeight: 0, padding: '0.5rem' }}>
-                  <DataTableComponent
-                    data={processedData ? processedData[queryKey] : responseData[queryKey]}
-                    enableFullscreenDialog={false}
-                  />
+        {/* Right side: Controls (20%) */}
+        <div style={{ flex: '0 0 20%', display: 'flex', flexDirection: 'column', overflow: 'hidden', borderLeft: '1px solid #e5e7eb', padding: '1rem', backgroundColor: '#f9fafb' }}>
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Controls</h3>
+            
+            {/* Flatten Field Selector */}
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-gray-700 block">
+                Flatten Array Field:
+              </label>
+              {arrayOfObjectFields.length > 0 ? (
+                <SingleFieldSelector
+                  columns={arrayOfObjectFields}
+                  selectedField={selectedFlattenField}
+                  onSelectionChange={handleFlattenFieldChange}
+                  formatFieldName={formatFieldName}
+                  placeholder="Select field to flatten..."
+                />
+              ) : (
+                <div className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50 text-gray-500">
+                  No array-of-object fields available
                 </div>
-              </TabPanel>
-            ))}
-          </TabView>
-        ) : (
-          <div className="h-full overflow-auto" style={{ height: '100%', overflow: 'auto', flex: 1, minHeight: 0, padding: '0.5rem' }}>
-            <DataTableComponent
-              data={processedData ? processedData[queryKeys[0]] : responseData[queryKeys[0]]}
-              enableFullscreenDialog={false}
-            />
+              )}
+              {arrayOfObjectFields.length === 0 && (
+                <span className="text-xs text-orange-600 block mt-1">
+                  No array-of-object fields detected
+                </span>
+              )}
+            </div>
           </div>
-        )}
+        </div>
       </div>
     </Dialog>
   );

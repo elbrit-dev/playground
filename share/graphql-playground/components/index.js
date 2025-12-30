@@ -8,4 +8,6 @@ export { TableDialog } from './TableDialog';
 export { GraphiQLResponseExtractor } from './GraphiQLResponseExtractor';
 export { SaveControlsWrapper } from './SaveControlsWrapper';
 export { SaveControls } from './SaveControls';
+export { TabChangeDetector } from './TabChangeDetector';
+export { ActiveTabTracker } from './ActiveTabTracker';
 

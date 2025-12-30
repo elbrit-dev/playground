@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { firestoreService } from '../services/firestoreService';
 import { findNodeKeyFromIndexQuery } from '../utils/query-matcher';
 import { parseQueryToTreeNodes, extractOperationName } from '../utils/graphql-parser';
+import { useTableDialogStore } from './useTableDialogStore';
 
 /**
  * Save controls store
@@ -92,9 +93,17 @@ export const useSaveControlsStore = create((set, get) => ({
             updates.monthIndexExpandedKeys = {};
           }
 
+          // Restore flattenField if it exists
+          if (data.flattenField) {
+            useTableDialogStore.getState().setSelectedFlattenField(data.flattenField);
+          } else {
+            useTableDialogStore.getState().setSelectedFlattenField(null);
+          }
+
           set(updates);
         } else {
           // Reset if no data found
+          useTableDialogStore.getState().setSelectedFlattenField(null);
           set({
             clientSave: false,
             selectedKeys: null,
@@ -109,6 +118,7 @@ export const useSaveControlsStore = create((set, get) => ({
       }
     } else {
       // Reset if no operation name
+      useTableDialogStore.getState().setSelectedFlattenField(null);
       set({
         clientSave: false,
         selectedKeys: null,

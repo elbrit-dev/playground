@@ -22,6 +22,9 @@ export const useAppStore = create((set, get) => ({
     set({
       selectedEndpoint: endpoint,
       endpointUrl: endpoint?.code || '',
+      tabData: {}, // Reset all tabs when endpoint changes
+      tableMode: false, // Reset table mode when endpoint changes
+      isTableDialogOpen: false, // Close dialog when endpoint changes
     });
   },
 
@@ -30,12 +33,26 @@ export const useAppStore = create((set, get) => ({
   setTableMode: (mode) => set({ tableMode: mode }),
   toggleTableMode: () => set((state) => ({ tableMode: !state.tableMode })),
 
-  // Response data
-  responseData: null,
-  setResponseData: (data) => set({ responseData: data }),
-
   // Table dialog
   isTableDialogOpen: false,
   setIsTableDialogOpen: (open) => set({ isTableDialogOpen: open }),
+
+  // Query execution state per tab
+  // Map of tabIndex -> { hasSuccessfulQuery: boolean, transformedData: object }
+  tabData: {}, // { [tabIndex]: { hasSuccessfulQuery: boolean, transformedData: object | null } }
+  setTabData: (tabIndex, data) => 
+    set((state) => ({
+      tabData: {
+        ...state.tabData,
+        [tabIndex]: {
+          ...state.tabData[tabIndex],
+          ...data,
+        },
+      },
+    })),
+  getTabData: (tabIndex) => {
+    const state = get();
+    return state.tabData[tabIndex] || { hasSuccessfulQuery: false, transformedData: null };
+  },
 }));
 

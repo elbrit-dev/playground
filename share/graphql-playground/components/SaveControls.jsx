@@ -10,9 +10,13 @@ import { OverlayPanel } from 'primereact/overlaypanel';
 import { print } from 'graphql';
 import { useSaveControlsStore } from '../stores/useSaveControlsStore';
 import { useTableDialogStore } from '../stores/useTableDialogStore';
+import { useAppStore } from '../stores/useAppStore';
 import { extractOperationName } from '../utils/graphql-parser';
 import { findNodeByKey } from '../utils/query-matcher';
 import { firestoreService } from '../services/firestoreService';
+import { detectArrayOfObjectFields } from '../utils/data-flattener';
+import { SingleFieldSelector } from './SingleFieldSelector';
+import { startCase } from 'lodash';
 
 export const SaveControls = React.forwardRef((props, ref) => {
   const {
@@ -32,17 +36,28 @@ export const SaveControls = React.forwardRef((props, ref) => {
     loadQueryData,
     reset: resetSaveControls,
   } = useSaveControlsStore();
-  const { selectedFlattenField } = useTableDialogStore();
-  
-  // Log when selectedFlattenField changes
-  useEffect(() => {
-    console.log('[SaveControls] selectedFlattenField accessed/updated:', selectedFlattenField);
-  }, [selectedFlattenField]);
+  const { selectedFlattenField, setSelectedFlattenField } = useTableDialogStore();
   const queryEditor = useGraphiQL((state) => state.queryEditor);
   const variableEditor = useGraphiQL((state) => state.variableEditor);
   const currentQuery = useGraphiQL((state) => state.queryEditor?.getValue() || '');
+  const activeTabIndex = useGraphiQL((state) => state.activeTabIndex) ?? 0;
+  const tabData = useAppStore((state) => state.tabData);
+  const currentTabData = tabData[activeTabIndex] || { hasSuccessfulQuery: false, transformedData: null };
+  const transformedData = currentTabData.transformedData;
   const indexFieldOp = useRef(null);
   const monthIndexFieldOp = useRef(null);
+
+  // Debug logging for flatten field selector visibility
+  useEffect(() => {
+    console.log('[SaveControls] Debug - Flatten Field Selector Visibility:', {
+      clientSave,
+      activeTabIndex,
+      hasTransformedData: !!transformedData,
+      transformedDataKeys: transformedData ? Object.keys(transformedData) : [],
+      currentTabData,
+      tabDataKeys: Object.keys(tabData),
+    });
+  }, [clientSave, activeTabIndex, transformedData, currentTabData, tabData]);
 
   // Load existing document data when query changes (including tab switches)
   useEffect(() => {
@@ -66,7 +81,6 @@ export const SaveControls = React.forwardRef((props, ref) => {
   // Cleanup: Reset monthIndexKeys if it's a function (from previous bug with function updater)
   useEffect(() => {
     if (typeof monthIndexKeys === 'function') {
-      console.warn('monthIndexKeys was a function, resetting to null');
       setMonthIndexKeys(null);
       setMonthIndexExpandedKeys({});
     }
@@ -79,10 +93,10 @@ export const SaveControls = React.forwardRef((props, ref) => {
     // Compute startDate (first day of month) and endDate (last day of month)
     const year = month.getFullYear();
     const monthIndex = month.getMonth(); // 0-11
-    
+
     // Start date: first day of the month
     const startDate = `${year}-${String(monthIndex + 1).padStart(2, '0')}-01`;
-    
+
     // End date: last day of the month
     const lastDay = new Date(year, monthIndex + 1, 0).getDate();
     const endDate = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
@@ -97,7 +111,6 @@ export const SaveControls = React.forwardRef((props, ref) => {
         variables = JSON.parse(currentVariablesString);
       } catch (e) {
         // If parsing fails, start with empty object
-        console.warn('Failed to parse existing variables:', e);
         variables = {};
       }
     }
@@ -153,10 +166,77 @@ export const SaveControls = React.forwardRef((props, ref) => {
     return filteredPathNames.length > 0 ? filteredPathNames.join(' > ') : String(key);
   }, [treeNodes]);
 
+  const formatFlattenFieldName = useCallback((key) => {
+    return startCase(key.split('__').join(' ').split('_').join(' '));
+  }, []);
+
+  // Compute array-of-object fields from transformed data
+  // Combine fields from all query keys to show all available options
+  const arrayOfObjectFields = useMemo(() => {
+    console.log('[SaveControls] Computing arrayOfObjectFields, transformedData:', transformedData);
+    if (!transformedData) {
+      console.log('[SaveControls] No transformedData, returning empty array');
+      return [];
+    }
+    // Get all query keys from transformed data
+    const queryKeys = Object.keys(transformedData).filter(key => transformedData[key] && transformedData[key].length > 0);
+    console.log('[SaveControls] Query keys:', queryKeys);
+    if (queryKeys.length === 0) {
+      console.log('[SaveControls] No query keys with data, returning empty array');
+      return [];
+    }
+
+    // Combine fields from all query keys
+    const allFields = new Set();
+    for (const queryKey of queryKeys) {
+      const data = transformedData[queryKey];
+      console.log(`[SaveControls] Processing query key "${queryKey}", data length:`, data?.length);
+      const fields = detectArrayOfObjectFields(data);
+      console.log(`[SaveControls] Detected fields for "${queryKey}":`, fields);
+      fields.forEach(field => allFields.add(field));
+    }
+
+    const result = Array.from(allFields).sort();
+    console.log('[SaveControls] Final arrayOfObjectFields:', result);
+    return result;
+  }, [transformedData]);
+
   const handleNodeSelect = (e) => {
-    setSelectedKeys(e.value);
-    if (indexFieldOp.current) {
-      indexFieldOp.current.hide();
+    // Only allow selection of leaf nodes (nodes without children)
+    // For non-leaf nodes, toggle expand/collapse
+    const selectedKey = e.value;
+    if (selectedKey) {
+      const node = findNodeByKey(treeNodes, selectedKey);
+      // Check if node is a leaf (no children or empty children array)
+      const isLeaf = !node || !node.children || node.children.length === 0;
+      
+      if (isLeaf) {
+        setSelectedKeys(selectedKey);
+        if (indexFieldOp.current) {
+          indexFieldOp.current.hide();
+        }
+      } else {
+        // For non-leaf nodes, toggle expand/collapse instead of selecting
+        const currentExpandedKeys = expandedKeys || {};
+        const isExpanded = !!currentExpandedKeys[selectedKey];
+        
+        if (isExpanded) {
+          // Collapse: remove the key from expandedKeys
+          const { [selectedKey]: _, ...rest } = currentExpandedKeys;
+          setExpandedKeys(rest);
+        } else {
+          // Expand: add the key to expandedKeys
+          setExpandedKeys({
+            ...currentExpandedKeys,
+            [selectedKey]: true,
+          });
+        }
+        
+        // Prevent selection of non-leaf nodes by keeping current selection
+        setSelectedKeys(selectedKeys);
+      }
+    } else {
+      setSelectedKeys(null);
     }
   };
 
@@ -165,9 +245,41 @@ export const SaveControls = React.forwardRef((props, ref) => {
   };
 
   const handleMonthIndexNodeSelect = (e) => {
-    setMonthIndexKeys(e.value);
-    if (monthIndexFieldOp.current) {
-      monthIndexFieldOp.current.hide();
+    // Only allow selection of leaf nodes (nodes without children)
+    // For non-leaf nodes, toggle expand/collapse
+    const selectedKey = e.value;
+    if (selectedKey) {
+      const node = findNodeByKey(monthIndexTreeNodes, selectedKey);
+      // Check if node is a leaf (no children or empty children array)
+      const isLeaf = !node || !node.children || node.children.length === 0;
+      
+      if (isLeaf) {
+        setMonthIndexKeys(selectedKey);
+        if (monthIndexFieldOp.current) {
+          monthIndexFieldOp.current.hide();
+        }
+      } else {
+        // For non-leaf nodes, toggle expand/collapse instead of selecting
+        const currentExpandedKeys = monthIndexExpandedKeys || {};
+        const isExpanded = !!currentExpandedKeys[selectedKey];
+        
+        if (isExpanded) {
+          // Collapse: remove the key from expandedKeys
+          const { [selectedKey]: _, ...rest } = currentExpandedKeys;
+          setMonthIndexExpandedKeys(rest);
+        } else {
+          // Expand: add the key to expandedKeys
+          setMonthIndexExpandedKeys({
+            ...currentExpandedKeys,
+            [selectedKey]: true,
+          });
+        }
+        
+        // Prevent selection of non-leaf nodes by keeping current selection
+        setMonthIndexKeys(monthIndexKeys);
+      }
+    } else {
+      setMonthIndexKeys(null);
     }
   };
 
@@ -190,7 +302,6 @@ export const SaveControls = React.forwardRef((props, ref) => {
     // Capture selectedFlattenField at the time handleSave is called
     // so it persists even if the store value changes before confirmDialog accept callback
     const capturedSelectedFlattenField = selectedFlattenField;
-    console.log('[SaveControls] handleSave called - capturedSelectedFlattenField:', capturedSelectedFlattenField, 'current selectedFlattenField:', selectedFlattenField);
 
     const queryString = queryEditor.getValue() || '';
     const variablesString = variableEditor?.getValue() || '';
@@ -206,7 +317,8 @@ export const SaveControls = React.forwardRef((props, ref) => {
       return;
     }
 
-    if (!selectedKeys) {
+    // Index field is only required when clientSave is enabled
+    if (clientSave && !selectedKeys) {
       confirmDialog({
         message: 'Please select an index field before saving.',
         header: 'Index Field Required',
@@ -216,8 +328,8 @@ export const SaveControls = React.forwardRef((props, ref) => {
       return;
     }
 
-    // If month is selected, monthIndex is mandatory
-    if (month && !monthIndexKeys) {
+    // If month is selected, monthIndex is mandatory (only for client save)
+    if (clientSave && month && !monthIndexKeys) {
       confirmDialog({
         message: 'Please select a month index field when a month is selected.',
         header: 'Month Index Field Required',
@@ -229,7 +341,8 @@ export const SaveControls = React.forwardRef((props, ref) => {
 
     // Build selected query
     const buildSelectedQuery = () => {
-      if (treeNodes.length === 0 || !selectedKeys) return '';
+      // Only build query if clientSave is enabled and selectedKeys exists
+      if (!clientSave || treeNodes.length === 0 || !selectedKeys) return '';
 
       const selectedNode = findNodeByKey(treeNodes, selectedKeys);
       if (!selectedNode) return '';
@@ -397,7 +510,8 @@ export const SaveControls = React.forwardRef((props, ref) => {
 
     // Build month index query (similar to buildSelectedQuery but for monthIndexKeys)
     const buildMonthIndexQuery = () => {
-      if (treeNodes.length === 0 || !monthIndexKeys) return '';
+      // Only build query if clientSave is enabled and monthIndexKeys exists
+      if (!clientSave || treeNodes.length === 0 || !monthIndexKeys) return '';
 
       const selectedNode = findNodeByKey(treeNodes, monthIndexKeys);
       if (!selectedNode) return '';
@@ -548,10 +662,10 @@ export const SaveControls = React.forwardRef((props, ref) => {
       }
     };
 
-    const monthIndexQuery = (month && monthIndexKeys) ? buildMonthIndexQuery() : '';
+    const monthIndexQuery = (clientSave && month && monthIndexKeys) ? buildMonthIndexQuery() : '';
 
     let selectedPath = '';
-    if (selectedKeys) {
+    if (clientSave && selectedKeys) {
       selectedPath = formatFieldName(selectedKeys);
       if (!selectedPath && selectedKeys) {
         selectedPath = selectedKeys;
@@ -565,8 +679,6 @@ export const SaveControls = React.forwardRef((props, ref) => {
         monthIndexPath = monthIndexKeys;
       }
     }
-
-    console.log('[SaveControls] Opening confirmDialog - capturedSelectedFlattenField:', capturedSelectedFlattenField, 'will display:', capturedSelectedFlattenField || 'Not selected');
 
     confirmDialog({
       message: (
@@ -607,7 +719,6 @@ export const SaveControls = React.forwardRef((props, ref) => {
       acceptClassName: 'p-confirm-dialog-save',
       rejectClassName: 'p-confirm-dialog-reject',
       accept: async () => {
-        console.log('[SaveControls] confirmDialog accept callback - using capturedSelectedFlattenField:', capturedSelectedFlattenField);
         try {
           const queryToSave = queryString;
           const saveData = {
@@ -624,7 +735,6 @@ export const SaveControls = React.forwardRef((props, ref) => {
               flattenField: capturedSelectedFlattenField,
             }),
           };
-          console.log('[SaveControls] Saving query with data:', saveData);
           await firestoreService.saveQuery(operationName, saveData);
         } catch (error) {
           console.error('Error saving query:', error);
@@ -662,70 +772,113 @@ export const SaveControls = React.forwardRef((props, ref) => {
         </span>
       </div>
 
-      {/* Index Field Selector */}
-      <div className={`graphiql-index-selector ${selectedKeys ? 'has-selection' : ''}`}>
-        <Button
-          type="button"
-          onClick={(e) => {
-            if (treeNodes.length > 0 && indexFieldOp.current) {
-              indexFieldOp.current.toggle(e);
-            }
-          }}
-          disabled={treeNodes.length === 0}
-          className="p-button-sm p-button-outlined"
-          title={selectedKeys && formatFieldName ? String(formatFieldName(selectedKeys)) : 'Select index field'}
-          style={{
-            width: '100%',
-            justifyContent: 'space-between',
-            textAlign: 'left',
-            padding: '0.5rem 0.75rem'
-          }}
-        >
-          <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: 0 }}>
-            <i className="pi pi-sitemap" style={{ fontSize: '0.875rem', color: '#6b7280', flexShrink: 0 }}></i>
-            <span style={{
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              color: selectedKeys ? '#374151' : '#9ca3af',
-              fontWeight: selectedKeys ? '500' : '400'
-            }}>
-              {selectedKeys ? (formatFieldName ? formatFieldName(selectedKeys) : String(selectedKeys)) : 'Select index field'}
+      {/* Index Field Selector - Only show when clientSave is enabled */}
+      {clientSave && (
+        <div className={`graphiql-index-selector ${selectedKeys ? 'has-selection' : ''}`}>
+          <Button
+            type="button"
+            onClick={(e) => {
+              console.log(treeNodes)
+              if (treeNodes.length > 0 && indexFieldOp.current) {
+                indexFieldOp.current.toggle(e);
+              }
+            }}
+            disabled={treeNodes.length === 0}
+            className="p-button-sm p-button-outlined"
+            title={selectedKeys && formatFieldName ? String(formatFieldName(selectedKeys)) : 'Select index field'}
+            style={{
+              width: '100%',
+              justifyContent: 'space-between',
+              textAlign: 'left',
+              padding: '0.5rem 0.75rem'
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: 0 }}>
+              <i className="pi pi-sitemap" style={{ fontSize: '0.875rem', color: '#6b7280', flexShrink: 0 }}></i>
+              <span style={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                color: selectedKeys ? '#374151' : '#9ca3af',
+                fontWeight: selectedKeys ? '500' : '400'
+              }}>
+                {selectedKeys ? (formatFieldName ? formatFieldName(selectedKeys) : String(selectedKeys)) : 'Select index field'}
+              </span>
             </span>
-          </span>
-          <i className="pi pi-chevron-down" style={{ fontSize: '0.75rem', color: '#6b7280', marginLeft: '0.5rem', flexShrink: 0 }}></i>
-        </Button>
-        <OverlayPanel
-          ref={indexFieldOp}
-          dismissable
-          className="graphiql-index-overlay"
-          style={{ width: '420px' }}
-        >
-          {treeNodes.length > 0 ? (
-            <Tree
-              value={treeNodes}
-              selectionMode="single"
-              selectionKeys={selectedKeys}
-              onSelectionChange={handleNodeSelect}
-              expandedKeys={expandedKeys}
-              onToggle={handleToggle}
-              filter
-              filterMode="lenient"
-              filterBy="data.labelText,data.name"
-              filterPlaceholder="Search fields..."
-              className="w-full"
-            />
-          ) : (
-            <div className="px-4 py-6 text-sm text-gray-500 text-center bg-gray-50 rounded-lg">
-              <i className="pi pi-info-circle text-gray-400 mb-2" style={{ fontSize: '1.25rem' }}></i>
-              <p className="font-medium text-gray-600 mb-1">No query fields available</p>
-              <p className="text-xs text-gray-500">
-                Please write a GraphQL query in the editor.
-              </p>
-            </div>
-          )}
-        </OverlayPanel>
-      </div>
+            <i className="pi pi-chevron-down" style={{ fontSize: '0.75rem', color: '#6b7280', marginLeft: '0.5rem', flexShrink: 0 }}></i>
+          </Button>
+          <OverlayPanel
+            ref={indexFieldOp}
+            dismissable
+            className="graphiql-index-overlay"
+            style={{ width: '420px' }}
+          >
+            {treeNodes.length > 0 ? (
+              <Tree
+                value={treeNodes}
+                selectionMode="single"
+                selectionKeys={selectedKeys}
+                onSelectionChange={handleNodeSelect}
+                expandedKeys={expandedKeys}
+                onToggle={handleToggle}
+                filter
+                filterMode="lenient"
+                filterBy="data.labelText,data.name"
+                filterPlaceholder="Search fields..."
+                className="w-full"
+              />
+            ) : (
+              <div className="px-4 py-6 text-sm text-gray-500 text-center bg-gray-50 rounded-lg">
+                <i className="pi pi-info-circle text-gray-400 mb-2" style={{ fontSize: '1.25rem' }}></i>
+                <p className="font-medium text-gray-600 mb-1">No query fields available</p>
+                <p className="text-xs text-gray-500">
+                  Please write a GraphQL query in the editor.
+                </p>
+              </div>
+            )}
+          </OverlayPanel>
+        </div>
+      )}
+
+      {/* Flatten Field Selector - Show when data is available or field already has value */}
+      {(() => {
+        // Show if: 1) query has been executed (transformedData exists), OR 2) field already has a value
+        const shouldShow = transformedData || selectedFlattenField;
+        const hasFields = arrayOfObjectFields.length > 0;
+        console.log('[SaveControls] Render - Flatten Field Selector:', {
+          shouldShow,
+          clientSave,
+          hasTransformedData: !!transformedData,
+          hasSelectedFlattenField: !!selectedFlattenField,
+          hasFields,
+          arrayOfObjectFieldsCount: arrayOfObjectFields.length,
+          arrayOfObjectFields,
+        });
+
+        if (!shouldShow) {
+          console.log('[SaveControls] Not showing selector - transformedData:', !!transformedData, 'selectedFlattenField:', !!selectedFlattenField);
+          return null;
+        }
+
+        return (
+          <div className={`graphiql-flatten-selector w-sm ${selectedFlattenField ? 'has-selection' : ''}`}>
+            {hasFields || selectedFlattenField ? (
+              <SingleFieldSelector
+                columns={arrayOfObjectFields}
+                selectedField={selectedFlattenField}
+                onSelectionChange={setSelectedFlattenField}
+                formatFieldName={formatFlattenFieldName}
+                placeholder="Select flatten field..."
+                showTag={false}
+              />
+            ) : (
+              <div className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50 text-gray-500 text-center">
+                No array-of-object fields available
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Month Picker */}
       <div className="graphiql-month-picker">
@@ -784,8 +937,8 @@ export const SaveControls = React.forwardRef((props, ref) => {
         )}
       </div>
 
-      {/* Month Index Field Selector */}
-      {month && (
+      {/* Month Index Field Selector - Only show when clientSave is enabled and month is selected */}
+      {clientSave && month && (
         <div className={`graphiql-index-selector ${monthIndexKeys ? 'has-selection' : ''}`}>
           <Button
             type="button"

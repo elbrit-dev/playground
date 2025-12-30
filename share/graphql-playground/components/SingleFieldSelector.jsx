@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { toLower, includes, filter, isEmpty } from 'lodash';
 
-export function SingleFieldSelector({ columns, selectedField, onSelectionChange, formatFieldName, placeholder, label }) {
+export function SingleFieldSelector({ columns, selectedField, onSelectionChange, formatFieldName, placeholder, label, showTag = true }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
@@ -60,8 +60,8 @@ export function SingleFieldSelector({ columns, selectedField, onSelectionChange,
         <i className={`pi ${isOpen ? 'pi-chevron-up' : 'pi-chevron-down'} text-gray-500 text-xs`}></i>
       </button>
 
-      {/* Selected Tag */}
-      {selectedField && (
+      {/* Selected Tag - Only show if showTag prop is true */}
+      {showTag && selectedField && (
         <div className="flex items-center gap-1.5 mt-2">
           <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-md">
             {formatFieldName(selectedField)}

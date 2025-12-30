@@ -12,9 +12,7 @@ export const useTableDialogStore = create((set, get) => ({
   // Selected flatten field
   selectedFlattenField: null,
   setSelectedFlattenField: (field) => {
-    console.log('[useTableDialogStore] setSelectedFlattenField called:', field);
     set({ selectedFlattenField: field });
-    console.log('[useTableDialogStore] selectedFlattenField updated to:', field);
   },
 
   // Processed data
@@ -23,7 +21,6 @@ export const useTableDialogStore = create((set, get) => ({
 
   // Reset all state (but preserve selectedFlattenField for saving)
   reset: () => {
-    console.log('[useTableDialogStore] reset called - preserving selectedFlattenField, clearing activeTab and processedData');
     set((state) => ({
       activeTab: 0,
       selectedFlattenField: state.selectedFlattenField, // Preserve the selected field
