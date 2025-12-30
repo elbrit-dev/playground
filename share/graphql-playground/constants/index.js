@@ -1,7 +1,7 @@
 // GraphQL Endpoint Configuration
 export const GRAPHQL_ENDPOINTS = {
-  UAT: process.env.NEXT_PUBLIC_GRAPHQL_ENDPOINT_UAT || 'https://uat.elbrit.org/api/method/graphql',
-  ERP: process.env.NEXT_PUBLIC_GRAPHQL_ENDPOINT_ERP || 'https://erp.elbrit.org/api/method/graphql',
+  UAT: process.env.NEXT_PUBLIC_GRAPHQL_ENDPOINT_UAT,
+  ERP: process.env.NEXT_PUBLIC_GRAPHQL_ENDPOINT_ERP,
 };
 
 // Firestore Collections

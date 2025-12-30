@@ -39,90 +39,77 @@ export const useSaveControlsStore = create((set, get) => ({
 
   // Actions
   loadQueryData: async (queryString) => {
-    try {
-      const nodes = parseQueryToTreeNodes(queryString);
-      set({ treeNodes: nodes });
+    const nodes = parseQueryToTreeNodes(queryString);
+    set({ treeNodes: nodes });
 
-      // Extract operation name
-      const operationName = extractOperationName(queryString);
+    // Extract operation name
+    const operationName = extractOperationName(queryString);
 
-      if (operationName) {
-        try {
-          const data = await firestoreService.loadQuery(operationName);
-          if (data) {
-            const updates = {};
+    if (operationName) {
+      try {
+        const data = await firestoreService.loadQuery(operationName);
+        if (data) {
+          const updates = {};
 
-            if (data.clientSave !== undefined) {
-              updates.clientSave = data.clientSave;
-            }
-
-            if (data.index && data.index.trim()) {
-              const matchingKey = findNodeKeyFromIndexQuery(data.index, nodes);
-              if (matchingKey) {
-                updates.selectedKeys = matchingKey;
-                const parts = matchingKey.split('.');
-                const expanded = {};
-                for (let i = 1; i < parts.length; i++) {
-                  const keyToExpand = parts.slice(0, i).join('.');
-                  expanded[keyToExpand] = true;
-                }
-                updates.expandedKeys = expanded;
-              }
-            }
-
-            if (data.month === true && data.monthDate) {
-              updates.month = new Date(data.monthDate);
-            } else {
-              updates.month = null;
-            }
-
-            if (data.monthIndex && data.monthIndex.trim()) {
-              const matchingMonthIndexKey = findNodeKeyFromIndexQuery(data.monthIndex, nodes);
-              if (matchingMonthIndexKey) {
-                updates.monthIndexKeys = matchingMonthIndexKey;
-                const parts = matchingMonthIndexKey.split('.');
-                const expanded = {};
-                for (let i = 1; i < parts.length; i++) {
-                  const keyToExpand = parts.slice(0, i).join('.');
-                  expanded[keyToExpand] = true;
-                }
-                updates.monthIndexExpandedKeys = expanded;
-              }
-            } else {
-              updates.monthIndexKeys = null;
-              updates.monthIndexExpandedKeys = {};
-            }
-
-            set(updates);
-          } else {
-            // Reset if no data found
-            set({
-              clientSave: false,
-              selectedKeys: null,
-              expandedKeys: {},
-              month: null,
-              monthIndexKeys: null,
-              monthIndexExpandedKeys: {},
-            });
+          if (data.clientSave !== undefined) {
+            updates.clientSave = data.clientSave;
           }
-        } catch (error) {
-          console.error('Error loading existing document:', error);
+
+          if (data.index && data.index.trim()) {
+            const matchingKey = findNodeKeyFromIndexQuery(data.index, nodes);
+            if (matchingKey) {
+              updates.selectedKeys = matchingKey;
+              const parts = matchingKey.split('.');
+              const expanded = {};
+              for (let i = 1; i < parts.length; i++) {
+                const keyToExpand = parts.slice(0, i).join('.');
+                expanded[keyToExpand] = true;
+              }
+              updates.expandedKeys = expanded;
+            }
+          }
+
+          if (data.month === true && data.monthDate) {
+            updates.month = new Date(data.monthDate);
+          } else {
+            updates.month = null;
+          }
+
+          if (data.monthIndex && data.monthIndex.trim()) {
+            const matchingMonthIndexKey = findNodeKeyFromIndexQuery(data.monthIndex, nodes);
+            if (matchingMonthIndexKey) {
+              updates.monthIndexKeys = matchingMonthIndexKey;
+              const parts = matchingMonthIndexKey.split('.');
+              const expanded = {};
+              for (let i = 1; i < parts.length; i++) {
+                const keyToExpand = parts.slice(0, i).join('.');
+                expanded[keyToExpand] = true;
+              }
+              updates.monthIndexExpandedKeys = expanded;
+            }
+          } else {
+            updates.monthIndexKeys = null;
+            updates.monthIndexExpandedKeys = {};
+          }
+
+          set(updates);
+        } else {
+          // Reset if no data found
+          set({
+            clientSave: false,
+            selectedKeys: null,
+            expandedKeys: {},
+            month: null,
+            monthIndexKeys: null,
+            monthIndexExpandedKeys: {},
+          });
         }
-      } else {
-        // Reset if no operation name
-        set({
-          clientSave: false,
-          selectedKeys: null,
-          expandedKeys: {},
-          month: null,
-          monthIndexKeys: null,
-          monthIndexExpandedKeys: {},
-        });
+      } catch (error) {
+        console.error('Error loading existing document:', error);
       }
-    } catch (error) {
-      console.error('Error in loadQueryData:', error);
+    } else {
+      // Reset if no operation name
       set({
-        treeNodes: [],
         clientSave: false,
         selectedKeys: null,
         expandedKeys: {},

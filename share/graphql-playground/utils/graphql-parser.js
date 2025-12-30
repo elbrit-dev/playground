@@ -7,7 +7,7 @@ import React from 'react';
  * @returns {string} Operation name or empty string
  */
 export const extractOperationName = (queryString) => {
-  if (!queryString || typeof queryString !== 'string' || !queryString.trim()) return '';
+  if (!queryString || !queryString.trim()) return '';
   try {
     const ast = parse(queryString);
     const operation = getOperationAST(ast);
@@ -24,13 +24,7 @@ export const extractOperationName = (queryString) => {
  * @returns {Array} Array of tree node objects
  */
 export const parseQueryToTreeNodes = (queryString, parentPath = '') => {
-  if (!queryString || typeof queryString !== 'string' || !queryString.trim()) {
-    return [];
-  }
-
-  // Basic check for minimal GraphQL structure
-  const trimmed = queryString.trim();
-  if (!trimmed.includes('{') && !trimmed.startsWith('query') && !trimmed.startsWith('mutation') && !trimmed.startsWith('subscription')) {
+  if (!queryString || !queryString.trim()) {
     return [];
   }
 

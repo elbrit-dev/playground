@@ -10,13 +10,12 @@ import { flattenResponse, removeIndexKeys } from './data-flattener';
  * @returns {Object|null} Extracted and processed data grouped by query keys, or null if no data
  */
 export function extractDataFromResponse(jsonData, queryString) {
-  if (!jsonData || !queryString || typeof queryString !== 'string') return null;
+  if (!jsonData || !queryString) return null;
 
   // Step 1: Parse GraphQL query to AST
   let queries = [];
   try {
-    const trimmed = queryString.trim();
-    if (trimmed && (trimmed.includes('{') || trimmed.startsWith('query') || trimmed.startsWith('mutation') || trimmed.startsWith('subscription'))) {
+    if (queryString.trim()) {
       const ast = parse(queryString);
 
       // Find the operation definition
