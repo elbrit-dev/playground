@@ -274,6 +274,9 @@ const DataTableWrapper = (props) => {
     targetValueField: propTargetValueField,
     actualValueField: propActualValueField,
     targetData: propTargetData,
+    enableFullscreenDialog: propEnableFullscreenDialog,
+    scrollable: propScrollable,
+    scrollHeight: propScrollHeight,
   } = props;
 
   const toast = useRef(null);
@@ -305,6 +308,9 @@ const DataTableWrapper = (props) => {
   const [targetInnerGroupFieldRawState, setTargetInnerGroupFieldRaw] = useLocalStorageString('datatable-targetInnerGroupField', null);
   const [targetValueFieldRawState, setTargetValueFieldRaw] = useLocalStorageString('datatable-targetValueField', null);
   const [actualValueFieldRawState, setActualValueFieldRaw] = useLocalStorageString('datatable-actualValueField', null);
+  const [enableFullscreenDialogState, setEnableFullscreenDialog] = useLocalStorageBoolean('datatable-enableFullscreenDialog', true);
+  const [scrollableState, setScrollable] = useLocalStorageBoolean('datatable-scrollable', true);
+  const [scrollHeightState, setScrollHeight] = useLocalStorageString('datatable-scrollHeight', '600px');
 
   // Derived values that prefer props over localStorage state
   const enableSort = propEnableSort !== undefined ? propEnableSort : enableSortState;
@@ -326,6 +332,9 @@ const DataTableWrapper = (props) => {
   const targetValueFieldRaw = propTargetValueField !== undefined ? propTargetValueField : targetValueFieldRawState;
   const actualValueFieldRaw = propActualValueField !== undefined ? propActualValueField : actualValueFieldRawState;
   const targetData = propTargetData !== undefined ? propTargetData : Target;
+  const enableFullscreenDialog = propEnableFullscreenDialog !== undefined ? propEnableFullscreenDialog : enableFullscreenDialogState;
+  const scrollable = propScrollable !== undefined ? propScrollable : scrollableState;
+  const scrollHeight = propScrollHeight !== undefined ? propScrollHeight : scrollHeightState;
 
   // Load saved queries on mount
   useEffect(() => {
@@ -596,7 +605,14 @@ const DataTableWrapper = (props) => {
   useEffect(() => {
     if (typeof window !== 'undefined' && window.localStorage) {
       try {
-        const booleanKeys = ['datatable-enableSort', 'datatable-enableFilter', 'datatable-enableSummation', 'datatable-enableCellEdit'];
+        const booleanKeys = [
+          'datatable-enableSort', 
+          'datatable-enableFilter', 
+          'datatable-enableSummation', 
+          'datatable-enableCellEdit',
+          'datatable-enableFullscreenDialog',
+          'datatable-scrollable'
+        ];
         booleanKeys.forEach(key => {
           try {
             const item = window.localStorage.getItem(key);
@@ -682,9 +698,10 @@ const DataTableWrapper = (props) => {
   }, [tableData]);
 
   const targetColumns = useMemo(() => {
-    if (!Array.isArray(Target) || isEmpty(Target)) return [];
-    return uniq(flatMap(Target, (item) => item && typeof item === 'object' ? keys(item) : []));
-  }, []);
+    const dataToUse = (propTargetData && propTargetData.length > 0) ? propTargetData : Target;
+    if (!Array.isArray(dataToUse) || isEmpty(dataToUse)) return [];
+    return uniq(flatMap(dataToUse, (item) => item && typeof item === 'object' ? keys(item) : []));
+  }, [propTargetData]);
 
   const handleCellEditComplete = (e) => {
     const { rowData, newValue, field, oldValue } = e;
@@ -807,6 +824,56 @@ const DataTableWrapper = (props) => {
               onTargetValueFieldChange={setTargetValueFieldRaw}
               onActualValueFieldChange={setActualValueFieldRaw}
             />
+
+            {/* Display Settings - Local to wrapper to avoid modifying share folder */}
+            <div className="mt-6 pt-6 border-t border-gray-100">
+              <div className="flex items-center gap-2 mb-4 text-blue-700">
+                <i className="pi pi-desktop text-lg"></i>
+                <h3 className="font-bold">Display Settings</h3>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 bg-gray-50 p-4 rounded-xl">
+                <div className="flex items-center justify-between p-2 bg-white rounded-lg shadow-sm border border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <i className={`pi pi-window-maximize ${enableFullscreenDialog ? 'text-blue-600' : 'text-gray-400'}`}></i>
+                    <span className="text-sm font-medium text-gray-700">Fullscreen Dialog</span>
+                  </div>
+                  <div 
+                    className={`w-10 h-5 rounded-full transition-colors cursor-pointer relative ${enableFullscreenDialog ? 'bg-blue-600' : 'bg-gray-300'}`}
+                    onClick={() => setEnableFullscreenDialog(!enableFullscreenDialog)}
+                  >
+                    <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${enableFullscreenDialog ? 'left-5.5 translate-x-1' : 'left-0.5'}`}></div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between p-2 bg-white rounded-lg shadow-sm border border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <i className={`pi pi-arrows-v ${scrollable ? 'text-blue-600' : 'text-gray-400'}`}></i>
+                    <span className="text-sm font-medium text-gray-700">Scrollable</span>
+                  </div>
+                  <div 
+                    className={`w-10 h-5 rounded-full transition-colors cursor-pointer relative ${scrollable ? 'bg-blue-600' : 'bg-gray-300'}`}
+                    onClick={() => setScrollable(!scrollable)}
+                  >
+                    <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${scrollable ? 'left-5.5 translate-x-1' : 'left-0.5'}`}></div>
+                  </div>
+                </div>
+
+                <div className="p-2 bg-white rounded-lg shadow-sm border border-gray-100 flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <i className="pi pi-expand text-gray-400"></i>
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Scroll Height</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={scrollHeight || ''}
+                    onChange={(e) => setScrollHeight(e.target.value)}
+                    placeholder="e.g. 600px"
+                    className="w-full text-sm font-medium text-gray-900 border-0 p-0 focus:ring-0 placeholder:text-gray-300"
+                  />
+                </div>
+              </div>
+            </div>
           </>
         )}
 
@@ -814,7 +881,8 @@ const DataTableWrapper = (props) => {
           data={tableData}
           rowsPerPageOptions={rowsPerPageOptions}
           defaultRows={defaultRows}
-          scrollable={true}
+          scrollable={scrollable}
+          scrollHeight={scrollHeight}
           enableSort={enableSort}
           enableFilter={enableFilter}
           enableSummation={enableSummation}
@@ -835,7 +903,7 @@ const DataTableWrapper = (props) => {
           targetInnerGroupField={enableTargetDataRaw ? targetInnerGroupFieldRaw : null}
           targetValueField={enableTargetDataRaw ? targetValueFieldRaw : null}
           actualValueField={enableTargetDataRaw ? actualValueFieldRaw : null}
-          enableFullscreenDialog={showControls}
+          enableFullscreenDialog={enableFullscreenDialog}
         />
       </div>
     </div>

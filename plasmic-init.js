@@ -116,6 +116,11 @@ PLASMIC.registerComponent(DataTable, {
       type: "string",
       description: "The field in the main data that contains the actual value",
     },
+    enableFullscreenDialog: {
+      type: "boolean",
+      defaultValue: true,
+      description: "Enable/disable fullscreen dialog feature",
+    },
   },
   importPath: "./components/DataTable",
 });
