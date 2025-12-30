@@ -23,7 +23,7 @@ PLASMIC.registerComponent(DataTable, {
     showControls: {
       type: "boolean",
       description: "Toggle the visibility of the table controls (sort, filter, etc.)",
-      defaultValue: true,
+      defaultValue: false,
     },
     rowsPerPageOptions: {
       type: "object",
