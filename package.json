@@ -11,6 +11,7 @@
   "dependencies": {
     "@graphiql/plugin-explorer": "^5.1.1",
     "@graphiql/react": "^0.37.3",
+    "@monaco-editor/react": "^4.7.0",
     "@plasmicapp/loader-nextjs": "^1.0.446",
     "embla-carousel-autoplay": "^8.6.0",
     "embla-carousel-react": "^8.6.0",
