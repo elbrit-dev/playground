@@ -41,34 +41,23 @@ export const SaveControls = React.forwardRef((props, ref) => {
   const variableEditor = useGraphiQL((state) => state.variableEditor);
   const currentQuery = useGraphiQL((state) => state.queryEditor?.getValue() || '');
   const activeTabIndex = useGraphiQL((state) => state.activeTabIndex) ?? 0;
-  const tabData = useAppStore((state) => state.tabData);
-  const currentTabData = tabData[activeTabIndex] || { hasSuccessfulQuery: false, transformedData: null };
+  const { tabData, setTabData } = useAppStore();
+  const currentTabData = tabData[activeTabIndex] || { hasSuccessfulQuery: false, transformedData: null, transformerCode: '' };
   const transformedData = currentTabData.transformedData;
+  const transformerCode = currentTabData.transformerCode || '';
   const indexFieldOp = useRef(null);
   const monthIndexFieldOp = useRef(null);
-
-  // Debug logging for flatten field selector visibility
-  useEffect(() => {
-    console.log('[SaveControls] Debug - Flatten Field Selector Visibility:', {
-      clientSave,
-      activeTabIndex,
-      hasTransformedData: !!transformedData,
-      transformedDataKeys: transformedData ? Object.keys(transformedData) : [],
-      currentTabData,
-      tabDataKeys: Object.keys(tabData),
-    });
-  }, [clientSave, activeTabIndex, transformedData, currentTabData, tabData]);
 
   // Load existing document data when query changes (including tab switches)
   useEffect(() => {
     if (queryEditor) {
       const queryString = currentQuery || queryEditor.getValue() || '';
-      loadQueryData(queryString).catch((error) => {
+      loadQueryData(queryString, activeTabIndex).catch((error) => {
         console.error('Error loading query data:', error);
         resetSaveControls();
       });
     }
-  }, [queryEditor, currentQuery, loadQueryData, resetSaveControls]);
+  }, [queryEditor, currentQuery, loadQueryData, resetSaveControls, activeTabIndex]);
 
   // Clear monthIndexKeys when month is cleared
   useEffect(() => {
@@ -173,16 +162,12 @@ export const SaveControls = React.forwardRef((props, ref) => {
   // Compute array-of-object fields from transformed data
   // Combine fields from all query keys to show all available options
   const arrayOfObjectFields = useMemo(() => {
-    console.log('[SaveControls] Computing arrayOfObjectFields, transformedData:', transformedData);
     if (!transformedData) {
-      console.log('[SaveControls] No transformedData, returning empty array');
       return [];
     }
     // Get all query keys from transformed data
     const queryKeys = Object.keys(transformedData).filter(key => transformedData[key] && transformedData[key].length > 0);
-    console.log('[SaveControls] Query keys:', queryKeys);
     if (queryKeys.length === 0) {
-      console.log('[SaveControls] No query keys with data, returning empty array');
       return [];
     }
 
@@ -190,14 +175,11 @@ export const SaveControls = React.forwardRef((props, ref) => {
     const allFields = new Set();
     for (const queryKey of queryKeys) {
       const data = transformedData[queryKey];
-      console.log(`[SaveControls] Processing query key "${queryKey}", data length:`, data?.length);
       const fields = detectArrayOfObjectFields(data);
-      console.log(`[SaveControls] Detected fields for "${queryKey}":`, fields);
       fields.forEach(field => allFields.add(field));
     }
 
     const result = Array.from(allFields).sort();
-    console.log('[SaveControls] Final arrayOfObjectFields:', result);
     return result;
   }, [transformedData]);
 
@@ -209,7 +191,7 @@ export const SaveControls = React.forwardRef((props, ref) => {
       const node = findNodeByKey(treeNodes, selectedKey);
       // Check if node is a leaf (no children or empty children array)
       const isLeaf = !node || !node.children || node.children.length === 0;
-      
+
       if (isLeaf) {
         setSelectedKeys(selectedKey);
         if (indexFieldOp.current) {
@@ -219,7 +201,7 @@ export const SaveControls = React.forwardRef((props, ref) => {
         // For non-leaf nodes, toggle expand/collapse instead of selecting
         const currentExpandedKeys = expandedKeys || {};
         const isExpanded = !!currentExpandedKeys[selectedKey];
-        
+
         if (isExpanded) {
           // Collapse: remove the key from expandedKeys
           const { [selectedKey]: _, ...rest } = currentExpandedKeys;
@@ -231,7 +213,7 @@ export const SaveControls = React.forwardRef((props, ref) => {
             [selectedKey]: true,
           });
         }
-        
+
         // Prevent selection of non-leaf nodes by keeping current selection
         setSelectedKeys(selectedKeys);
       }
@@ -252,7 +234,7 @@ export const SaveControls = React.forwardRef((props, ref) => {
       const node = findNodeByKey(monthIndexTreeNodes, selectedKey);
       // Check if node is a leaf (no children or empty children array)
       const isLeaf = !node || !node.children || node.children.length === 0;
-      
+
       if (isLeaf) {
         setMonthIndexKeys(selectedKey);
         if (monthIndexFieldOp.current) {
@@ -262,7 +244,7 @@ export const SaveControls = React.forwardRef((props, ref) => {
         // For non-leaf nodes, toggle expand/collapse instead of selecting
         const currentExpandedKeys = monthIndexExpandedKeys || {};
         const isExpanded = !!currentExpandedKeys[selectedKey];
-        
+
         if (isExpanded) {
           // Collapse: remove the key from expandedKeys
           const { [selectedKey]: _, ...rest } = currentExpandedKeys;
@@ -274,7 +256,7 @@ export const SaveControls = React.forwardRef((props, ref) => {
             [selectedKey]: true,
           });
         }
-        
+
         // Prevent selection of non-leaf nodes by keeping current selection
         setMonthIndexKeys(monthIndexKeys);
       }
@@ -298,6 +280,9 @@ export const SaveControls = React.forwardRef((props, ref) => {
 
   const handleSave = useCallback(() => {
     if (!queryEditor) return;
+
+    // Print Monaco Editor content
+    console.log('Monaco Editor Content:', transformerCode);
 
     // Capture selectedFlattenField at the time handleSave is called
     // so it persists even if the store value changes before confirmDialog accept callback
@@ -734,6 +719,9 @@ export const SaveControls = React.forwardRef((props, ref) => {
             ...(capturedSelectedFlattenField && {
               flattenField: capturedSelectedFlattenField,
             }),
+            ...(transformerCode && transformerCode.trim() && {
+              transformerCode: transformerCode,
+            }),
           };
           await firestoreService.saveQuery(operationName, saveData);
         } catch (error) {
@@ -747,7 +735,7 @@ export const SaveControls = React.forwardRef((props, ref) => {
         }
       },
     });
-  }, [clientSave, selectedKeys, month, monthIndexKeys, treeNodes, queryEditor, variableEditor, formatFieldName, selectedFlattenField]);
+  }, [clientSave, selectedKeys, month, monthIndexKeys, treeNodes, queryEditor, variableEditor, formatFieldName, selectedFlattenField, transformerCode, activeTabIndex, setTabData]);
 
   // Expose handleSave via ref
   useImperativeHandle(ref, () => ({
@@ -845,18 +833,8 @@ export const SaveControls = React.forwardRef((props, ref) => {
         // Show if: 1) query has been executed (transformedData exists), OR 2) field already has a value
         const shouldShow = transformedData || selectedFlattenField;
         const hasFields = arrayOfObjectFields.length > 0;
-        console.log('[SaveControls] Render - Flatten Field Selector:', {
-          shouldShow,
-          clientSave,
-          hasTransformedData: !!transformedData,
-          hasSelectedFlattenField: !!selectedFlattenField,
-          hasFields,
-          arrayOfObjectFieldsCount: arrayOfObjectFields.length,
-          arrayOfObjectFields,
-        });
 
         if (!shouldShow) {
-          console.log('[SaveControls] Not showing selector - transformedData:', !!transformedData, 'selectedFlattenField:', !!selectedFlattenField);
           return null;
         }
 

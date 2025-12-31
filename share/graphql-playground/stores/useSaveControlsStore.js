@@ -3,6 +3,7 @@ import { firestoreService } from '../services/firestoreService';
 import { findNodeKeyFromIndexQuery } from '../utils/query-matcher';
 import { parseQueryToTreeNodes, extractOperationName } from '../utils/graphql-parser';
 import { useTableDialogStore } from './useTableDialogStore';
+import { useAppStore } from './useAppStore';
 
 /**
  * Save controls store
@@ -39,7 +40,7 @@ export const useSaveControlsStore = create((set, get) => ({
   setMonthIndexExpandedKeys: (keys) => set({ monthIndexExpandedKeys: keys }),
 
   // Actions
-  loadQueryData: async (queryString) => {
+  loadQueryData: async (queryString, activeTabIndex = 0) => {
     const nodes = parseQueryToTreeNodes(queryString);
     set({ treeNodes: nodes });
 
@@ -100,10 +101,18 @@ export const useSaveControlsStore = create((set, get) => ({
             useTableDialogStore.getState().setSelectedFlattenField(null);
           }
 
+          // Restore transformerCode if it exists
+          if (data.transformerCode !== undefined) {
+            useAppStore.getState().setTabData(activeTabIndex, { transformerCode: data.transformerCode || '' });
+          } else {
+            useAppStore.getState().setTabData(activeTabIndex, { transformerCode: '' });
+          }
+
           set(updates);
         } else {
           // Reset if no data found
           useTableDialogStore.getState().setSelectedFlattenField(null);
+          useAppStore.getState().setTabData(activeTabIndex, { transformerCode: '' });
           set({
             clientSave: false,
             selectedKeys: null,
@@ -119,6 +128,7 @@ export const useSaveControlsStore = create((set, get) => ({
     } else {
       // Reset if no operation name
       useTableDialogStore.getState().setSelectedFlattenField(null);
+      useAppStore.getState().setTabData(activeTabIndex, { transformerCode: '' });
       set({
         clientSave: false,
         selectedKeys: null,

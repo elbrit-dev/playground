@@ -431,7 +431,7 @@ export default function DataTableControls({
       </div>
       
       {/* Scrollable Content with Accordion */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 p-4">
         <Accordion multiple activeIndex={[0]}>
               {/* TABLE FEATURES */}
               <AccordionTab header={

@@ -25,20 +25,6 @@ export function detectArrayOfObjectFields(data) {
             isArrayOfObjects = true;
           }
         }
-        // Also check if value is a JSON string representing an array of objects
-        else if (typeof value === 'string') {
-          try {
-            const parsed = JSON.parse(value);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              const firstItem = parsed[0];
-              if (firstItem && typeof firstItem === 'object' && !Array.isArray(firstItem)) {
-                isArrayOfObjects = true;
-              }
-            }
-          } catch (e) {
-            // Not a valid JSON string, skip
-          }
-        }
 
         if (isArrayOfObjects) {
           fieldSet.add(key);
@@ -60,20 +46,8 @@ export function flattenParentItems(primary, itemsFieldName) {
   if (!Array.isArray(primary) || primary.length === 0) return [];
 
   return primary.flatMap(({ [itemsFieldName]: items, ...parent }) => {
-    // Parse items if it's a JSON string, otherwise use as-is
-    let itemsArray = [];
-    if (Array.isArray(items)) {
-      itemsArray = items;
-    } else if (typeof items === 'string') {
-      try {
-        const parsed = JSON.parse(items);
-        if (Array.isArray(parsed)) {
-          itemsArray = parsed;
-        }
-      } catch (e) {
-        // Not a valid JSON string, itemsArray remains empty
-      }
-    }
+    // Use items as-is if it's an array, otherwise empty array
+    const itemsArray = Array.isArray(items) ? items : [];
 
     // If no items, return the parent with the items field removed
     if (itemsArray.length === 0) {
@@ -119,17 +93,11 @@ export function flattenResponse(nodes) {
         maxDepth: 10,     // Maximum depth to flatten
       });
 
-      // Process the flattened object and handle arrays
+      // Process the flattened object - keep arrays as arrays
       const processed = { __index__: index };
       for (const key in flattenedNode) {
         if (flattenedNode.hasOwnProperty(key)) {
-          const value = flattenedNode[key];
-          // Handle arrays - use custom formatter for readable output
-          if (Array.isArray(value)) {
-            processed[key] = JSON.stringify(value);
-          } else {
-            processed[key] = value;
-          }
+          processed[key] = flattenedNode[key];
         }
       }
 

@@ -46,19 +46,19 @@ export default function GraphQLPlayground() {
   const saveControlsRef = useRef(null);
   const currentTabIndexRef = useRef(0);
   const [activeTabIndex, setActiveTabIndex] = useState(0);
-  
+
   // Get tab data for current tab (reactive to store changes)
   // Subscribe to entire tabData object to avoid selector closure issues
   const tabData = useAppStore((state) => state.tabData);
   const currentTabData = tabData[activeTabIndex] || { hasSuccessfulQuery: false, transformedData: null };
   const hasSuccessfulQuery = currentTabData.hasSuccessfulQuery;
   const transformedData = currentTabData.transformedData;
-  
+
   // Update ref when tab changes
   useEffect(() => {
     currentTabIndexRef.current = activeTabIndex;
   }, [activeTabIndex]);
-  
+
   // Callback to update active tab index from ActiveTabTracker
   const handleTabIndexChange = useCallback((tabIndex) => {
     setActiveTabIndex(tabIndex);
@@ -76,34 +76,6 @@ export default function GraphQLPlayground() {
 
   // Endpoint options - UAT and ERP (using extracted constant)
   const endpointOptions = useMemo(() => getEndpointOptions(), []);
-
-
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && typeof self !== 'undefined') {
-
-
-      if (!self.MonacoEnvironment || !self.MonacoEnvironment.getWorker) {
-
-        self.MonacoEnvironment = {
-          getWorker: function (_workerId, label) {
-
-            const baseUrl = MONACO_EDITOR_CDN_URL;
-            const workerUrl = label === 'json'
-              ? `${baseUrl}/language/json/json.worker.js`
-              : `${baseUrl}/editor/editor.worker.js`;
-
-
-            const blob = new Blob(
-              [`importScripts('${workerUrl}');`],
-              { type: 'application/javascript' }
-            );
-            return new Worker(URL.createObjectURL(blob));
-          },
-        };
-      }
-    }
-  }, []);
 
   // Handle endpoint selection change
   const handleEndpointChange = useCallback((e) => {
@@ -132,8 +104,8 @@ export default function GraphQLPlayground() {
       const currentTabIndex = currentTabIndexRef.current;
 
       // Check if this is an IntrospectionQuery
-      const isIntrospectionQuery = 
-        graphQLParams.query?.includes('__schema') || 
+      const isIntrospectionQuery =
+        graphQLParams.query?.includes('__schema') ||
         graphQLParams.query?.includes('IntrospectionQuery') ||
         graphQLParams.operationName === 'IntrospectionQuery';
 
@@ -145,26 +117,25 @@ export default function GraphQLPlayground() {
         },
         body: JSON.stringify(graphQLParams),
       });
-      
+
       const response = await data.json().catch(() => data.text());
 
       // Process and store data for non-introspection queries and successful responses
       if (!isIntrospectionQuery && data.ok) {
         // Check if response has GraphQL errors
         const hasErrors = response && typeof response === 'object' && response.errors && response.errors.length > 0;
-        
+
         if (!hasErrors) {
           // Process and transform the response data
           const queryString = graphQLParams.query || '';
           const transformedData = extractDataFromResponse(response, queryString);
-          
+
           // Store both success state and transformed data for this tab
           setTabData(currentTabIndex, {
             hasSuccessfulQuery: true,
             transformedData: transformedData,
           });
-          
-          console.log('Query Response:', response);
+
         } else {
           // Query failed - reset tab data
           setTabData(currentTabIndex, {
@@ -173,7 +144,7 @@ export default function GraphQLPlayground() {
           });
         }
       }
-      
+
       return response;
     };
   }, [endpointUrl, authToken, setTabData]);
@@ -300,10 +271,10 @@ export default function GraphQLPlayground() {
                     }
                   }}
                   title={
-                    !hasSuccessfulQuery 
-                      ? "Execute a query first to enable table view" 
-                      : tableMode 
-                        ? "Switch to JSON view" 
+                    !hasSuccessfulQuery
+                      ? "Execute a query first to enable table view"
+                      : tableMode
+                        ? "Switch to JSON view"
                         : "Switch to table view"
                   }
                 >
@@ -327,11 +298,6 @@ export default function GraphQLPlayground() {
           </ToolbarPlaceholder>
           <ActiveTabTracker onTabIndexChange={handleTabIndexChange} />
           <TabChangeDetector
-            onTabChange={(tabInfo) => {
-              console.log('Tab changed:', tabInfo);
-              // Tab change detected - state is now per-tab, so no need to reset
-              // The hasSuccessfulQuery will be checked based on the new activeTabIndex
-            }}
           />
           <TableDialog
             visible={isTableDialogOpen}

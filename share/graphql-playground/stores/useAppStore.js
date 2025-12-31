@@ -38,8 +38,8 @@ export const useAppStore = create((set, get) => ({
   setIsTableDialogOpen: (open) => set({ isTableDialogOpen: open }),
 
   // Query execution state per tab
-  // Map of tabIndex -> { hasSuccessfulQuery: boolean, transformedData: object }
-  tabData: {}, // { [tabIndex]: { hasSuccessfulQuery: boolean, transformedData: object | null } }
+  // Map of tabIndex -> { hasSuccessfulQuery: boolean, transformedData: object, transformerCode: string }
+  tabData: {}, // { [tabIndex]: { hasSuccessfulQuery: boolean, transformedData: object | null, transformerCode: string } }
   setTabData: (tabIndex, data) => 
     set((state) => ({
       tabData: {
@@ -52,7 +52,7 @@ export const useAppStore = create((set, get) => ({
     })),
   getTabData: (tabIndex) => {
     const state = get();
-    return state.tabData[tabIndex] || { hasSuccessfulQuery: false, transformedData: null };
+    return state.tabData[tabIndex] || { hasSuccessfulQuery: false, transformedData: null, transformerCode: '' };
   },
 }));
 

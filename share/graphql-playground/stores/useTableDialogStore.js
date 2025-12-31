@@ -3,9 +3,10 @@ import { create } from 'zustand';
 /**
  * Table dialog store
  * Manages: active tab, selected flatten field, processed data
+ * Note: transformerCode is now stored per-tab in useAppStore.tabData
  */
 export const useTableDialogStore = create((set, get) => ({
-  // Active tab index
+  // Active tab index (for internal TableDialog tabs, not GraphiQL tabs)
   activeTab: 0,
   setActiveTab: (index) => set({ activeTab: index }),
 

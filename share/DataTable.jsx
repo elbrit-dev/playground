@@ -1232,6 +1232,11 @@ export default function DataTableComponent({
       return formatDateValue(value);
     }
 
+    // Format arrays - use JSON.stringify for readable output
+    if (isArray(value)) {
+      return JSON.stringify(value);
+    }
+
     if (isNumber(value)) {
       return value % 1 === 0
         ? value.toLocaleString('en-US')
@@ -2613,10 +2618,15 @@ export default function DataTableComponent({
   };
 
   const exportToXLSX = useCallback(() => {
-    // Prepare data for export - use sortedData (filtered and sorted)
-    const exportData = sortedData.map((row) => {
+    // Prepare data for export - use original data (unfiltered, ungrouped, unsorted)
+    // Get all columns from the original data
+    const allColumns = isEmpty(safeData) ? [] : uniq(flatMap(safeData, (item) =>
+      item && typeof item === 'object' ? keys(item) : []
+    ));
+
+    const exportData = safeData.map((row) => {
       const exportRow = {};
-      columns.forEach((col) => {
+      allColumns.forEach((col) => {
         const value = get(row, col);
         const colType = get(columnTypes, col);
 
@@ -2645,7 +2655,7 @@ export default function DataTableComponent({
 
     // Write file
     XLSX.writeFile(wb, filename);
-  }, [sortedData, columns, columnTypes, formatHeaderName, formatCellValue, isTruthyBoolean]);
+  }, [safeData, columnTypes, formatHeaderName, formatCellValue, isTruthyBoolean]);
 
   if (isEmpty(safeData)) {
     return (

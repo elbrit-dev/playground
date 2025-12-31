@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import * as _ from 'lodash';
+import * as jmespath from 'jmespath';
 import { Dropdown } from 'primereact/dropdown';
 import { Button } from 'primereact/button';
 import { startCase } from 'lodash';
 import { firestoreService } from '@/app/graphql-playground/services/firestoreService';
 import { extractDataFromResponse } from '@/app/graphql-playground/utils/data-extractor';
-import { flattenParentItems, removeIndexKeys } from '@/app/graphql-playground/utils/data-flattener';
+import { removeIndexKeys } from '@/app/graphql-playground/utils/data-flattener';
 import { getInitialEndpoint, DEFAULT_AUTH_TOKEN } from '@/app/graphql-playground/constants';
 import { MonthRangePicker } from './MonthRangePicker';
 
@@ -74,9 +76,10 @@ export default function DataProvider({
   const [executingQuery, setExecutingQuery] = useState(false);
   const [responseData, setResponseData] = useState(null);
   const [processedData, setProcessedData] = useState(null);
-  const [selectedFlattenField, setSelectedFlattenField] = useState(null);
+  const [transformerCode, setTransformerCode] = useState('');
   const [monthRange, setMonthRange] = useState(null); // Array of [startMonth, endMonth] or null
   const [hasMonthSupport, setHasMonthSupport] = useState(false); // Whether the current query supports month filtering
+  const [isRunningTransformer, setIsRunningTransformer] = useState(false);
 
   // Load saved queries on mount
   useEffect(() => {
@@ -109,7 +112,7 @@ export default function DataProvider({
     } else if (dataSource === 'offline') {
       setResponseData(null);
       setProcessedData(null);
-      setSelectedFlattenField(null);
+      setTransformerCode('');
       setSelectedQueryKey(null);
       setMonthRange(null);
       setHasMonthSupport(false);
@@ -141,7 +144,7 @@ export default function DataProvider({
     }
   }, [processedData, availableQueryKeys, selectedQueryKey, dataSource, setSelectedQueryKey]);
 
-  // Process data when responseData or selectedFlattenField changes
+  // Process data when responseData changes (basic processing - transformer handles transformation)
   useEffect(() => {
     if (!responseData) {
       setProcessedData(null);
@@ -157,12 +160,8 @@ export default function DataProvider({
     const processed = {};
     for (const queryKey of queryKeys) {
       const data = responseData[queryKey];
-
-      if (selectedFlattenField && data && data.length > 0) {
-        processed[queryKey] = flattenParentItems(data, selectedFlattenField);
-      } else {
-        processed[queryKey] = data;
-      }
+      // Use original data - flattening is now done in transformer code
+      processed[queryKey] = data;
     }
 
     // Remove __index__ keys from all processed data at the end
@@ -172,7 +171,7 @@ export default function DataProvider({
     }
 
     setProcessedData(cleanedProcessed);
-  }, [responseData, selectedFlattenField]);
+  }, [responseData]);
 
   // Execute saved query
   const executeSavedQuery = useCallback(async (queryId, skipMonthDateLoad = false) => {
@@ -183,16 +182,16 @@ export default function DataProvider({
         throw new Error('Query not found');
       }
 
-      const { body, variables, index, flattenField, month, monthDate } = queryDoc;
+      const { body, variables, index, transformerCode: savedTransformerCode, month, monthDate } = queryDoc;
       if (!body || !body.trim()) {
         throw new Error('Query body is empty');
       }
 
-      // Set selected flatten field from saved document
-      if (flattenField) {
-        setSelectedFlattenField(flattenField);
+      // Set transformer code from saved document
+      if (savedTransformerCode !== undefined) {
+        setTransformerCode(savedTransformerCode || '');
       } else {
-        setSelectedFlattenField(null);
+        setTransformerCode('');
       }
 
       // Set month support flag from saved document
@@ -298,6 +297,11 @@ export default function DataProvider({
       const extractedData = extractDataFromResponse(jsonResponse, body);
       setResponseData(extractedData);
 
+      // Apply transformer if transformer code exists (will be applied via useEffect)
+      // Reset the applied flag so transformer runs for new data
+      transformerAppliedOnLoadRef.current = false;
+      lastResponseDataRef.current = null;
+
       if (onDataChange) {
         onDataChange({
           severity: 'success',
@@ -322,6 +326,163 @@ export default function DataProvider({
       setExecutingQuery(false);
     }
   }, [onDataChange, onError, hasMonthSupport, monthRange]);
+
+  // Track if transformer has been applied on initial load for current responseData
+  const transformerAppliedOnLoadRef = useRef(false);
+  const lastResponseDataRef = useRef(null);
+
+  // Create query function for transformer
+  const createQueryFunction = useCallback(() => {
+    return async (queryKey) => {
+      if (!queryKey || !queryKey.trim()) {
+        throw new Error('Query key is required');
+      }
+
+      // Load query document from Firestore
+      const queryDoc = await firestoreService.loadQuery(queryKey);
+      if (!queryDoc) {
+        throw new Error(`Query "${queryKey}" not found`);
+      }
+
+      const { body, variables } = queryDoc;
+      if (!body || !body.trim()) {
+        throw new Error('Query body is empty');
+      }
+
+      // Get endpoint URL and auth token
+      const endpoint = getInitialEndpoint()?.code;
+      const token = DEFAULT_AUTH_TOKEN;
+
+      if (!endpoint) {
+        throw new Error('GraphQL endpoint URL is not set');
+      }
+
+      // Parse variables if provided
+      let parsedVariables = {};
+      if (variables && variables.trim()) {
+        try {
+          parsedVariables = JSON.parse(variables);
+        } catch (e) {
+          console.warn('Failed to parse variables, using empty object:', e);
+        }
+      }
+
+      // Execute GraphQL query
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': token }),
+        },
+        body: JSON.stringify({
+          query: body,
+          variables: parsedVariables,
+        }),
+      });
+
+      const jsonResponse = await response.json();
+      if (jsonResponse.errors) {
+        throw new Error(JSON.stringify(jsonResponse.errors));
+      }
+
+      // Extract data using the abstracted utility function
+      const extractedData = extractDataFromResponse(jsonResponse, body);
+      return extractedData;
+    };
+  }, []);
+
+  // Apply transformer code and update processedData
+  const applyTransformer = useCallback(async () => {
+    if (isRunningTransformer) {
+      return;
+    }
+
+    if (!transformerCode || transformerCode.trim() === '') {
+      return;
+    }
+
+    if (!responseData) {
+      return;
+    }
+
+    console.log('Applying transformer:', transformerCode);
+    setIsRunningTransformer(true);
+
+    try {
+      // Create query function
+      const query = createQueryFunction();
+
+      // Wrap editor content in async function to support await
+      const wrappedContent = `(async () => {
+        ${transformerCode || ''}
+      })()`;
+
+      // Create function with imports and context
+      const fn = new Function(
+        'jmespath',
+        '_',
+        'data',
+        'query',
+        `return ${wrappedContent};`
+      );
+
+      // Execute with provided context
+      // Always use responseData (original data) as source, not processedData
+      const sourceData = responseData;
+      const dataCopy = sourceData ? JSON.parse(JSON.stringify(sourceData)) : {};
+      const evalResult = await fn(
+        jmespath,
+        _,
+        dataCopy,
+        query
+      );
+
+      console.log('Transformer Result:', evalResult);
+
+      // If result is valid, use it to update processedData
+      if (evalResult !== null && evalResult !== undefined) {
+        // Ensure result is in the correct format (object with queryKeys)
+        if (typeof evalResult === 'object' && !Array.isArray(evalResult)) {
+          setProcessedData(evalResult);
+        } else {
+          console.warn('Transformer result is not an object, ignoring result');
+        }
+      }
+    } catch (error) {
+      console.error('Error applying transformer:', error);
+      console.error('Error Type:', error.name);
+      console.error('Error Message:', error.message);
+      console.error('Error Stack:', error.stack);
+    } finally {
+      setIsRunningTransformer(false);
+    }
+  }, [transformerCode, isRunningTransformer, createQueryFunction, responseData, setProcessedData]);
+
+  // Apply transformer whenever responseData changes (after GraphQL query execution)
+  // This ensures transformer runs every time a query is executed
+  useEffect(() => {
+    // Only apply if:
+    // 1. Transformer code exists
+    // 2. We have responseData (original data)
+    // 3. We haven't already applied for this specific responseData instance
+    if (!transformerCode || transformerCode.trim() === '') {
+      return;
+    }
+
+    if (!responseData) {
+      return;
+    }
+
+    // Check if we've already applied for this responseData instance
+    if (transformerAppliedOnLoadRef.current && lastResponseDataRef.current === responseData) {
+      return;
+    }
+
+    // Apply transformer whenever new data arrives (after GraphQL query)
+    transformerAppliedOnLoadRef.current = true;
+    lastResponseDataRef.current = responseData;
+    applyTransformer();
+  }, [responseData, applyTransformer]); // Runs every time responseData changes (new query executed)
 
   // Determine which data to use (processed from query or offline)
   const tableData = useMemo(() => {
