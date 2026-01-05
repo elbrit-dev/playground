@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "copy-shared": "git clone git@github.com:VICTORVICKIE/Elbrit-Play.git temp-elbrit && powershell -Command \"mkdir share\\datatable -Force; mkdir share\\graphql-playground -Force; mkdir share\\components -Force; robocopy .\\temp-elbrit\\src\\app\\datatable .\\share\\datatable /E /MIR; robocopy .\\temp-elbrit\\src\\app\\graphql-playground .\\share\\graphql-playground /E /MIR; robocopy .\\temp-elbrit\\src\\components .\\share\\components /E /MIR; rmdir .\\temp-elbrit -Recurse -Force\""
+    "copy-shared": "git clone git@github.com:VICTORVICKIE/Elbrit-Play.git temp-elbrit && powershell -Command \"mkdir share\\datatable -Force; mkdir share\\graphql-playground -Force; mkdir share\\components -Force; robocopy .\\temp-elbrit\\src\\app .\\share /E /MIR; robocopy .\\temp-elbrit\\src\\components .\\share\\components /E /MIR; rmdir .\\temp-elbrit -Recurse -Force\""
   },
   "dependencies": {
     "@graphiql/plugin-explorer": "^5.1.1",
