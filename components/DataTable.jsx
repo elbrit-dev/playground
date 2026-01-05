@@ -13,7 +13,7 @@ import Target from '../resource/target';
 import { uniq, flatMap, keys, isEmpty, startCase, filter as lodashFilter, get, isNil, debounce } from 'lodash';
 import { saveSettingsForDataSource, loadSettingsForDataSource } from '../share/datatable/utils/settingsService';
 
-// We use the exact same state management hooks as the native page.jsx
+// Custom hook for localStorage with proper JSON serialization for booleans
 function useLocalStorageBoolean(key, defaultValue) {
   const [value, setValue] = useState(() => {
     if (typeof window === 'undefined') return defaultValue;
@@ -23,7 +23,9 @@ function useLocalStorageBoolean(key, defaultValue) {
       const parsed = JSON.parse(item);
       return typeof parsed === 'boolean' ? parsed : defaultValue;
     } catch (error) {
-      try { window.localStorage.removeItem(key); } catch { }
+      try {
+        window.localStorage.removeItem(key);
+      } catch { }
       return defaultValue;
     }
   });
@@ -34,7 +36,9 @@ function useLocalStorageBoolean(key, defaultValue) {
       const item = window.localStorage.getItem(key);
       if (item !== null && item !== undefined) {
         const parsed = JSON.parse(item);
-        if (typeof parsed === 'boolean') setValue(parsed);
+        if (typeof parsed === 'boolean') {
+          setValue(parsed);
+        }
       }
     } catch (error) { }
   }, [key]);
@@ -43,14 +47,20 @@ function useLocalStorageBoolean(key, defaultValue) {
     try {
       if (typeof newValue === 'boolean') {
         const serialized = JSON.stringify(newValue);
-        if (typeof window !== 'undefined') window.localStorage.setItem(key, serialized);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(key, serialized);
+        }
         setValue(newValue);
       }
-    } catch (error) { console.error(`Error: ${key}`, error); }
+    } catch (error) {
+      console.error(`Error setting localStorage key "${key}":`, error);
+    }
   };
+
   return [value, setStoredValue];
 }
 
+// Custom hook for localStorage with proper JSON serialization for arrays
 function useLocalStorageArray(key, defaultValue) {
   const [value, setValue] = useState(() => {
     if (typeof window === 'undefined') return defaultValue;
@@ -60,7 +70,9 @@ function useLocalStorageArray(key, defaultValue) {
       const parsed = JSON.parse(item);
       return Array.isArray(parsed) ? parsed : defaultValue;
     } catch (error) {
-      try { window.localStorage.removeItem(key); } catch { }
+      try {
+        window.localStorage.removeItem(key);
+      } catch { }
       return defaultValue;
     }
   });
@@ -71,7 +83,9 @@ function useLocalStorageArray(key, defaultValue) {
       const item = window.localStorage.getItem(key);
       if (item !== null && item !== undefined) {
         const parsed = JSON.parse(item);
-        if (Array.isArray(parsed)) setValue(parsed);
+        if (Array.isArray(parsed)) {
+          setValue(parsed);
+        }
       }
     } catch (error) { }
   }, [key]);
@@ -83,21 +97,29 @@ function useLocalStorageArray(key, defaultValue) {
           const updated = newValue(prev);
           if (Array.isArray(updated)) {
             const serialized = JSON.stringify(updated);
-            if (typeof window !== 'undefined') window.localStorage.setItem(key, serialized);
+            if (typeof window !== 'undefined') {
+              window.localStorage.setItem(key, serialized);
+            }
             return updated;
           }
           return prev;
         });
       } else if (Array.isArray(newValue)) {
         const serialized = JSON.stringify(newValue);
-        if (typeof window !== 'undefined') window.localStorage.setItem(key, serialized);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(key, serialized);
+        }
         setValue(newValue);
       }
-    } catch (error) { console.error(`Error: ${key}`, error); }
+    } catch (error) {
+      console.error(`Error setting localStorage key "${key}":`, error);
+    }
   };
+
   return [value, setStoredValue];
 }
 
+// Custom hook for localStorage with proper JSON serialization for string/null values
 function useLocalStorageString(key, defaultValue) {
   const [value, setValue] = useState(() => {
     if (typeof window === 'undefined') return defaultValue;
@@ -107,7 +129,9 @@ function useLocalStorageString(key, defaultValue) {
       const parsed = JSON.parse(item);
       return (typeof parsed === 'string' || parsed === null) ? parsed : defaultValue;
     } catch (error) {
-      try { window.localStorage.removeItem(key); } catch { }
+      try {
+        window.localStorage.removeItem(key);
+      } catch { }
       return defaultValue;
     }
   });
@@ -118,7 +142,9 @@ function useLocalStorageString(key, defaultValue) {
       const item = window.localStorage.getItem(key);
       if (item !== null && item !== undefined) {
         const parsed = JSON.parse(item);
-        if (typeof parsed === 'string' || parsed === null) setValue(parsed);
+        if (typeof parsed === 'string' || parsed === null) {
+          setValue(parsed);
+        }
       }
     } catch (error) { }
   }, [key]);
@@ -127,14 +153,20 @@ function useLocalStorageString(key, defaultValue) {
     try {
       if (typeof newValue === 'string' || newValue === null) {
         const serialized = JSON.stringify(newValue);
-        if (typeof window !== 'undefined') window.localStorage.setItem(key, serialized);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(key, serialized);
+        }
         setValue(newValue);
       }
-    } catch (error) { console.error(`Error: ${key}`, error); }
+    } catch (error) {
+      console.error(`Error setting localStorage key "${key}":`, error);
+    }
   };
+
   return [value, setStoredValue];
 }
 
+// Custom hook for localStorage with proper JSON serialization for numbers
 function useLocalStorageNumber(key, defaultValue) {
   const [value, setValue] = useState(() => {
     if (typeof window === 'undefined') return defaultValue;
@@ -144,7 +176,9 @@ function useLocalStorageNumber(key, defaultValue) {
       const parsed = JSON.parse(item);
       return (typeof parsed === 'number' && !isNaN(parsed) && parsed > 0) ? parsed : defaultValue;
     } catch (error) {
-      try { window.localStorage.removeItem(key); } catch { }
+      try {
+        window.localStorage.removeItem(key);
+      } catch { }
       return defaultValue;
     }
   });
@@ -155,7 +189,9 @@ function useLocalStorageNumber(key, defaultValue) {
       const item = window.localStorage.getItem(key);
       if (item !== null && item !== undefined) {
         const parsed = JSON.parse(item);
-        if (typeof parsed === 'number' && !isNaN(parsed) && parsed > 0) setValue(parsed);
+        if (typeof parsed === 'number' && !isNaN(parsed) && parsed > 0) {
+          setValue(parsed);
+        }
       }
     } catch (error) { }
   }, [key]);
@@ -164,198 +200,331 @@ function useLocalStorageNumber(key, defaultValue) {
     try {
       if (typeof newValue === 'number' && !isNaN(newValue) && newValue > 0) {
         const serialized = JSON.stringify(newValue);
-        if (typeof window !== 'undefined') window.localStorage.setItem(key, serialized);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(key, serialized);
+        }
         setValue(newValue);
       }
-    } catch (error) { console.error(`Error: ${key}`, error); }
+    } catch (error) {
+      console.error(`Error setting localStorage key "${key}":`, error);
+    }
   };
+
   return [value, setStoredValue];
 }
 
 const DataTableWrapper = (props) => {
-  const { className, showControls = true } = props;
+  const {
+    className,
+    showControls = true,
+    enableSort: propEnableSort,
+    enableFilter: propEnableFilter,
+    enableSummation: propEnableSummation,
+    enableCellEdit: propEnableCellEdit,
+    rowsPerPageOptions: propRowsPerPageOptions,
+    defaultRows: propDefaultRows,
+    textFilterColumns: propTextFilterColumns,
+    visibleColumns: propVisibleColumns,
+    redFields: propRedFields,
+    greenFields: propGreenFields,
+    outerGroupField: propOuterGroupField,
+    innerGroupField: propInnerGroupField,
+    nonEditableColumns: propNonEditableColumns,
+    enableTargetData: propEnableTargetData,
+    targetOuterGroupField: propTargetOuterGroupField,
+    targetInnerGroupField: propTargetInnerGroupField,
+    targetValueField: propTargetValueField,
+    actualValueField: propActualValueField,
+    targetData: propTargetData,
+    enableFullscreenDialog: propEnableFullscreenDialog,
+    scrollable: propScrollable,
+    scrollHeight: propScrollHeight,
+  } = props;
+
   const toast = useRef(null);
   const [isLoading, setIsLoading] = useState(true);
   const [tableData, setTableData] = useState(props.data || data);
   const [currentDataSource, setCurrentDataSource] = useState(null);
 
-  // All state precisely mirroring native page.jsx
-  const [enableSort, setEnableSort] = useLocalStorageBoolean('datatable-enableSort', true);
-  const [enableFilter, setEnableFilter] = useLocalStorageBoolean('datatable-enableFilter', true);
-  const [enableSummation, setEnableSummation] = useLocalStorageBoolean('datatable-enableSummation', true);
-  const [enableCellEdit, setEnableCellEdit] = useLocalStorageBoolean('datatable-enableCellEdit', false);
-  const [rowsPerPageOptionsRaw, setRowsPerPageOptionsRaw] = useLocalStorageArray('datatable-rowsPerPageOptions', [5, 10, 25, 50, 100, 200]);
-  const [defaultRowsRaw, setDefaultRowsRaw] = useLocalStorageNumber('datatable-defaultRows', 10);
-  const [textFilterColumns, setTextFilterColumns] = useLocalStorageArray('datatable-textFilterColumns', []);
-  const [visibleColumns, setVisibleColumns] = useLocalStorageArray('datatable-visibleColumns', []);
-  const [redFields, setRedFields] = useLocalStorageArray('datatable-redFields', []);
-  const [greenFields, setGreenFields] = useLocalStorageArray('datatable-greenFields', []);
-  const [outerGroupField, setOuterGroupField] = useLocalStorageString('datatable-outerGroupField', null);
-  const [innerGroupField, setInnerGroupField] = useLocalStorageString('datatable-innerGroupField', null);
-  const [nonEditableColumns, setNonEditableColumns] = useLocalStorageArray('datatable-nonEditableColumns', []);
-  const [enableTargetData, setEnableTargetData] = useLocalStorageBoolean('datatable-enableTargetData', false);
-  const [targetOuterGroupField, setTargetOuterGroupField] = useLocalStorageString('datatable-targetOuterGroupField', null);
-  const [targetInnerGroupField, setTargetInnerGroupField] = useLocalStorageString('datatable-targetInnerGroupField', null);
-  const [targetValueField, setTargetValueField] = useLocalStorageString('datatable-targetValueField', null);
-  const [actualValueField, setActualValueField] = useLocalStorageString('datatable-actualValueField', null);
+  const [enableSortState, setEnableSort] = useLocalStorageBoolean('datatable-enableSort', true);
+  const [enableFilterState, setEnableFilter] = useLocalStorageBoolean('datatable-enableFilter', true);
+  const [enableSummationState, setEnableSummation] = useLocalStorageBoolean('datatable-enableSummation', true);
+  const [enableCellEditState, setEnableCellEdit] = useLocalStorageBoolean('datatable-enableCellEdit', false);
+  const [rowsPerPageOptionsRawState, setRowsPerPageOptionsRaw] = useLocalStorageArray('datatable-rowsPerPageOptions', [5, 10, 25, 50, 100, 200]);
+  const [defaultRowsRawState, setDefaultRowsRaw] = useLocalStorageNumber('datatable-defaultRows', 10);
+  const [textFilterColumnsRawState, setTextFilterColumnsRaw] = useLocalStorageArray('datatable-textFilterColumns', []);
+  const [visibleColumnsRawState, setVisibleColumnsRaw] = useLocalStorageArray('datatable-visibleColumns', []);
+  const [redFieldsRawState, setRedFieldsRaw] = useLocalStorageArray('datatable-redFields', []);
+  const [greenFieldsRawState, setGreenFieldsRaw] = useLocalStorageArray('datatable-greenFields', []);
+  const [outerGroupFieldRawState, setOuterGroupFieldRaw] = useLocalStorageString('datatable-outerGroupField', null);
+  const [innerGroupFieldRawState, setInnerGroupFieldRaw] = useLocalStorageString('datatable-innerGroupField', null);
+  const [nonEditableColumnsRawState, setNonEditableColumnsRaw] = useLocalStorageArray('datatable-nonEditableColumns', []);
+  const [enableTargetDataRawState, setEnableTargetDataRaw] = useLocalStorageBoolean('datatable-enableTargetData', false);
+  const [targetOuterGroupFieldRawState, setTargetOuterGroupFieldRaw] = useLocalStorageString('datatable-targetOuterGroupField', null);
+  const [targetInnerGroupFieldRawState, setTargetInnerGroupFieldRaw] = useLocalStorageString('datatable-targetInnerGroupField', null);
+  const [targetValueFieldRawState, setTargetValueFieldRaw] = useLocalStorageString('datatable-targetValueField', null);
+  const [actualValueFieldRawState, setActualValueFieldRaw] = useLocalStorageString('datatable-actualValueField', null);
   
   const [queryVariables, setQueryVariables] = useState({});
   const [variableOverrides, setVariableOverrides] = useState({});
 
+  // Drawer state
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [drawerData, setDrawerData] = useState([]);
   const [drawerTabs, setDrawerTabs] = useLocalStorageArray('datatable-drawerTabs', [{ id: `tab-${Date.now()}`, name: '', outerGroup: null, innerGroup: null }]);
   const [activeDrawerTabIndex, setActiveDrawerTabIndex] = useState(0);
   const [clickedDrawerValues, setClickedDrawerValues] = useState({ outerValue: null, innerValue: null });
 
+  // Header offset and z-index for sticky headers
   const [appHeaderOffset, setAppHeaderOffset] = useState(0);
   const [appHeaderZIndex, setAppHeaderZIndex] = useState(1000);
   const [sidebarHeaderOffset, setSidebarHeaderOffset] = useState(0);
   const [sidebarZIndex, setSidebarZIndex] = useState(1000);
 
+  // Derived values that prefer props over localStorage state
+  const enableSort = propEnableSort !== undefined ? propEnableSort : enableSortState;
+  const enableFilter = propEnableFilter !== undefined ? propEnableFilter : enableFilterState;
+  const enableSummation = propEnableSummation !== undefined ? propEnableSummation : enableSummationState;
+  const enableCellEdit = propEnableCellEdit !== undefined ? propEnableCellEdit : enableCellEditState;
+  const rowsPerPageOptions = propRowsPerPageOptions !== undefined ? propRowsPerPageOptions : rowsPerPageOptionsRawState;
+  const defaultRows = propDefaultRows !== undefined ? propDefaultRows : defaultRowsRawState;
+  const textFilterColumns = propTextFilterColumns !== undefined ? propTextFilterColumns : textFilterColumnsRawState;
+  const visibleColumns = propVisibleColumns !== undefined ? propVisibleColumns : visibleColumnsRawState;
+  const redFields = propRedFields !== undefined ? propRedFields : redFieldsRawState;
+  const greenFields = propGreenFields !== undefined ? propGreenFields : greenFieldsRawState;
+  const outerGroupField = propOuterGroupField !== undefined ? propOuterGroupField : outerGroupFieldRawState;
+  const innerGroupField = propInnerGroupField !== undefined ? propInnerGroupField : innerGroupFieldRawState;
+  const nonEditableColumns = propNonEditableColumns !== undefined ? propNonEditableColumns : nonEditableColumnsRawState;
+  const enableTargetData = propEnableTargetData !== undefined ? propEnableTargetData : enableTargetDataRawState;
+  const targetOuterGroupField = propTargetOuterGroupField !== undefined ? propTargetOuterGroupField : targetOuterGroupFieldRawState;
+  const targetInnerGroupField = propTargetInnerGroupField !== undefined ? propTargetInnerGroupField : targetInnerGroupFieldRawState;
+  const targetValueField = propTargetValueField !== undefined ? propTargetValueField : targetValueFieldRawState;
+  const actualValueField = propActualValueField !== undefined ? propActualValueField : actualValueFieldRawState;
+  
   const originalTableDataRef = useRef(null);
 
+  // Calculate app header offset
   useEffect(() => {
-    const calc = () => {
-      const el = document.querySelector('.app-header-container');
-      if (el) {
-        setAppHeaderOffset(el.getBoundingClientRect().height);
-        setAppHeaderZIndex(parseInt(window.getComputedStyle(el).zIndex) || 1000);
+    const calculateAppHeaderHeight = () => {
+      const headerElement = document.querySelector('.app-header-container');
+      if (headerElement) {
+        const height = headerElement.getBoundingClientRect().height;
+        setAppHeaderOffset(height);
+        const computedStyle = window.getComputedStyle(headerElement);
+        setAppHeaderZIndex(parseInt(computedStyle.zIndex) || 1000);
       }
     };
-    calc();
-    const h = debounce(calc, 100);
-    window.addEventListener('resize', h);
-    return () => window.removeEventListener('resize', h);
+
+    calculateAppHeaderHeight();
+    const handleResize = debounce(calculateAppHeaderHeight, 100);
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      handleResize.cancel();
+    };
   }, []);
 
+  // Calculate sidebar header offset
   useEffect(() => {
     if (!drawerVisible) return;
-    const calc = () => {
-      const sh = document.querySelector('.p-sidebar-header');
-      const sb = document.querySelector('.p-sidebar');
-      if (sh && sb) {
-        setSidebarHeaderOffset(sh.getBoundingClientRect().height);
-        setSidebarZIndex(parseInt(window.getComputedStyle(sb).zIndex) || 1000);
+    const calculateSidebarHeaderOffset = () => {
+      const sidebarHeaderElement = document.querySelector('.p-sidebar-header');
+      const sidebarElement = document.querySelector('.p-sidebar');
+      if (sidebarHeaderElement && sidebarElement) {
+        setSidebarHeaderOffset(sidebarHeaderElement.getBoundingClientRect().height);
+        const computedStyle = window.getComputedStyle(sidebarElement);
+        setSidebarZIndex(parseInt(computedStyle.zIndex) || 1000);
       }
     };
-    const t = setTimeout(calc, 100);
-    const h = debounce(calc, 100);
-    window.addEventListener('resize', h);
-    return () => { clearTimeout(t); window.removeEventListener('resize', h); };
+
+    const timeoutId = setTimeout(calculateSidebarHeaderOffset, 100);
+    const handleResize = debounce(calculateSidebarHeaderOffset, 100);
+    window.addEventListener('resize', handleResize);
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('resize', handleResize);
+      handleResize.cancel();
+    };
   }, [drawerVisible]);
 
+  // Clean up localStorage and set loading false
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.localStorage) requestAnimationFrame(() => setIsLoading(false));
-    else setIsLoading(false);
+    if (typeof window !== 'undefined' && window.localStorage) {
+      requestAnimationFrame(() => setIsLoading(false));
+    } else {
+      setIsLoading(false);
+    }
   }, []);
+
+  const handleDataChange = (notification) => {
+    if (toast.current) toast.current.show(notification);
+  };
+
+  const handleError = (notification) => {
+    if (toast.current) toast.current.show(notification);
+  };
 
   const handleTableDataChange = (newTableData) => {
     setTableData(newTableData);
-    if (newTableData && Array.isArray(newTableData)) originalTableDataRef.current = newTableData;
+    if (newTableData && Array.isArray(newTableData)) {
+      originalTableDataRef.current = newTableData;
+    }
   };
 
-  const handleDataSourceChange = useCallback((ds) => {
-    setCurrentDataSource(ds);
-    if (!ds) return;
-    const s = loadSettingsForDataSource(ds);
-    if (s) {
-      if (s.enableSort !== undefined) setEnableSort(s.enableSort);
-      if (s.enableFilter !== undefined) setEnableFilter(s.enableFilter);
-      if (s.enableSummation !== undefined) setEnableSummation(s.enableSummation);
-      if (s.enableCellEdit !== undefined) setEnableCellEdit(s.enableCellEdit);
-      if (s.rowsPerPageOptions) setRowsPerPageOptionsRaw(s.rowsPerPageOptions);
-      if (s.defaultRows !== undefined) setDefaultRowsRaw(s.defaultRows);
-      if (s.textFilterColumns) setTextFilterColumns(s.textFilterColumns);
-      if (s.visibleColumns) setVisibleColumns(s.visibleColumns);
-      if (s.redFields) setRedFields(s.redFields);
-      if (s.greenFields) setGreenFields(s.greenFields);
-      if (s.outerGroupField !== undefined) setOuterGroupField(s.outerGroupField);
-      if (s.innerGroupField !== undefined) setInnerGroupField(s.innerGroupField);
-      if (s.nonEditableColumns) setNonEditableColumns(s.nonEditableColumns);
-      if (s.enableTargetData !== undefined) setEnableTargetData(s.enableTargetData);
-      if (s.targetOuterGroupField !== undefined) setTargetOuterGroupField(s.targetOuterGroupField);
-      if (s.targetInnerGroupField !== undefined) setTargetInnerGroupField(s.targetInnerGroupField);
-      if (s.targetValueField !== undefined) setTargetValueField(s.targetValueField);
-      if (s.actualValueField !== undefined) setActualValueField(s.actualValueField);
-      if (s.drawerTabs !== undefined) setDrawerTabs(s.drawerTabs);
+  const handleDataSourceChange = useCallback((dataSource) => {
+    setCurrentDataSource(dataSource);
+    if (!dataSource) return;
+
+    const savedSettings = loadSettingsForDataSource(dataSource);
+    if (savedSettings) {
+      if (savedSettings.enableSort !== undefined) setEnableSort(savedSettings.enableSort);
+      if (savedSettings.enableFilter !== undefined) setEnableFilter(savedSettings.enableFilter);
+      if (savedSettings.enableSummation !== undefined) setEnableSummation(savedSettings.enableSummation);
+      if (savedSettings.enableCellEdit !== undefined) setEnableCellEdit(savedSettings.enableCellEdit);
+      if (savedSettings.rowsPerPageOptions) setRowsPerPageOptionsRaw(savedSettings.rowsPerPageOptions);
+      if (savedSettings.defaultRows !== undefined) setDefaultRowsRaw(savedSettings.defaultRows);
+      if (savedSettings.textFilterColumns) setTextFilterColumnsRaw(savedSettings.textFilterColumns);
+      if (savedSettings.visibleColumns) setVisibleColumnsRaw(savedSettings.visibleColumns);
+      if (savedSettings.redFields) setRedFieldsRaw(savedSettings.redFields);
+      if (savedSettings.greenFields) setGreenFieldsRaw(savedSettings.greenFields);
+      if (savedSettings.outerGroupField !== undefined) setOuterGroupFieldRaw(savedSettings.outerGroupField);
+      if (savedSettings.innerGroupField !== undefined) setInnerGroupFieldRaw(savedSettings.innerGroupField);
+      if (savedSettings.nonEditableColumns) setNonEditableColumnsRaw(savedSettings.nonEditableColumns);
+      if (savedSettings.enableTargetData !== undefined) setEnableTargetDataRaw(savedSettings.enableTargetData);
+      if (savedSettings.targetOuterGroupField !== undefined) setTargetOuterGroupFieldRaw(savedSettings.targetOuterGroupField);
+      if (savedSettings.targetInnerGroupField !== undefined) setTargetInnerGroupFieldRaw(savedSettings.targetInnerGroupField);
+      if (savedSettings.targetValueField !== undefined) setTargetValueFieldRaw(savedSettings.targetValueField);
+      if (savedSettings.actualValueField !== undefined) setActualValueFieldRaw(savedSettings.actualValueField);
+      if (savedSettings.drawerTabs !== undefined) setDrawerTabs(savedSettings.drawerTabs);
     }
   }, []);
 
   const handleSaveSettings = () => {
     if (!currentDataSource) {
-      toast.current?.show({ severity: 'warn', summary: 'Warning', detail: 'Select source first' });
+      toast.current?.show({ severity: 'warn', summary: 'Warning', detail: 'Select a data source first', life: 3000 });
       return;
     }
-    const s = {
+
+    const settings = {
       enableSort, enableFilter, enableSummation, enableCellEdit,
-      rowsPerPageOptions: rowsPerPageOptionsRaw, defaultRows: defaultRowsRaw, 
-      textFilterColumns, visibleColumns, redFields, greenFields, 
-      outerGroupField, innerGroupField, nonEditableColumns, 
-      enableTargetData, targetOuterGroupField, targetInnerGroupField, 
-      targetValueField, actualValueField, drawerTabs
+      rowsPerPageOptions, defaultRows, textFilterColumns, visibleColumns,
+      redFields, greenFields, outerGroupField, innerGroupField,
+      nonEditableColumns, enableTargetData, targetOuterGroupField,
+      targetInnerGroupField, targetValueField, actualValueField, drawerTabs
     };
+
     try {
-      saveSettingsForDataSource(currentDataSource, s);
-      toast.current?.show({ severity: 'success', summary: 'Success', detail: 'Settings saved' });
-    } catch (e) {
-      toast.current?.show({ severity: 'error', summary: 'Error', detail: 'Save failed' });
+      saveSettingsForDataSource(currentDataSource, settings);
+      toast.current?.show({ severity: 'success', summary: 'Success', detail: 'Settings saved', life: 3000 });
+    } catch (error) {
+      toast.current?.show({ severity: 'error', summary: 'Error', detail: 'Failed to save settings', life: 3000 });
     }
   };
 
+  const columns = useMemo(() => {
+    if (!Array.isArray(tableData) || isEmpty(tableData)) return [];
+    return uniq(flatMap(tableData, (item) => item && typeof item === 'object' ? keys(item) : []));
+  }, [tableData]);
+
+  const targetColumns = useMemo(() => {
+    if (!Array.isArray(Target) || isEmpty(Target)) return [];
+    return uniq(flatMap(Target, (item) => item && typeof item === 'object' ? keys(item) : []));
+  }, []);
+
+  const handleCellEditComplete = (e) => {
+    const { newValue, field, oldValue } = e;
+    const columnName = startCase(field.split('__').join(' ').split('_').join(' '));
+    toast.current?.show({
+      severity: 'success',
+      summary: 'Cell Updated',
+      detail: `Column: ${columnName} | Previous: ${oldValue} → Current: ${newValue}`,
+      life: 5000
+    });
+  };
+
   const handleOuterGroupClick = (rowData, column, value) => {
-    const od = originalTableDataRef.current || tableData;
-    if (!Array.isArray(od)) return;
+    const originalData = originalTableDataRef.current || tableData;
+    if (!Array.isArray(originalData)) return;
+
     setClickedDrawerValues({ outerValue: value, innerValue: null });
     setActiveDrawerTabIndex(0);
-    const fd = lodashFilter(od, (r) => {
-      const rv = get(r, outerGroupField);
-      return isNil(value) ? isNil(rv) : String(rv) === String(value);
+
+    const filteredData = lodashFilter(originalData, (row) => {
+      const rowValue = get(row, outerGroupField);
+      return isNil(value) ? isNil(rowValue) : String(rowValue) === String(value);
     });
-    setDrawerData(fd);
+
+    setDrawerData(filteredData);
     setDrawerVisible(true);
   };
 
   const handleInnerGroupClick = (rowData, column, value) => {
-    const od = originalTableDataRef.current || tableData;
-    if (!Array.isArray(od)) return;
-    const ov = get(rowData, outerGroupField);
-    setClickedDrawerValues({ outerValue: ov, innerValue: value });
+    const originalData = originalTableDataRef.current || tableData;
+    if (!Array.isArray(originalData)) return;
+
+    const outerValue = get(rowData, outerGroupField);
+    setClickedDrawerValues({ outerValue, innerValue: value });
     setActiveDrawerTabIndex(0);
-    const fd = lodashFilter(od, (r) => {
-      const rov = get(r, outerGroupField);
-      const riv = get(r, innerGroupField);
-      let m = isNil(ov) ? isNil(rov) : String(rov) === String(ov);
-      if (!m) return false;
-      return isNil(value) ? isNil(riv) : String(riv) === String(value);
+
+    const filteredData = lodashFilter(originalData, (row) => {
+      const rowOuterValue = get(row, outerGroupField);
+      const rowInnerValue = get(row, innerGroupField);
+
+      let outerMatch = isNil(outerValue) ? isNil(rowOuterValue) : String(rowOuterValue) === String(outerValue);
+      if (!outerMatch) return false;
+
+      return isNil(value) ? isNil(rowInnerValue) : String(rowInnerValue) === String(value);
     });
-    setDrawerData(fd);
+
+    setDrawerData(filteredData);
     setDrawerVisible(true);
   };
 
-  if (isLoading) return (
-    <div className="flex items-center justify-center min-h-[400px]">
-      <div className="text-center">
-        <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-300 border-t-blue-600 mb-4"></div>
-        <p className="text-sm text-gray-600">Loading...</p>
+  const handleAddDrawerTab = useCallback(() => {
+    const newTab = { id: `tab-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, name: '', outerGroup: null, innerGroup: null };
+    setDrawerTabs(prev => [...prev, newTab]);
+    setActiveDrawerTabIndex(drawerTabs.length);
+  }, [drawerTabs]);
+
+  const handleRemoveDrawerTab = useCallback((tabId) => {
+    if (drawerTabs.length <= 1) return;
+    const newTabs = drawerTabs.filter(tab => tab.id !== tabId);
+    setDrawerTabs(newTabs);
+    if (activeDrawerTabIndex >= newTabs.length) setActiveDrawerTabIndex(newTabs.length - 1);
+  }, [drawerTabs, activeDrawerTabIndex]);
+
+  const handleUpdateDrawerTab = useCallback((tabId, updates) => {
+    setDrawerTabs(prev => prev.map(tab => tab.id === tabId ? { ...tab, ...updates } : tab));
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-300 border-t-blue-600 mb-4"></div>
+          <p className="text-sm text-gray-600">Loading...</p>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
   return (
     <div className={`flex flex-col h-full ${className}`}>
       <Toast ref={toast} />
+      
       <DataProvider
         offlineData={props.data || data}
-        onDataChange={n => toast.current?.show(n)}
-        onError={n => toast.current?.show(n)}
+        onDataChange={handleDataChange}
+        onError={handleError}
         onTableDataChange={handleTableDataChange}
         onDataSourceChange={handleDataSourceChange}
         onVariablesChange={setQueryVariables}
         variableOverrides={variableOverrides}
-        renderHeaderControls={(sJSX) => (
+        renderHeaderControls={(selectorsJSX) => (
           <div className="px-4 py-3 border-b border-gray-200 bg-white">
-            <div className="flex items-end gap-3 flex-wrap">{sJSX}</div>
+            <div className="flex items-end gap-3 flex-wrap">
+              {selectorsJSX}
+            </div>
           </div>
         )}
       >
@@ -367,25 +536,27 @@ const DataTableWrapper = (props) => {
                   <div className="flex flex-col items-center justify-center h-full text-center">
                     <i className="pi pi-table text-6xl text-gray-200 mb-4"></i>
                     <h3 className="text-lg font-medium text-gray-700">No Data</h3>
+                    <p className="text-sm text-gray-500">Select a source to begin</p>
                   </div>
                 ) : (
                   <DataTableComponent
                     data={tableData}
-                    rowsPerPageOptions={rowsPerPageOptionsRaw}
-                    defaultRows={defaultRowsRaw}
+                    rowsPerPageOptions={rowsPerPageOptions}
+                    defaultRows={defaultRows}
                     scrollable={false}
                     enableSort={enableSort}
                     enableFilter={enableFilter}
                     enableSummation={enableSummation}
                     textFilterColumns={textFilterColumns}
                     visibleColumns={visibleColumns}
-                    onVisibleColumnsChange={setVisibleColumns}
+                    onVisibleColumnsChange={setVisibleColumnsRaw}
                     redFields={redFields}
                     greenFields={greenFields}
                     outerGroupField={outerGroupField}
                     innerGroupField={innerGroupField}
                     enableCellEdit={enableCellEdit}
                     nonEditableColumns={nonEditableColumns}
+                    onCellEditComplete={handleCellEditComplete}
                     onOuterGroupClick={handleOuterGroupClick}
                     onInnerGroupClick={handleInnerGroupClick}
                     targetData={enableTargetData ? Target : null}
@@ -400,62 +571,106 @@ const DataTableWrapper = (props) => {
                 )}
               </div>
             </SplitterPanel>
+
             <SplitterPanel className="flex flex-col min-w-0 border-l border-gray-200" size={20}>
               <DataTableControls
-                enableSort={enableSort} enableFilter={enableFilter} enableSummation={enableSummation} enableCellEdit={enableCellEdit}
-                rowsPerPageOptions={rowsPerPageOptionsRaw} defaultRows={defaultRowsRaw}
-                columns={uniq(flatMap(tableData || [], item => item && typeof item === 'object' ? keys(item) : []))}
-                textFilterColumns={textFilterColumns} visibleColumns={visibleColumns} redFields={redFields} greenFields={greenFields}
-                outerGroupField={outerGroupField} innerGroupField={innerGroupField} nonEditableColumns={nonEditableColumns}
-                enableTargetData={enableTargetData} targetColumns={uniq(flatMap(Target, item => item && typeof item === 'object' ? keys(item) : []))}
-                targetOuterGroupField={targetOuterGroupField} targetInnerGroupField={targetInnerGroupField}
-                targetValueField={targetValueField} actualValueField={actualValueField}
-                dataSource={currentDataSource} queryVariables={queryVariables} variableOverrides={variableOverrides}
-                onVariableOverrideChange={setVariableOverrides} onSortChange={setEnableSort} onFilterChange={setEnableFilter}
-                onSummationChange={setEnableSummation} onCellEditChange={setEnableCellEdit}
-                onRowsPerPageOptionsChange={setRowsPerPageOptionsRaw} onDefaultRowsChange={setDefaultRowsRaw}
-                onTextFilterColumnsChange={setTextFilterColumns} onVisibleColumnsChange={setVisibleColumns}
-                onRedFieldsChange={setRedFields} onGreenFieldsChange={setGreenFields}
-                onOuterGroupFieldChange={setOuterGroupField} onInnerGroupFieldChange={setInnerGroupField}
-                onNonEditableColumnsChange={setNonEditableColumns} onEnableTargetDataChange={setEnableTargetData}
-                onTargetOuterGroupFieldChange={setTargetOuterGroupField} onTargetInnerGroupFieldChange={setTargetInnerGroupField}
-                onTargetValueFieldChange={setTargetValueField} onActualValueFieldChange={setActualValueField}
-                onSaveSettings={handleSaveSettings} drawerTabs={drawerTabs} onDrawerTabsChange={setDrawerTabs}
-                onAddDrawerTab={() => {
-                  const nt = { id: `tab-${Date.now()}`, name: '', outerGroup: null, innerGroup: null };
-                  setDrawerTabs(prev => [...prev, nt]);
-                  setActiveDrawerTabIndex(drawerTabs.length);
-                }}
-                onRemoveDrawerTab={tid => {
-                  if (drawerTabs.length <= 1) return;
-                  const nts = drawerTabs.filter(t => t.id !== tid);
-                  setDrawerTabs(nts);
-                  if (activeDrawerTabIndex >= nts.length) setActiveDrawerTabIndex(nts.length - 1);
-                }}
-                onUpdateDrawerTab={(tid, u) => setDrawerTabs(prev => prev.map(t => t.id === tid ? { ...t, ...u } : t))}
+                enableSort={enableSort}
+                enableFilter={enableFilter}
+                enableSummation={enableSummation}
+                enableCellEdit={enableCellEdit}
+                rowsPerPageOptions={rowsPerPageOptions}
+                defaultRows={defaultRows}
+                columns={columns}
+                textFilterColumns={textFilterColumns}
+                visibleColumns={visibleColumns}
+                redFields={redFields}
+                greenFields={greenFields}
+                outerGroupField={outerGroupField}
+                innerGroupField={innerGroupField}
+                nonEditableColumns={nonEditableColumns}
+                enableTargetData={enableTargetData}
+                targetColumns={targetColumns}
+                targetOuterGroupField={targetOuterGroupField}
+                targetInnerGroupField={targetInnerGroupField}
+                targetValueField={targetValueField}
+                actualValueField={actualValueField}
+                dataSource={currentDataSource}
+                queryVariables={queryVariables}
+                variableOverrides={variableOverrides}
+                onVariableOverrideChange={setVariableOverrides}
+                onSortChange={setEnableSort}
+                onFilterChange={setEnableFilter}
+                onSummationChange={setEnableSummation}
+                onCellEditChange={setEnableCellEdit}
+                onRowsPerPageOptionsChange={setRowsPerPageOptionsRaw}
+                onDefaultRowsChange={setDefaultRowsRaw}
+                onTextFilterColumnsChange={setTextFilterColumnsRaw}
+                onVisibleColumnsChange={setVisibleColumnsRaw}
+                onRedFieldsChange={setRedFieldsRaw}
+                onGreenFieldsChange={setGreenFieldsRaw}
+                onOuterGroupFieldChange={setOuterGroupFieldRaw}
+                onInnerGroupFieldChange={setInnerGroupFieldRaw}
+                onNonEditableColumnsChange={setNonEditableColumnsRaw}
+                onEnableTargetDataChange={setEnableTargetDataRaw}
+                onTargetOuterGroupFieldChange={setTargetOuterGroupFieldRaw}
+                onTargetInnerGroupFieldChange={setTargetInnerGroupFieldRaw}
+                onTargetValueFieldChange={setTargetValueFieldRaw}
+                onActualValueFieldChange={setActualValueFieldRaw}
+                onSaveSettings={handleSaveSettings}
+                drawerTabs={drawerTabs}
+                onDrawerTabsChange={setDrawerTabs}
+                onAddDrawerTab={handleAddDrawerTab}
+                onRemoveDrawerTab={handleRemoveDrawerTab}
+                onUpdateDrawerTab={handleUpdateDrawerTab}
               />
             </SplitterPanel>
           </Splitter>
         </div>
       </DataProvider>
+
       <Sidebar
-        position="bottom" blockScroll visible={drawerVisible} onHide={() => setDrawerVisible(false)} style={{ height: '100vh' }}
-        header={<h2 className="text-lg font-semibold m-0">{clickedDrawerValues.innerValue ? `${clickedDrawerValues.outerValue} : ${clickedDrawerValues.innerValue}` : clickedDrawerValues.outerValue || 'Details'}</h2>}
+        position="bottom"
+        blockScroll
+        visible={drawerVisible}
+        onHide={() => setDrawerVisible(false)}
+        style={{ height: '100vh' }}
+        header={
+          <h2 className="text-lg font-semibold m-0">
+            {clickedDrawerValues.innerValue 
+              ? `${clickedDrawerValues.outerValue} : ${clickedDrawerValues.innerValue}`
+              : clickedDrawerValues.outerValue || 'Details'}
+          </h2>
+        }
       >
         <div className="flex flex-col h-full">
-          <TabView activeIndex={activeDrawerTabIndex} onTabChange={e => setActiveDrawerTabIndex(e.index)}>
-            {drawerTabs.map(tab => (
+          <TabView activeIndex={activeDrawerTabIndex} onTabChange={(e) => setActiveDrawerTabIndex(e.index)}>
+            {drawerTabs.map((tab) => (
               <TabPanel key={tab.id} header={tab.name || `Tab ${drawerTabs.indexOf(tab) + 1}`}>
                 <div className="overflow-auto py-4">
                   {drawerData.length > 0 ? (
                     <DataTableComponent
-                      data={drawerData} rowsPerPageOptions={rowsPerPageOptionsRaw} defaultRows={defaultRowsRaw} scrollable={false}
-                      enableSort={enableSort} enableFilter={enableFilter} enableSummation={enableSummation}
-                      textFilterColumns={textFilterColumns} visibleColumns={visibleColumns} onVisibleColumnsChange={setVisibleColumns}
-                      redFields={redFields} greenFields={greenFields} outerGroupField={tab.outerGroup} innerGroupField={tab.innerGroup}
-                      enableCellEdit={false} appHeaderOffset={sidebarHeaderOffset} stickyHeaderZIndex={sidebarZIndex + 1} tableName="sidebar"
+                      data={drawerData}
+                      rowsPerPageOptions={rowsPerPageOptions}
+                      defaultRows={defaultRows}
+                      scrollable={false}
+                      enableSort={enableSort}
+                      enableFilter={enableFilter}
+                      enableSummation={enableSummation}
+                      textFilterColumns={textFilterColumns}
+                      visibleColumns={visibleColumns}
+                      onVisibleColumnsChange={setVisibleColumnsRaw}
+                      redFields={redFields}
+                      greenFields={greenFields}
+                      outerGroupField={tab.outerGroup}
+                      innerGroupField={tab.innerGroup}
+                      enableCellEdit={false}
+                      appHeaderOffset={sidebarHeaderOffset}
+                      stickyHeaderZIndex={sidebarZIndex + 1}
+                      tableName="sidebar"
                     />
-                  ) : <p className="text-center text-gray-500">No data available</p>}
+                  ) : (
+                    <p className="text-center text-gray-500">No data available</p>
+                  )}
                 </div>
               </TabPanel>
             ))}
