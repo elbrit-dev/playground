@@ -1,6 +1,1 @@
-import GraphQLPlayground from '../share/graphql-playground/GraphQLPlayground';
-
-export default function GraphQLPlaygroundPage() {
-  return <GraphQLPlayground />;
-}
-
+export { default } from '../share/graphql-playground/page';
