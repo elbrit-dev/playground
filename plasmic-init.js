@@ -27,6 +27,15 @@ PLASMIC.registerComponent(DataTable, {
       description: "Toggle the visibility of the table controls (sort, filter, etc.)",
       defaultValue: false,
     },
+    dataSource: {
+      type: "string",
+      description: "The data source ID or 'offline' for local data",
+      defaultValue: "offline",
+    },
+    queryKey: {
+      type: "string",
+      description: "The specific key within the data source results to display",
+    },
     rowsPerPageOptions: {
       type: "object",
       defaultValue: [10, 25, 50, 100],
