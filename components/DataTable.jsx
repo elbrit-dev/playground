@@ -217,6 +217,8 @@ const DataTableWrapper = (props) => {
   const {
     className,
     showControls = true,
+    dataSource: propDataSource,
+    queryKey: propQueryKey,
     enableSort: propEnableSort,
     enableFilter: propEnableFilter,
     enableSummation: propEnableSummation,
@@ -274,6 +276,19 @@ const DataTableWrapper = (props) => {
   const [drawerTabs, setDrawerTabs] = useLocalStorageArray('datatable-drawerTabs', [{ id: `tab-${Date.now()}`, name: '', outerGroup: null, innerGroup: null }]);
   const [activeDrawerTabIndex, setActiveDrawerTabIndex] = useState(0);
   const [clickedDrawerValues, setClickedDrawerValues] = useState({ outerValue: null, innerValue: null });
+
+  // Sync props to localStorage for DataProvider to pick up
+  useEffect(() => {
+    if (typeof window !== 'undefined' && propDataSource !== undefined) {
+      window.localStorage.setItem('datatable-dataSource', JSON.stringify(propDataSource));
+    }
+  }, [propDataSource]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && propQueryKey !== undefined) {
+      window.localStorage.setItem('datatable-selectedQueryKey', JSON.stringify(propQueryKey));
+    }
+  }, [propQueryKey]);
 
   // Header offset and z-index for sticky headers
   const [appHeaderOffset, setAppHeaderOffset] = useState(0);
@@ -513,6 +528,7 @@ const DataTableWrapper = (props) => {
       <Toast ref={toast} />
       
       <DataProvider
+        key={`${propDataSource}-${propQueryKey}`}
         offlineData={props.data || data}
         onDataChange={handleDataChange}
         onError={handleError}
