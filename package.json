@@ -6,13 +6,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "copy-shared": "npx degit VICTORVICKIE/Elbrit-Play/src/components share --force && npx degit VICTORVICKIE/Elbrit-Play/src/app/graphql-playground share/graphql-playground --force && npx degit VICTORVICKIE/Elbrit-Play/src/app/datatable share/datatable --force"
+    "copy-shared": "git clone git@github.com:VICTORVICKIE/Elbrit-Play.git temp-elbrit && powershell -Command \"mkdir share\\datatable -Force; mkdir share\\graphql-playground -Force; mkdir share\\components -Force; robocopy .\\temp-elbrit\\src\\app\\datatable .\\share\\datatable /E /MIR; robocopy .\\temp-elbrit\\src\\app\\graphql-playground .\\share\\graphql-playground /E /MIR; robocopy .\\temp-elbrit\\src\\components .\\share\\components /E /MIR; rmdir .\\temp-elbrit -Recurse -Force\""
   },
   "dependencies": {
     "@graphiql/plugin-explorer": "^5.1.1",
     "@graphiql/react": "^0.37.3",
     "@monaco-editor/react": "^4.7.0",
     "@plasmicapp/loader-nextjs": "^1.0.446",
+    "antd": "^6.1.4",
+    "dayjs": "^1.11.19",
     "embla-carousel-autoplay": "^8.6.0",
     "embla-carousel-react": "^8.6.0",
     "embla-carousel-wheel-gestures": "^8.1.0",
@@ -22,6 +24,8 @@
     "graphiql": "^5.2.2",
     "graphql": "^16.12.0",
     "jmespath": "^0.16.0",
+    "jsonata": "^2.1.0",
+    "jsonc-parser": "^3.3.1",
     "lodash": "^4.17.21",
     "next": "16.0.10",
     "primeicons": "^7.0.0",

@@ -1,6 +1,8 @@
 import { initPlasmicLoader } from "@plasmicapp/loader-nextjs";
 import DataTable from "./components/DataTable";
-import GraphQLPlaygroundCard from "./components/GraphQLPlaygroundCard";
+// import GraphQLPlaygroundCard from "./components/GraphQLPlaygroundCard";
+// import FirebaseUIComponent from "./components/FirebaseUIComponent";
+
 
 export const PLASMIC = initPlasmicLoader({
   projects: [
@@ -125,6 +127,7 @@ PLASMIC.registerComponent(DataTable, {
   importPath: "./components/DataTable",
 });
 
+/*
 PLASMIC.registerComponent(GraphQLPlaygroundCard, {
   name: "GraphQLPlaygroundCard",
   props: {
@@ -139,3 +142,24 @@ PLASMIC.registerComponent(GraphQLPlaygroundCard, {
   },
   importPath: "./components/GraphQLPlaygroundCard",
 });
+
+PLASMIC.registerComponent(FirebaseUIComponent, {
+  name: "FirebaseUIComponent",
+  description: "Native Firebase Authentication UI (Microsoft & Phone)",
+  isDefaultExport: true,
+  importPath: "./components/FirebaseUIComponent",
+  props: {
+    className: {
+      type: "string",
+    },
+    onSuccess: {
+      type: "eventHandler",
+      argTypes: [{ name: "data", type: "object" }],
+    },
+    onError: {
+      type: "eventHandler",
+      argTypes: [{ name: "error", type: "object" }],
+    },
+  },
+})
+*/
