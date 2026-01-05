@@ -4,10 +4,10 @@ export { HistoryPluginContent } from './HistoryPluginContent';
 export { createHistoryPlugin } from './historyPlugin';
 export { GraphiQLWrapper } from './GraphiQLWrapper';
 export { SingleFieldSelector } from './SingleFieldSelector';
-export { TableDialog } from './TableDialog';
-export { GraphiQLResponseExtractor } from './GraphiQLResponseExtractor';
+export { DataTransformerTab } from './DataTransformerTab';
 export { SaveControlsWrapper } from './SaveControlsWrapper';
 export { SaveControls } from './SaveControls';
 export { TabChangeDetector } from './TabChangeDetector';
 export { ActiveTabTracker } from './ActiveTabTracker';
+export { GraphiQLStateSync } from './GraphiQLStateSync';
 

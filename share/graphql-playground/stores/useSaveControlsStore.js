@@ -4,6 +4,7 @@ import { findNodeKeyFromIndexQuery } from '../utils/query-matcher';
 import { parseQueryToTreeNodes, extractOperationName } from '../utils/graphql-parser';
 import { useTableDialogStore } from './useTableDialogStore';
 import { useAppStore } from './useAppStore';
+import { getEndpointFromUrlKey } from '../constants';
 
 /**
  * Save controls store
@@ -51,6 +52,14 @@ export const useSaveControlsStore = create((set, get) => ({
       try {
         const data = await firestoreService.loadQuery(operationName);
         if (data) {
+          // Restore endpoint from urlKey if available
+          if (data.urlKey) {
+            const endpoint = getEndpointFromUrlKey(data.urlKey);
+            if (endpoint) {
+              useAppStore.getState().setSelectedEndpoint(endpoint);
+            }
+          }
+
           const updates = {};
 
           if (data.clientSave !== undefined) {
@@ -94,13 +103,6 @@ export const useSaveControlsStore = create((set, get) => ({
             updates.monthIndexExpandedKeys = {};
           }
 
-          // Restore flattenField if it exists
-          if (data.flattenField) {
-            useTableDialogStore.getState().setSelectedFlattenField(data.flattenField);
-          } else {
-            useTableDialogStore.getState().setSelectedFlattenField(null);
-          }
-
           // Restore transformerCode if it exists
           if (data.transformerCode !== undefined) {
             useAppStore.getState().setTabData(activeTabIndex, { transformerCode: data.transformerCode || '' });
@@ -111,7 +113,6 @@ export const useSaveControlsStore = create((set, get) => ({
           set(updates);
         } else {
           // Reset if no data found
-          useTableDialogStore.getState().setSelectedFlattenField(null);
           useAppStore.getState().setTabData(activeTabIndex, { transformerCode: '' });
           set({
             clientSave: false,
@@ -125,10 +126,9 @@ export const useSaveControlsStore = create((set, get) => ({
       } catch (error) {
         console.error('Error loading existing document:', error);
       }
-    } else {
-      // Reset if no operation name
-      useTableDialogStore.getState().setSelectedFlattenField(null);
-      useAppStore.getState().setTabData(activeTabIndex, { transformerCode: '' });
+      } else {
+        // Reset if no operation name
+        useAppStore.getState().setTabData(activeTabIndex, { transformerCode: '' });
       set({
         clientSave: false,
         selectedKeys: null,

@@ -55,9 +55,14 @@ export const firestoreService = {
           id: doc.id,
           name: doc.id,
           body: body,
+          urlKey: doc.data().urlKey || '',
           index: doc.data().index || '',
           clientSave: doc.data().clientSave || false,
           variables: doc.data().variables || '',
+          bodyUpdatedAt: doc.data().bodyUpdatedAt || null,
+          variablesUpdatedAt: doc.data().variablesUpdatedAt || null,
+          transformerCodeUpdatedAt: doc.data().transformerCodeUpdatedAt || null,
+          lastUpdatedBy: doc.data().lastUpdatedBy || null,
         });
       }
     });

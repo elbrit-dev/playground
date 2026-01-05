@@ -127,6 +127,57 @@
 }
 
 /* Save Controls Styles */
+.graphiql-tab-triggers {
+  display: flex;
+  align-items: center;
+  padding-left: 0.75rem;
+  border-left: 1px solid #e5e7eb;
+}
+
+.graphiql-tab-triggers .p-selectbutton {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.graphiql-tab-triggers .p-selectbutton .p-button {
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.375rem 0.75rem;
+  min-width: auto;
+}
+
+.graphiql-tab-triggers .p-selectbutton .p-button:not(.p-highlight) {
+  background: #ffffff;
+  border-color: #d1d5db;
+  color: #6b7280;
+}
+
+.graphiql-tab-triggers .p-selectbutton .p-button:not(.p-highlight):hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+  color: #374151;
+}
+
+.graphiql-tab-triggers .p-selectbutton .p-button.p-highlight {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #ffffff;
+}
+
+.graphiql-tab-triggers .p-selectbutton .p-button.p-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: auto; /* Allow hover for tooltip */
+}
+
+.graphiql-tab-triggers .p-selectbutton .p-button.p-disabled:hover {
+  opacity: 0.6;
+}
+
+.graphiql-tab-triggers .p-selectbutton:not(.p-disabled) .p-button:not(.p-disabled) {
+  cursor: pointer;
+}
+
 .graphiql-save-controls {
   display: flex;
   align-items: center;
@@ -913,6 +964,69 @@
   line-height: 1.6;
 }
 
+/* TabView Styles for Main Tabs */
+.graphiql-main-tabview {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.graphiql-main-tabview .p-tabview-nav {
+  display: none !important;
+}
+
+.graphiql-main-tabview .p-tabview-nav li .p-tabview-nav-link {
+  padding: 0.75rem 1.25rem;
+  color: #6b7280;
+  font-weight: 500;
+  font-size: 0.875rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  transition: all 0.2s ease;
+  margin-bottom: -1px;
+}
+
+.graphiql-main-tabview .p-tabview-nav li .p-tabview-nav-link:hover {
+  color: #374151;
+  background: #f9fafb;
+  border-bottom-color: #d1d5db;
+}
+
+.graphiql-main-tabview .p-tabview-nav li.p-highlight .p-tabview-nav-link {
+  color: #3b82f6;
+  background: #ffffff;
+  border-bottom-color: #3b82f6;
+  font-weight: 600;
+}
+
+.graphiql-main-tabview .p-tabview-panels {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  padding: 0;
+  min-height: 0;
+}
+
+.graphiql-main-tabview .p-tabview-panel {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  min-height: 0;
+}
+
+.graphiql-main-tabview .p-tabview-panel > div {
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 /* TabView Styles for Table Dialog */
 .table-dialog .p-tabview {
   display: flex;
@@ -980,6 +1094,90 @@
   overflow: auto;
 }
 
+/* TabView Styles for DataTransformerTab */
+.data-transformer-tabview {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.data-transformer-tabview .p-tabview-nav-container {
+  display: block !important;
+  flex-shrink: 0;
+  min-height: auto;
+  height: auto !important;
+  overflow: visible;
+}
+
+.data-transformer-tabview .p-tabview-nav {
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 0 1rem;
+  margin: 0;
+  border-radius: 0;
+  display: flex !important;
+  flex-shrink: 0;
+  list-style: none;
+  width: 100%;
+  height: auto !important;
+  min-height: 48px;
+}
+
+.data-transformer-tabview .p-tabview-nav li {
+  margin-right: 0.5rem;
+  display: list-item;
+}
+
+.data-transformer-tabview .p-tabview-nav li .p-tabview-nav-link {
+  padding: 0.75rem 1.25rem;
+  color: #6b7280;
+  font-weight: 500;
+  font-size: 0.875rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  transition: all 0.2s ease;
+  margin-bottom: -1px;
+}
+
+.data-transformer-tabview .p-tabview-nav li .p-tabview-nav-link:hover {
+  color: #374151;
+  background: #f3f4f6;
+  border-bottom-color: #d1d5db;
+}
+
+.data-transformer-tabview .p-tabview-nav li.p-highlight .p-tabview-nav-link {
+  color: #3b82f6;
+  background: #ffffff;
+  border-bottom-color: #3b82f6;
+  font-weight: 600;
+}
+
+.data-transformer-tabview .p-tabview-panels {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  padding: 0;
+  min-height: 0;
+}
+
+.data-transformer-tabview .p-tabview-panel {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  min-height: 0;
+}
+
+.data-transformer-tabview .p-tabview-panel > div {
+  height: 100%;
+  overflow: auto;
+}
+
 /* Fix Monaco Editor height calculation issue */
 .graphiql-container {
   height: 100%;
@@ -1040,5 +1238,34 @@
   max-height: 100% !important;
   overflow: hidden !important;
   position: absolute !important;
+}
+
+/* Resizable Panel Styles for Table Dialog */
+.table-dialog [data-separator] {
+  width: 8px;
+  background-color: #e5e7eb;
+  cursor: col-resize;
+  position: relative;
+  transition: background-color 0.2s;
+}
+
+.table-dialog [data-separator]:hover {
+  background-color: #d1d5db;
+}
+
+.table-dialog [data-separator]::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  height: 100%;
+  background-color: #9ca3af;
+  transition: background-color 0.2s;
+}
+
+.table-dialog [data-separator]:hover::before {
+  background-color: #3b82f6;
 }
 

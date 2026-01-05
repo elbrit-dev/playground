@@ -43,6 +43,7 @@ import {
   isArray,
   values,
 } from 'lodash';
+import { useStickyElements } from '../hooks/useStickyElements';
 
 // Date format patterns for detection
 const DATE_PATTERNS = [
@@ -375,8 +376,14 @@ function IconOnlyMultiselectFilter({ value, options, onChange, placeholder = "Se
   const [position, setPosition] = useState({ top: 0, left: 0, width: 0 });
   const triggerRef = useRef(null);
   const dropdownRef = useRef(null);
-  const selectedValues = value || [];
+  // Use local state for selected values - only apply to parent on blur
+  const [localSelectedValues, setLocalSelectedValues] = useState(value || []);
   const [mounted, setMounted] = useState(false);
+  
+  // Sync local state when value prop changes (from outside)
+  useEffect(() => {
+    setLocalSelectedValues(value || []);
+  }, [value]);
 
   // Ensure portal target exists
   useEffect(() => {
@@ -442,7 +449,7 @@ function IconOnlyMultiselectFilter({ value, options, onChange, placeholder = "Se
     };
   }, [isOpen]);
 
-  // Close dropdown when clicking outside
+  // Close dropdown when clicking outside and apply filters
   useEffect(() => {
     if (!isOpen) return;
 
@@ -453,6 +460,8 @@ function IconOnlyMultiselectFilter({ value, options, onChange, placeholder = "Se
         dropdownRef.current &&
         !dropdownRef.current.contains(event.target)
       ) {
+        // Apply filters when closing
+        onChange(localSelectedValues);
         setIsOpen(false);
       }
     };
@@ -460,7 +469,7 @@ function IconOnlyMultiselectFilter({ value, options, onChange, placeholder = "Se
     // Use capture phase to catch clicks before they bubble
     document.addEventListener('mousedown', handleClickOutside, true);
     return () => document.removeEventListener('mousedown', handleClickOutside, true);
-  }, [isOpen]);
+  }, [isOpen, localSelectedValues, onChange]);
 
   const filteredOptions = useMemo(() => {
     if (!searchTerm) return options;
@@ -469,24 +478,27 @@ function IconOnlyMultiselectFilter({ value, options, onChange, placeholder = "Se
   }, [options, searchTerm]);
 
   const toggleValue = (val) => {
-    if (includes(selectedValues, val)) {
-      onChange(filter(selectedValues, v => v !== val));
+    // Update local state only, don't apply filter yet
+    if (includes(localSelectedValues, val)) {
+      setLocalSelectedValues(filter(localSelectedValues, v => v !== val));
     } else {
-      onChange([...selectedValues, val]);
+      setLocalSelectedValues([...localSelectedValues, val]);
     }
   };
 
   const clearAll = () => {
-    onChange([]);
+    // Update local state only
+    setLocalSelectedValues([]);
     setSearchTerm('');
   };
 
   const selectAll = () => {
-    onChange(options.map(o => o.value));
+    // Update local state only
+    setLocalSelectedValues(options.map(o => o.value));
   };
 
-  const selectedCount = selectedValues.length;
-  const hasSelection = !isEmpty(selectedValues);
+  const selectedCount = localSelectedValues.length;
+  const hasSelection = !isEmpty(localSelectedValues);
 
   const dropdownContent = isOpen && mounted ? (
     <div
@@ -542,10 +554,10 @@ function IconOnlyMultiselectFilter({ value, options, onChange, placeholder = "Se
         >
           Clear
         </button>
-        {!isEmpty(selectedValues) && (
+        {!isEmpty(localSelectedValues) && (
           <>
             <span className="text-gray-300">|</span>
-            <span className="text-gray-500">{selectedValues.length} selected</span>
+            <span className="text-gray-500">{localSelectedValues.length} selected</span>
           </>
         )}
       </div>
@@ -558,7 +570,7 @@ function IconOnlyMultiselectFilter({ value, options, onChange, placeholder = "Se
           </div>
         ) : (
           filteredOptions.map(opt => {
-            const isSelected = includes(selectedValues, opt.value);
+            const isSelected = includes(localSelectedValues, opt.value);
             return (
               <label
                 key={opt.value}
@@ -623,8 +635,14 @@ function MultiselectFilter({ value, options, onChange, placeholder = "Select..."
   const [position, setPosition] = useState({ top: 0, left: 0, width: 0 });
   const triggerRef = useRef(null);
   const dropdownRef = useRef(null);
-  const selectedValues = value || [];
+  // Use local state for selected values - only apply to parent on blur
+  const [localSelectedValues, setLocalSelectedValues] = useState(value || []);
   const [mounted, setMounted] = useState(false);
+  
+  // Sync local state when value prop changes (from outside)
+  useEffect(() => {
+    setLocalSelectedValues(value || []);
+  }, [value]);
 
   // Ensure portal target exists
   useEffect(() => {
@@ -690,7 +708,7 @@ function MultiselectFilter({ value, options, onChange, placeholder = "Select..."
     };
   }, [isOpen]);
 
-  // Close dropdown when clicking outside
+  // Close dropdown when clicking outside and apply filters
   useEffect(() => {
     if (!isOpen) return;
 
@@ -701,6 +719,8 @@ function MultiselectFilter({ value, options, onChange, placeholder = "Select..."
         dropdownRef.current &&
         !dropdownRef.current.contains(event.target)
       ) {
+        // Apply filters when closing
+        onChange(localSelectedValues);
         setIsOpen(false);
       }
     };
@@ -708,7 +728,7 @@ function MultiselectFilter({ value, options, onChange, placeholder = "Select..."
     // Use capture phase to catch clicks before they bubble
     document.addEventListener('mousedown', handleClickOutside, true);
     return () => document.removeEventListener('mousedown', handleClickOutside, true);
-  }, [isOpen]);
+  }, [isOpen, localSelectedValues, onChange]);
 
   const filteredOptions = useMemo(() => {
     if (!searchTerm) return options;
@@ -717,20 +737,23 @@ function MultiselectFilter({ value, options, onChange, placeholder = "Select..."
   }, [options, searchTerm]);
 
   const toggleValue = (val) => {
-    if (includes(selectedValues, val)) {
-      onChange(filter(selectedValues, v => v !== val));
+    // Update local state only, don't apply filter yet
+    if (includes(localSelectedValues, val)) {
+      setLocalSelectedValues(filter(localSelectedValues, v => v !== val));
     } else {
-      onChange([...selectedValues, val]);
+      setLocalSelectedValues([...localSelectedValues, val]);
     }
   };
 
   const clearAll = () => {
-    onChange([]);
+    // Update local state only
+    setLocalSelectedValues([]);
     setSearchTerm('');
   };
 
   const selectAll = () => {
-    onChange(options.map(o => o.value));
+    // Update local state only
+    setLocalSelectedValues(options.map(o => o.value));
   };
 
   const dropdownContent = isOpen && mounted ? (
@@ -787,10 +810,10 @@ function MultiselectFilter({ value, options, onChange, placeholder = "Select..."
         >
           Clear
         </button>
-        {!isEmpty(selectedValues) && (
+        {!isEmpty(localSelectedValues) && (
           <>
             <span className="text-gray-300">|</span>
-            <span className="text-gray-500">{selectedValues.length} selected</span>
+            <span className="text-gray-500">{localSelectedValues.length} selected</span>
           </>
         )}
       </div>
@@ -803,7 +826,7 @@ function MultiselectFilter({ value, options, onChange, placeholder = "Select..."
           </div>
         ) : (
           filteredOptions.map(opt => {
-            const isSelected = includes(selectedValues, opt.value);
+            const isSelected = includes(localSelectedValues, opt.value);
             return (
               <label
                 key={opt.value}
@@ -841,11 +864,11 @@ function MultiselectFilter({ value, options, onChange, placeholder = "Select..."
           ref={triggerRef}
           type="button"
           onClick={() => setIsOpen(!isOpen)}
-          className={`w-full flex items-center justify-between px-2 py-1.5 text-xs border rounded bg-white hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors ${isEmpty(selectedValues) ? 'border-gray-300 text-gray-500' : 'border-blue-400 text-blue-700 bg-blue-50'
+          className={`w-full flex items-center justify-between px-2 py-1.5 text-xs border rounded bg-white hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors ${isEmpty(localSelectedValues) ? 'border-gray-300 text-gray-500' : 'border-blue-400 text-blue-700 bg-blue-50'
             }`}
         >
           <span className="truncate">
-            {isEmpty(selectedValues) ? placeholder : `${selectedValues.length} ${itemLabel}${selectedValues.length !== 1 ? 's' : ''}`}
+            {isEmpty(localSelectedValues) ? placeholder : `${localSelectedValues.length} ${itemLabel}${localSelectedValues.length !== 1 ? 's' : ''}`}
           </span>
           <i className={`pi ${isOpen ? 'pi-chevron-up' : 'pi-chevron-down'} text-[10px] ml-1 shrink-0`}></i>
         </button>
@@ -932,6 +955,16 @@ export default function DataTableComponent({
   targetValueField = null, // Field in target data that contains the target value
   actualValueField = null, // Field in data that contains the actual value to compare
   enableFullscreenDialog = true, // Enable/disable fullscreen dialog feature
+  // Sticky header/footer control props (page-level control)
+  stickyHeaderOffset = 0, // Additional offset for sticky header
+  stickyHeaderZIndex = 1000, // Z-index for sticky header
+  appHeaderOffset = null, // App header height (null = auto-calculate)
+  shouldShowHeader = null, // Custom function to determine header visibility: ({ tableElement, thead, containerRect, headerRect, scrollY, viewportHeight, totalHeaderOffset }) => boolean
+  shouldShowFooter = null, // Custom function to determine footer visibility: ({ tableElement, tfoot, containerRect, footerRect, scrollY, viewportHeight }) => boolean
+  calculateHeaderPosition = null, // Custom function to calculate header position: ({ containerRect, tableElement, thead, headerRect, totalHeaderOffset }) => { width, left, top } | null
+  calculateFooterPosition = null, // Custom function to calculate footer position: ({ containerRect, tableElement, tfoot, footerRect }) => { width, left, bottom } | null
+  manualStickyControl = false, // If true, hook only provides state, page controls visibility via returned setters
+  tableName = 'table', // Table name used for sticky element IDs (e.g., 'main', 'dialog', 'sidebar')
 }) {
   const [first, setFirst] = useState(0);
   const [rows, setRows] = useState(defaultRows);
@@ -943,6 +976,7 @@ export default function DataTableComponent({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const dialogRef = useRef(null);
+  const scrollPositionRef = useRef(0);
 
   // Prevent body scroll when dialog is open
   useEffect(() => {
@@ -962,6 +996,12 @@ export default function DataTableComponent({
   }, [defaultRows]);
 
   useEffect(() => {
+    // Only calculate scrollHeight if scrollable is true
+    if (!scrollable) {
+      setScrollHeightValue(undefined);
+      return;
+    }
+
     const updateScrollHeight = debounce(() => {
       if (scrollHeight) {
         setScrollHeightValue(scrollHeight);
@@ -983,7 +1023,7 @@ export default function DataTableComponent({
       updateScrollHeight.cancel();
       window.removeEventListener('resize', updateScrollHeight);
     };
-  }, [scrollHeight]);
+  }, [scrollHeight, scrollable]);
 
   const safeData = useMemo(() => {
     if (!Array.isArray(data) || isEmpty(data)) return [];
@@ -1015,48 +1055,163 @@ export default function DataTableComponent({
       let booleanCount = 0;
       let binaryCount = 0; // Count of 0/1 values
       let nonNullCount = 0;
+      let totalCount = 0;
+      const sampleValues = []; // Store sample values for debugging
 
+      // First pass: collect raw counts
       sampleData.forEach((row) => {
         const value = get(row, col);
+        totalCount++;
         if (!isNil(value)) {
           nonNullCount++;
-          if (isBoolean(value)) booleanCount++;
-          // Check for binary 0/1 values (number or string)
-          else if (value === 0 || value === 1 || value === '0' || value === '1') {
+          // Store first few non-null values for debugging
+          if (sampleValues.length < 5) {
+            sampleValues.push({ value, type: typeof value, stringified: String(value) });
+          }
+          
+          if (isBoolean(value)) {
+            booleanCount++;
+          } else if (value === 0 || value === 1 || value === '0' || value === '1') {
             binaryCount++;
-          }
-          // Check for date (before numeric to avoid timestamp confusion)
-          else if (isDateLike(value)) {
+          } else if (isDateLike(value)) {
             dateCount++;
-          }
-          // Check for numeric
-          else if (isNumericValue(value)) {
+          } else if (isNumericValue(value)) {
             numericCount++;
           }
         }
       });
 
+      // Boolean detection (strict - only true boolean values)
       const isTrueBooleanColumn = nonNullCount > 0 && booleanCount > nonNullCount * 0.7;
-      // Infer boolean from 0/1 if all non-null values are binary
       const isBinaryBooleanColumn = nonNullCount > 0 && binaryCount === nonNullCount && binaryCount >= 1;
       const isBooleanColumn = isTrueBooleanColumn || isBinaryBooleanColumn;
+      
+      const booleanReasons = [];
+      if (nonNullCount === 0) {
+        booleanReasons.push('NO_NON_NULL_VALUES');
+      } else {
+        booleanReasons.push(`booleanCount: ${booleanCount}/${nonNullCount} (${((booleanCount / nonNullCount) * 100).toFixed(1)}%)`);
+        booleanReasons.push(`binaryCount: ${binaryCount}/${nonNullCount} (${((binaryCount / nonNullCount) * 100).toFixed(1)}%)`);
+        if (!isTrueBooleanColumn) {
+          booleanReasons.push(`FAILED: booleanCount ${booleanCount} <= ${(nonNullCount * 0.7).toFixed(1)} (70% threshold)`);
+        }
+        if (!isBinaryBooleanColumn && binaryCount > 0) {
+          booleanReasons.push(`FAILED: binaryCount ${binaryCount} !== nonNullCount ${nonNullCount} (not all binary)`);
+        }
+      }
 
-      // Date detection: at least 70% should be date-like
-      const isDateColumn = !isBooleanColumn && nonNullCount > 0 && dateCount > nonNullCount * 0.7;
+      // Date detection (cascade: if boolean failed, check binary values as potential dates)
+      let dateCountWithBinary = dateCount;
+      if (!isBooleanColumn && binaryCount > 0) {
+        // Check if binary values could be dates (though 0/1 are unlikely to be dates)
+        sampleData.forEach((row) => {
+          const value = get(row, col);
+          if (!isNil(value) && (value === 0 || value === 1 || value === '0' || value === '1')) {
+            if (isDateLike(value)) {
+              dateCountWithBinary++;
+            }
+          }
+        });
+      }
+      const isDateColumn = !isBooleanColumn && nonNullCount > 0 && dateCountWithBinary > nonNullCount * 0.7;
+      
+      const dateReasons = [];
+      if (isBooleanColumn) {
+        dateReasons.push('SKIPPED: column is boolean');
+      } else if (nonNullCount === 0) {
+        dateReasons.push('NO_NON_NULL_VALUES');
+      } else {
+        dateReasons.push(`dateCount (raw): ${dateCount}/${nonNullCount} (${((dateCount / nonNullCount) * 100).toFixed(1)}%)`);
+        if (!isBooleanColumn && binaryCount > 0) {
+          dateReasons.push(`dateCount (with binary): ${dateCountWithBinary}/${nonNullCount} (${((dateCountWithBinary / nonNullCount) * 100).toFixed(1)}%)`);
+          dateReasons.push(`CASCADE: boolean failed, checking ${binaryCount} binary values as potential dates`);
+        }
+        if (!isDateColumn) {
+          dateReasons.push(`FAILED: dateCount ${dateCountWithBinary} <= ${(nonNullCount * 0.7).toFixed(1)} (70% threshold)`);
+        }
+      }
 
-      // Numeric detection: at least 80% should be numeric (excluding dates and booleans)
-      const isNumericColumn = !isBooleanColumn && !isDateColumn && nonNullCount > 0 && numericCount > nonNullCount * 0.8;
+      // Numeric detection (cascade: if boolean and date failed, include binary values as numeric)
+      let numericCountWithBinary = numericCount;
+      if (!isBooleanColumn && !isDateColumn && binaryCount > 0) {
+        // Binary 0/1 values are numeric when boolean and date both failed
+        numericCountWithBinary += binaryCount;
+      }
+      const isNumericColumn = !isBooleanColumn && !isDateColumn && nonNullCount > 0 && numericCountWithBinary > nonNullCount * 0.8;
+      
+      const numericReasons = [];
+      if (isBooleanColumn) {
+        numericReasons.push('SKIPPED: column is boolean');
+      } else if (isDateColumn) {
+        numericReasons.push('SKIPPED: column is date');
+      } else if (nonNullCount === 0) {
+        numericReasons.push('NO_NON_NULL_VALUES');
+      } else {
+        numericReasons.push(`numericCount (raw): ${numericCount}/${nonNullCount} (${((numericCount / nonNullCount) * 100).toFixed(1)}%)`);
+        if (!isBooleanColumn && !isDateColumn && binaryCount > 0) {
+          numericReasons.push(`numericCount (with binary): ${numericCountWithBinary}/${nonNullCount} (${((numericCountWithBinary / nonNullCount) * 100).toFixed(1)}%)`);
+          numericReasons.push(`CASCADE: boolean and date failed, treating ${binaryCount} binary values as numeric`);
+        }
+        if (!isNumericColumn) {
+          numericReasons.push(`FAILED: numericCount ${numericCountWithBinary} <= ${(nonNullCount * 0.8).toFixed(1)} (80% threshold)`);
+        }
+      }
+
+      // Text/Unknown detection with reasons
+      const isTextColumn = !isBooleanColumn && !isDateColumn && !isNumericColumn && nonNullCount > 0;
+      const textReasons = [];
+      if (isBooleanColumn) {
+        textReasons.push('SKIPPED: column is boolean');
+      } else if (isDateColumn) {
+        textReasons.push('SKIPPED: column is date');
+      } else if (isNumericColumn) {
+        textReasons.push('SKIPPED: column is numeric');
+      } else if (nonNullCount === 0) {
+        textReasons.push('NO_NON_NULL_VALUES');
+      } else {
+        textReasons.push('MATCHED: none of the specific types matched');
+      }
 
       types[col] = {
         isBoolean: isBooleanColumn,
         isBinaryBoolean: isBinaryBooleanColumn,
         isNumeric: isNumericColumn,
-        isDate: isDateColumn
+        isDate: isDateColumn,
+        isText: isTextColumn,
+        // Diagnostic information
+        _diagnostics: {
+          totalCount,
+          nonNullCount,
+          sampleValues,
+          counts: {
+            boolean: booleanCount,
+            binary: binaryCount,
+            date: dateCount,
+            dateWithBinary: dateCountWithBinary,
+            numeric: numericCount,
+            numericWithBinary: numericCountWithBinary
+          },
+          percentages: {
+            boolean: nonNullCount > 0 ? (booleanCount / nonNullCount) * 100 : 0,
+            binary: nonNullCount > 0 ? (binaryCount / nonNullCount) * 100 : 0,
+            date: nonNullCount > 0 ? (dateCount / nonNullCount) * 100 : 0,
+            dateWithBinary: nonNullCount > 0 ? (dateCountWithBinary / nonNullCount) * 100 : 0,
+            numeric: nonNullCount > 0 ? (numericCount / nonNullCount) * 100 : 0,
+            numericWithBinary: nonNullCount > 0 ? (numericCountWithBinary / nonNullCount) * 100 : 0
+          },
+          reasons: {
+            boolean: booleanReasons,
+            date: dateReasons,
+            numeric: numericReasons,
+            text: textReasons
+          }
+        }
       };
     });
 
     return types;
   }, [safeData, columns, isNumericValue]);
+
 
   // Create target lookup map when target data is enabled
   const targetLookup = useMemo(() => {
@@ -1293,7 +1448,12 @@ export default function DataTableComponent({
 
           // Multiselect filter (multiselect columns)
           if (isMultiselectColumn && isArray(filterValue)) {
-            return some(filterValue, (v) => v === cellValue || String(v) === String(cellValue));
+            return some(filterValue, (v) => {
+              // Handle null/undefined values explicitly
+              if (isNil(v) && isNil(cellValue)) return true;
+              if (isNil(v) || isNil(cellValue)) return false;
+              return v === cellValue || String(v) === String(cellValue);
+            });
           }
 
           // Boolean filter (handles true/false and 1/0)
@@ -1351,11 +1511,22 @@ export default function DataTableComponent({
       });
 
       // Get unique values from the filtered data for this column
-      const uniqueVals = compact(uniq(filteredForColumn.map((row) => get(row, col))));
-      values[col] = orderBy(uniqueVals).map((val) => ({
+      const uniqueVals = uniq(filteredForColumn.map((row) => get(row, col)));
+      // Include null values explicitly - don't use compact
+      const hasNull = some(uniqueVals, val => isNil(val));
+      const nonNullVals = filter(uniqueVals, val => !isNil(val));
+      const sortedNonNull = orderBy(nonNullVals);
+      
+      // Build options array with null first if it exists
+      const options = [];
+      if (hasNull) {
+        options.push({ label: '(null)', value: null });
+      }
+      options.push(...sortedNonNull.map((val) => ({
         label: String(val),
         value: val,
-      }));
+      })));
+      values[col] = options;
     });
 
     return values;
@@ -1512,7 +1683,12 @@ export default function DataTableComponent({
 
         // Multiselect filter (multiselect columns)
         if (isMultiselectColumn && isArray(filterValue)) {
-          return some(filterValue, (v) => v === cellValue || String(v) === String(cellValue));
+          return some(filterValue, (v) => {
+            // Handle null/undefined values explicitly
+            if (isNil(v) && isNil(cellValue)) return true;
+            if (isNil(v) || isNil(cellValue)) return false;
+            return v === cellValue || String(v) === String(cellValue);
+          });
         }
 
         // Boolean filter (handles true/false and 1/0)
@@ -1570,9 +1746,59 @@ export default function DataTableComponent({
     });
   }, [safeData, filters, columns, columnTypes, multiselectColumns, isTargetDataActive, getTargetColumnValue]);
 
+  // Restore horizontal scroll position after filters change
+  useEffect(() => {
+    if (scrollPositionRef.current === 0) return;
+    
+    // Use a small delay to ensure the table has re-rendered
+    const timeoutId = setTimeout(() => {
+      let scrollableContainer = null;
+      
+      // Check if dialog is open and get its container
+      if (isFullscreen && dialogRef.current) {
+        const dialogElement = dialogRef.current.getElement();
+        if (dialogElement) {
+          scrollableContainer = dialogElement.querySelector('.p-datatable-wrapper') || 
+                               dialogElement.querySelector('.p-datatable-scrollable-body');
+        }
+      }
+      
+      // Fallback to document if not found in dialog
+      if (!scrollableContainer) {
+        scrollableContainer = document.querySelector('.p-datatable-wrapper') || 
+                             document.querySelector('.p-datatable-scrollable-body');
+      }
+      
+      if (scrollableContainer && scrollPositionRef.current > 0) {
+        scrollableContainer.scrollLeft = scrollPositionRef.current;
+        
+        // Also sync with sticky header/footer if they exist
+        const context = isFullscreen && dialogRef.current 
+          ? (dialogRef.current.getElement() || document)
+          : document;
+        const stickyHeaderWrapper = context.querySelector('.sticky-header-wrapper');
+        if (stickyHeaderWrapper) {
+          stickyHeaderWrapper.scrollLeft = scrollPositionRef.current;
+        }
+        const stickyFooterWrapper = context.querySelector('.sticky-footer-wrapper');
+        if (stickyFooterWrapper) {
+          stickyFooterWrapper.scrollLeft = scrollPositionRef.current;
+        }
+      }
+    }, 50);
+
+    return () => clearTimeout(timeoutId);
+  }, [filters, isFullscreen]);
+
   // Group filtered data by outerGroupField if set
   const groupedData = useMemo(() => {
-    if (!outerGroupField || isEmpty(filteredData)) return filteredData;
+    if (!outerGroupField || isEmpty(filteredData)) {
+      // When outerGroupField is removed, ensure we return a clean array without group rows
+      if (!outerGroupField && isArray(filteredData)) {
+        return filteredData.filter(row => !row?.__isGroupRow__);
+      }
+      return isArray(filteredData) ? filteredData : [];
+    }
 
     // Group by outerGroupField
     const groups = {};
@@ -1686,15 +1912,21 @@ export default function DataTableComponent({
       summaryRow.__isGroupRow__ = true;
 
       return summaryRow;
-    });
+    }).filter(Boolean); // Filter out any null values
   }, [filteredData, outerGroupField, innerGroupField, columns, columnTypes]);
 
   // Use grouped data if outerGroupField is set, otherwise use filteredData
   const dataForSorting = useMemo(() => {
-    return outerGroupField ? groupedData : filteredData;
+    const data = outerGroupField ? groupedData : filteredData;
+    // Ensure we always return an array
+    return isArray(data) ? data : [];
   }, [outerGroupField, groupedData, filteredData]);
 
   const sortedData = useMemo(() => {
+    // Ensure dataForSorting is an array
+    if (!isArray(dataForSorting)) {
+      return [];
+    }
     if (isEmpty(dataForSorting) || isEmpty(multiSortMeta)) {
       return dataForSorting;
     }
@@ -1811,12 +2043,19 @@ export default function DataTableComponent({
     return value === true || value === 1 || value === '1';
   }, []);
 
-  const booleanBodyTemplate = useCallback((rowData, column) => {
+  // Helper to get color class for a column
+  const getColumnColorClass = useCallback((column) => {
+    const isRedField = includes(redFields, column);
+    const isGreenField = includes(greenFields, column);
+    return isRedField ? 'text-red-600' : isGreenField ? 'text-green-600' : '';
+  }, [redFields, greenFields]);
+
+  const booleanBodyTemplate = useCallback((rowData, column, colorClass = '') => {
     const value = get(rowData, column);
     const isTruthy = isTruthyBoolean(value);
 
     return (
-      <div className="flex items-center justify-center">
+      <div className={`flex items-center justify-center ${colorClass}`}>
         {isTruthy ? (
           <i className="pi pi-check-circle text-green-600 text-lg" title="Yes" />
         ) : (
@@ -1826,24 +2065,47 @@ export default function DataTableComponent({
     );
   }, [isTruthyBoolean]);
 
-  const dateBodyTemplate = useCallback((rowData, column) => {
+  const dateBodyTemplate = useCallback((rowData, column, colorClass = '') => {
     const value = get(rowData, column);
     const formatted = formatDateValue(value);
 
     return (
-      <div className="text-xs sm:text-sm truncate text-left" title={formatted}>
+      <div className={`text-xs sm:text-sm truncate text-left ${colorClass}`} title={formatted}>
         {formatted}
       </div>
     );
   }, []);
 
   const updateFilter = useCallback((col, value) => {
+    // Save current scroll position before updating filters
+    // Try to find the scrollable container - check dialog first, then document
+    let container = null;
+    
+    // Check if dialog is open and get its container
+    if (isFullscreen && dialogRef.current) {
+      const dialogElement = dialogRef.current.getElement();
+      if (dialogElement) {
+        container = dialogElement.querySelector('.p-datatable-wrapper') || 
+                   dialogElement.querySelector('.p-datatable-scrollable-body');
+      }
+    }
+    
+    // Fallback to document if not found in dialog
+    if (!container) {
+      container = document.querySelector('.p-datatable-wrapper') || 
+                 document.querySelector('.p-datatable-scrollable-body');
+    }
+    
+    if (container) {
+      scrollPositionRef.current = container.scrollLeft || 0;
+    }
+    
     setFilters(prev => ({
       ...prev,
       [col]: { ...get(prev, col), value }
     }));
     setFirst(0);
-  }, []);
+  }, [isFullscreen]);
 
   const clearFilter = useCallback((col) => {
     updateFilter(col, null);
@@ -2067,6 +2329,7 @@ export default function DataTableComponent({
   const getBodyTemplate = useCallback((col) => {
     // Handle target data columns
     if (col === TARGET_PERCENTAGE_COL || col === TARGET_TARGET_COL || col === TARGET_ACTUAL_COL) {
+      const colorClass = getColumnColorClass(col);
       return (rowData) => {
         // Get actual value from rowData
         const actualValue = get(rowData, actualValueField);
@@ -2101,20 +2364,20 @@ export default function DataTableComponent({
 
         if (col === TARGET_PERCENTAGE_COL) {
           return (
-            <div className="text-xs sm:text-sm text-right">
-              <div className="font-semibold text-blue-700">{formatPercentage(percentage)}</div>
+            <div className={`text-xs sm:text-sm text-right ${colorClass}`}>
+              <div className={`font-semibold ${colorClass || 'text-blue-700'}`}>{formatPercentage(percentage)}</div>
             </div>
           );
         } else if (col === TARGET_TARGET_COL) {
           return (
-            <div className="text-xs sm:text-sm text-right">
-              <div>{formatNum(targetValue)}</div>
+            <div className={`text-xs sm:text-sm text-right ${colorClass}`}>
+              <div className={colorClass}>{formatNum(targetValue)}</div>
             </div>
           );
         } else if (col === TARGET_ACTUAL_COL) {
           return (
-            <div className="text-xs sm:text-sm text-right">
-              <div>{formatNum(actualNum)}</div>
+            <div className={`text-xs sm:text-sm text-right ${colorClass}`}>
+              <div className={colorClass}>{formatNum(actualNum)}</div>
             </div>
           );
         }
@@ -2128,6 +2391,7 @@ export default function DataTableComponent({
     const isNumericCol = get(colType, 'isNumeric', false);
     const isOuterGroupCol = col === outerGroupField;
     const isInnerGroupCol = col === innerGroupField;
+    const colorClass = getColumnColorClass(col);
 
     // Handle clickable group columns
     if (isOuterGroupCol && onOuterGroupClick) {
@@ -2136,7 +2400,7 @@ export default function DataTableComponent({
         const cellValue = formatCellValue(value, colType);
         return (
           <div
-            className={`text-xs sm:text-sm truncate cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded transition-colors ${isNumericCol ? 'text-right' : 'text-left'}`}
+            className={`text-xs sm:text-sm truncate cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded transition-colors ${isNumericCol ? 'text-right' : 'text-left'} ${colorClass}`}
             title={cellValue}
             onClick={(e) => {
               e.stopPropagation();
@@ -2155,7 +2419,7 @@ export default function DataTableComponent({
         const cellValue = formatCellValue(value, colType);
         return (
           <div
-            className={`text-xs sm:text-sm truncate cursor-pointer hover:bg-green-50 px-1 py-0.5 rounded transition-colors ${isNumericCol ? 'text-right' : 'text-left'}`}
+            className={`text-xs sm:text-sm truncate cursor-pointer hover:bg-green-50 px-1 py-0.5 rounded transition-colors ${isNumericCol ? 'text-right' : 'text-left'} ${colorClass}`}
             title={cellValue}
             onClick={(e) => {
               e.stopPropagation();
@@ -2169,20 +2433,32 @@ export default function DataTableComponent({
     }
 
     if (isBooleanCol) {
-      return (rowData) => booleanBodyTemplate(rowData, col);
+      return (rowData) => booleanBodyTemplate(rowData, col, colorClass);
     }
     if (isDateCol) {
-      return (rowData) => dateBodyTemplate(rowData, col);
+      return (rowData) => dateBodyTemplate(rowData, col, colorClass);
     }
     return (rowData) => (
       <div
-        className={`text-xs sm:text-sm truncate ${isNumericCol ? 'text-right' : 'text-left'}`}
+        className={`text-xs sm:text-sm truncate ${isNumericCol ? 'text-right' : 'text-left'} ${colorClass}`}
         title={formatCellValue(get(rowData, col), colType)}
       >
         {formatCellValue(get(rowData, col), colType)}
       </div>
     );
-  }, [columnTypes, outerGroupField, innerGroupField, onOuterGroupClick, onInnerGroupClick, booleanBodyTemplate, dateBodyTemplate, formatCellValue, isTargetDataActive, targetLookup, actualValueField, TARGET_PERCENTAGE_COL, TARGET_TARGET_COL, TARGET_ACTUAL_COL]);
+  }, [columnTypes, outerGroupField, innerGroupField, onOuterGroupClick, onInnerGroupClick, booleanBodyTemplate, dateBodyTemplate, formatCellValue, isTargetDataActive, targetLookup, actualValueField, TARGET_PERCENTAGE_COL, TARGET_TARGET_COL, TARGET_ACTUAL_COL, getColumnColorClass]);
+
+  // Header template function to apply column colors
+  const getHeaderTemplate = useCallback((col) => {
+    const colorClass = getColumnColorClass(col);
+    if (!colorClass) return undefined;
+    
+    return () => (
+      <span className={colorClass}>
+        {formatHeaderName(col)}
+      </span>
+    );
+  }, [getColumnColorClass, formatHeaderName]);
 
   // Cell editor functions
   const getCellEditor = useCallback((col) => {
@@ -2334,7 +2610,7 @@ export default function DataTableComponent({
                 <Column
                   key={col}
                   field={col}
-                  header={formatHeaderName(col)}
+                  header={getHeaderTemplate(col) || formatHeaderName(col)}
                   body={getBodyTemplate(col)}
                   align={isNumericCol ? 'right' : 'left'}
                   style={{
@@ -2348,7 +2624,7 @@ export default function DataTableComponent({
         </div>
       </div>
     );
-  }, [outerGroupField, innerGroupField, orderedColumns, columnTypes, formatHeaderName, getBodyTemplate, calculateColumnWidths]);
+  }, [outerGroupField, innerGroupField, orderedColumns, columnTypes, formatHeaderName, getBodyTemplate, calculateColumnWidths, getHeaderTemplate]);
 
   const onPageChange = (event) => {
     setFirst(event.first);
@@ -2405,7 +2681,10 @@ export default function DataTableComponent({
         </button>
         {showFullscreenButton && enableFullscreenDialog && (
           <button
-            onClick={() => setIsFullscreen(true)}
+            onClick={() => {
+              setIsFullscreen(true);
+              setIsMaximized(true);
+            }}
             className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center"
             title="View table in fullscreen"
           >
@@ -2474,13 +2753,480 @@ export default function DataTableComponent({
     );
   };
 
-  // Reusable Table View Component
-  const TableView = ({ scrollHeight, containerClassName = "", containerStyle = {} }) => (
-    <div className={`border border-gray-200 rounded-lg w-full responsive-table-container ${containerClassName}`} style={{ position: 'relative', ...containerStyle }}>
+  // Reusable Table View Component with Sticky Header/Footer
+  const TableView = ({ scrollHeight, containerClassName = "", containerStyle = {}, tableName: viewTableName = tableName }) => {
+    const tableContainerRef = useRef(null);
+    const tableRef = useRef(null);
+    const stickyHeaderRef = useRef(null);
+    const stickyFooterRef = useRef(null);
+    const originalHeaderRef = useRef(null);
+    const originalFooterRef = useRef(null);
+    const [calculatedAppHeaderOffset, setCalculatedAppHeaderOffset] = useState(0);
+    const [calculatedScrollHeight, setCalculatedScrollHeight] = useState(scrollHeight === "flex" ? undefined : scrollHeight);
+
+    // Calculate scrollHeight dynamically when "flex" is used
+    useEffect(() => {
+      if (scrollHeight === "flex" && tableContainerRef.current) {
+        const calculateHeight = () => {
+          if (tableContainerRef.current) {
+            const rect = tableContainerRef.current.getBoundingClientRect();
+            if (rect.height > 0) {
+              setCalculatedScrollHeight(`${rect.height}px`);
+            }
+          }
+        };
+        
+        // Calculate immediately and on resize
+        calculateHeight();
+        const resizeObserver = new ResizeObserver(calculateHeight);
+        if (tableContainerRef.current) {
+          resizeObserver.observe(tableContainerRef.current);
+        }
+        
+        return () => {
+          resizeObserver.disconnect();
+        };
+      } else {
+        setCalculatedScrollHeight(scrollHeight);
+      }
+    }, [scrollHeight, tableContainerRef]);
+
+    // Calculate app header offset dynamically if not provided
+    useEffect(() => {
+      if (appHeaderOffset !== null) {
+        // Use provided offset
+        setCalculatedAppHeaderOffset(appHeaderOffset);
+      } else {
+        // Calculate dynamically by finding the app header
+        const calculateAppHeaderHeight = () => {
+          // Try multiple selectors to find the app header
+          const headerSelectors = [
+            '.app-header-container',
+            '.app-header-menubar',
+            '[class*="app-header"]',
+            'header',
+            '.p-menubar'
+          ];
+          
+          for (const selector of headerSelectors) {
+            const headerElement = document.querySelector(selector);
+            if (headerElement) {
+              const height = headerElement.getBoundingClientRect().height;
+              setCalculatedAppHeaderOffset(height);
+              return;
+            }
+          }
+          
+          // Fallback: try to find any fixed/sticky header at the top
+          const allElements = document.querySelectorAll('*');
+          for (const el of allElements) {
+            const style = window.getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            if (
+              (style.position === 'fixed' || style.position === 'sticky') &&
+              rect.top === 0 &&
+              rect.height > 0 &&
+              rect.height < 200 // Reasonable header height
+            ) {
+              setCalculatedAppHeaderOffset(rect.height);
+              return;
+            }
+          }
+          
+          setCalculatedAppHeaderOffset(0);
+        };
+
+        // Calculate on mount and resize
+        calculateAppHeaderHeight();
+        const handleResize = debounce(calculateAppHeaderHeight, 100);
+        window.addEventListener('resize', handleResize);
+        
+        return () => {
+          window.removeEventListener('resize', handleResize);
+          handleResize.cancel();
+        };
+      }
+    }, [appHeaderOffset]);
+
+    // Use sticky elements hook for visibility and position
+    // Page-level control via props passed from DataTableComponent
+    // Disable sticky header for dialog views
+    const dialogShouldShowHeader = viewTableName.includes('dialog') 
+      ? () => false 
+      : shouldShowHeader;
+    
+    const {
+      showStickyHeader,
+      showStickyFooter,
+      headerPosition,
+      footerPosition,
+      totalHeaderOffset,
+      stickyHeaderZIndex: stickyHeaderZIndexFromHook
+    } = useStickyElements({
+      tableContainerRef,
+      tableRef,
+      stickyHeaderRef,
+      stickyFooterRef,
+      appHeaderOffset: calculatedAppHeaderOffset,
+      stickyHeaderOffset,
+      stickyHeaderZIndex,
+      // Page-level control functions
+      shouldShowHeader: dialogShouldShowHeader,
+      shouldShowFooter,
+      calculateHeaderPosition,
+      calculateFooterPosition,
+      manualControl: manualStickyControl,
+      tableName: viewTableName,
+    });
+
+    // Find table elements and set up sticky header/footer
+    useEffect(() => {
+      if (!tableContainerRef.current || !tableRef.current) {
+        return;
+      }
+
+      const findTableElements = () => {
+        const tableElement = tableRef.current?.querySelector('table.p-datatable-table') || tableRef.current?.querySelector('table');
+        if (!tableElement) {
+          return null;
+        }
+
+        const thead = tableElement.querySelector('thead');
+        const tfoot = tableElement.querySelector('tfoot');
+        
+        return { tableElement, thead, tfoot };
+      };
+
+        // Wait for table to render
+        const initStickyElements = () => {
+          const elements = findTableElements();
+          if (!elements) {
+            return;
+          }
+
+          const { tableElement, thead, tfoot } = elements;
+          
+          if (thead) {
+            originalHeaderRef.current = thead;
+          }
+          if (tfoot) {
+            originalFooterRef.current = tfoot;
+          }
+
+          // Update sticky header/footer when table structure changes
+          const updateStickyElements = () => {
+            const currentElements = findTableElements();
+            if (!currentElements) {
+              return;
+            }
+
+            const { tableElement: currentTable, thead: currentThead, tfoot: currentTfoot } = currentElements;
+
+            // Update sticky header - always update if ref exists (container is always rendered now)
+            if (currentThead) {
+              if (!stickyHeaderRef.current) {
+                return;
+              }
+              
+              // Create wrapper for horizontal scrolling
+              let stickyWrapper = stickyHeaderRef.current.querySelector('.sticky-header-wrapper');
+              if (!stickyWrapper) {
+                stickyWrapper = document.createElement('div');
+                stickyWrapper.className = 'sticky-header-wrapper';
+                stickyWrapper.style.overflowX = 'auto';
+                stickyWrapper.style.overflowY = 'hidden';
+                stickyHeaderRef.current.appendChild(stickyWrapper);
+              }
+              
+              let stickyTable = stickyWrapper.querySelector('table');
+              if (!stickyTable) {
+                stickyTable = document.createElement('table');
+                stickyTable.className = currentTable.className;
+                stickyTable.style.width = '100%';
+                stickyTable.style.tableLayout = currentTable.style.tableLayout || 'auto';
+                stickyWrapper.appendChild(stickyTable);
+              }
+            
+              const existingThead = stickyTable.querySelector('thead');
+              if (existingThead) {
+                stickyTable.removeChild(existingThead);
+              }
+              // Clone only the header row (first row), exclude filter row (second row)
+              const stickyThead = document.createElement('thead');
+              const headerRow = currentThead.querySelector('tr:first-child');
+              if (headerRow) {
+                const clonedHeaderRow = headerRow.cloneNode(true);
+                // Remove sort icons and badges from cloned header
+                const sortIcons = clonedHeaderRow.querySelectorAll('.p-sortable-column-icon, .p-sortable-column-badge');
+                sortIcons.forEach(icon => icon.remove());
+                stickyThead.appendChild(clonedHeaderRow);
+              }
+              stickyTable.appendChild(stickyThead);
+              
+              // Copy column widths after a brief delay to ensure rendering
+              setTimeout(() => {
+                // Only sync widths from the first row (header row), not filter row
+                const originalHeaderRow = currentThead.querySelector('tr:first-child');
+                const stickyHeaderRow = stickyThead.querySelector('tr:first-child');
+                if (originalHeaderRow && stickyHeaderRow) {
+                  const originalCells = originalHeaderRow.querySelectorAll('th');
+                  const stickyCells = stickyHeaderRow.querySelectorAll('th');
+                  originalCells.forEach((cell, index) => {
+                    if (stickyCells[index]) {
+                      stickyCells[index].style.width = cell.offsetWidth + 'px';
+                      stickyCells[index].style.minWidth = cell.offsetWidth + 'px';
+                    }
+                  });
+                }
+              }, 50);
+            }
+
+            // Update sticky footer - always update if ref exists (container is always rendered now)
+            if (currentTfoot) {
+              if (!stickyFooterRef.current) {
+                return;
+              }
+              
+              // Create wrapper for horizontal scrolling
+              let stickyWrapper = stickyFooterRef.current.querySelector('.sticky-footer-wrapper');
+              if (!stickyWrapper) {
+                stickyWrapper = document.createElement('div');
+                stickyWrapper.className = 'sticky-footer-wrapper';
+                stickyWrapper.style.overflowX = 'auto';
+                stickyWrapper.style.overflowY = 'hidden';
+                stickyFooterRef.current.appendChild(stickyWrapper);
+              }
+              
+              let stickyTable = stickyWrapper.querySelector('table');
+              if (!stickyTable) {
+                stickyTable = document.createElement('table');
+                stickyTable.className = currentTable.className;
+                stickyTable.style.width = '100%';
+                stickyTable.style.tableLayout = currentTable.style.tableLayout || 'auto';
+                stickyWrapper.appendChild(stickyTable);
+              }
+              
+              const existingTfoot = stickyTable.querySelector('tfoot');
+              if (existingTfoot) {
+                stickyTable.removeChild(existingTfoot);
+              }
+              const stickyTfoot = currentTfoot.cloneNode(true);
+              stickyTable.appendChild(stickyTfoot);
+              
+              // Copy column widths after a brief delay to ensure rendering
+              setTimeout(() => {
+                const originalCells = currentTfoot.querySelectorAll('td, th');
+                const stickyCells = stickyTfoot.querySelectorAll('td, th');
+                originalCells.forEach((cell, index) => {
+                  if (stickyCells[index]) {
+                    stickyCells[index].style.width = cell.offsetWidth + 'px';
+                    stickyCells[index].style.minWidth = cell.offsetWidth + 'px';
+                  }
+                });
+              }, 50);
+            }
+        };
+
+        updateStickyElements();
+
+        // Use MutationObserver to watch for table changes
+        const observer = new MutationObserver(() => {
+          updateStickyElements();
+        });
+
+        if (tableElement) {
+          observer.observe(tableElement, { childList: true, subtree: true });
+        }
+
+        return () => {
+          observer.disconnect();
+        };
+      };
+
+      // Delay to ensure table is rendered
+      const timeoutId = setTimeout(initStickyElements, 100);
+      return () => {
+        clearTimeout(timeoutId);
+      };
+    }, [paginatedData, filters, multiSortMeta, expandedRows]);
+
+    // Sync column widths and positions on scroll/resize and when sticky elements become visible
+    useEffect(() => {
+      const syncWidthsAndPositions = () => {
+        if (!tableRef.current || !tableContainerRef.current) {
+          return;
+        }
+
+        const tableElement = tableRef.current.querySelector('table.p-datatable-table') || tableRef.current.querySelector('table');
+        if (!tableElement) {
+          return;
+        }
+
+        const containerRect = tableContainerRef.current.getBoundingClientRect();
+        const thead = tableElement.querySelector('thead');
+        const tfoot = tableElement.querySelector('tfoot');
+
+        // Sync sticky header - sync whenever visible AND ref exists
+        if (thead && stickyHeaderRef.current && showStickyHeader) {
+          const stickyWrapper = stickyHeaderRef.current.querySelector('.sticky-header-wrapper');
+          const stickyTable = stickyWrapper?.querySelector('table') || stickyHeaderRef.current.querySelector('table');
+          if (stickyTable) {
+            // Only sync widths from the first row (header row), not filter row
+            const originalHeaderRow = thead.querySelector('tr:first-child');
+            const stickyHeaderRow = stickyTable.querySelector('thead tr:first-child');
+            if (originalHeaderRow && stickyHeaderRow) {
+              const originalCells = originalHeaderRow.querySelectorAll('th');
+              const stickyCells = stickyHeaderRow.querySelectorAll('th');
+              originalCells.forEach((cell, index) => {
+                if (stickyCells[index]) {
+                  stickyCells[index].style.width = cell.offsetWidth + 'px';
+                  stickyCells[index].style.minWidth = cell.offsetWidth + 'px';
+                }
+              });
+            }
+            stickyTable.style.width = tableElement.offsetWidth + 'px';
+            if (stickyWrapper) {
+              stickyWrapper.style.width = containerRect.width + 'px';
+            }
+            // Position is now managed by the hook, but we still need to sync width/left for the container
+            stickyHeaderRef.current.style.width = headerPosition.width + 'px';
+            stickyHeaderRef.current.style.left = headerPosition.left + 'px';
+          }
+        }
+
+        // Sync sticky footer - sync whenever visible AND ref exists
+        if (tfoot && stickyFooterRef.current && showStickyFooter) {
+          const stickyWrapper = stickyFooterRef.current.querySelector('.sticky-footer-wrapper');
+          const stickyTable = stickyWrapper?.querySelector('table') || stickyFooterRef.current.querySelector('table');
+          if (stickyTable) {
+            const originalCells = tfoot.querySelectorAll('td, th');
+            const stickyCells = stickyTable.querySelectorAll('td, th');
+            originalCells.forEach((cell, index) => {
+              if (stickyCells[index]) {
+                stickyCells[index].style.width = cell.offsetWidth + 'px';
+                stickyCells[index].style.minWidth = cell.offsetWidth + 'px';
+              }
+            });
+            stickyTable.style.width = tableElement.offsetWidth + 'px';
+            if (stickyWrapper) {
+              stickyWrapper.style.width = containerRect.width + 'px';
+            }
+            // Position is now managed by the hook, but we still need to sync width/left for the container
+            stickyFooterRef.current.style.width = footerPosition.width + 'px';
+            stickyFooterRef.current.style.left = footerPosition.left + 'px';
+          }
+        }
+      };
+
+      // Immediate sync when sticky elements become visible
+      if (showStickyHeader || showStickyFooter) {
+        setTimeout(syncWidthsAndPositions, 10);
+      }
+
+      const debouncedSync = debounce(syncWidthsAndPositions, 50);
+      window.addEventListener('resize', debouncedSync);
+      window.addEventListener('scroll', debouncedSync, true);
+
+      return () => {
+        window.removeEventListener('resize', debouncedSync);
+        window.removeEventListener('scroll', debouncedSync, true);
+        debouncedSync.cancel();
+      };
+    }, [paginatedData, showStickyHeader, showStickyFooter, headerPosition, footerPosition]);
+
+    // Sync horizontal scroll position between table and sticky header/footer
+    useEffect(() => {
+      if (!tableRef.current) return;
+
+      const syncHorizontalScroll = () => {
+        // Find the scrollable container (PrimeReact uses .p-datatable-wrapper)
+        const scrollableContainer = tableRef.current?.querySelector('.p-datatable-wrapper') || 
+                                   tableRef.current?.querySelector('.p-datatable-scrollable-body') ||
+                                   tableContainerRef.current;
+        
+        if (!scrollableContainer) {
+          return;
+        }
+
+        const scrollLeft = scrollableContainer.scrollLeft || 0;
+
+        // Sync sticky header scroll
+        if (stickyHeaderRef.current && showStickyHeader) {
+          const stickyWrapper = stickyHeaderRef.current.querySelector('.sticky-header-wrapper');
+          if (stickyWrapper) {
+            stickyWrapper.scrollLeft = scrollLeft;
+          }
+        }
+
+        // Sync sticky footer scroll
+        if (stickyFooterRef.current && showStickyFooter) {
+          const stickyWrapper = stickyFooterRef.current.querySelector('.sticky-footer-wrapper');
+          if (stickyWrapper) {
+            stickyWrapper.scrollLeft = scrollLeft;
+          }
+        }
+      };
+
+      // Find scrollable container and set up listener
+      const findAndSetupScrollSync = () => {
+        const scrollableContainer = tableRef.current?.querySelector('.p-datatable-wrapper') || 
+                                   tableRef.current?.querySelector('.p-datatable-scrollable-body') ||
+                                   tableContainerRef.current;
+
+        if (scrollableContainer) {
+          scrollableContainer.addEventListener('scroll', syncHorizontalScroll, { passive: true });
+          
+          return () => {
+            scrollableContainer.removeEventListener('scroll', syncHorizontalScroll);
+          };
+        }
+        return () => {};
+      };
+
+      // Delay to ensure table is rendered
+      const timeoutId = setTimeout(findAndSetupScrollSync, 300);
+      
+      return () => {
+        clearTimeout(timeoutId);
+        const scrollableContainer = tableRef.current?.querySelector('.p-datatable-wrapper') || 
+                                   tableRef.current?.querySelector('.p-datatable-scrollable-body') ||
+                                   tableContainerRef.current;
+        if (scrollableContainer) {
+          scrollableContainer.removeEventListener('scroll', syncHorizontalScroll);
+        }
+      };
+    }, [showStickyHeader, showStickyFooter, paginatedData]);
+
+    return (
+      <div 
+        ref={tableContainerRef}
+        className={`border border-gray-200 rounded-lg w-full responsive-table-container ${containerClassName}`} 
+        style={{ position: 'relative', ...containerStyle }}
+      >
+        {/* Sticky Header - Always render but hide when not needed */}
+        <div
+          ref={stickyHeaderRef}
+          className="sticky-table-header"
+          style={{
+            position: 'fixed',
+            top: `${headerPosition.top}px`,
+            left: `${headerPosition.left}px`,
+            width: `${headerPosition.width}px`,
+            zIndex: stickyHeaderZIndexFromHook,
+            backgroundColor: 'white',
+            borderBottom: '1px solid #e5e7eb',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            overflow: 'hidden',
+            pointerEvents: 'auto',
+            display: showStickyHeader ? 'block' : 'none'
+          }}
+        />
+
+        <div ref={tableRef}>
       <DataTable
         value={isArray(paginatedData) ? paginatedData : []}
-        scrollable={scrollable}
-        scrollHeight={scrollHeight}
+        scrollable={scrollHeight === "flex" || calculatedScrollHeight ? true : scrollable}
+        scrollHeight={scrollHeight === "flex" && calculatedScrollHeight ? calculatedScrollHeight : (scrollable && scrollHeight ? scrollHeight : undefined)}
         sortMode={enableSort ? "multiple" : undefined}
         removableSort={enableSort}
         multiSortMeta={multiSortMeta}
@@ -2514,7 +3260,7 @@ export default function DataTableComponent({
             <Column
               key={`frozen-${col}`}
               field={col}
-              header={formatHeaderName(col)}
+              header={getHeaderTemplate(col) || formatHeaderName(col)}
               sortable={enableSort}
               sortFunction={isTargetCol ? getTargetColumnSortFunction(col) : undefined}
               frozen={freezeFirstColumn}
@@ -2544,7 +3290,7 @@ export default function DataTableComponent({
             <Column
               key={col}
               field={col}
-              header={formatHeaderName(col)}
+              header={getHeaderTemplate(col) || formatHeaderName(col)}
               sortable={enableSort}
               sortFunction={isTargetCol ? getTargetColumnSortFunction(col) : undefined}
               style={{
@@ -2565,8 +3311,29 @@ export default function DataTableComponent({
           );
         })}
       </DataTable>
+        </div>
+
+        {/* Sticky Footer - Always render but hide when not needed */}
+        <div
+          ref={stickyFooterRef}
+          className="sticky-table-footer"
+          style={{
+            position: 'fixed',
+            bottom: `${footerPosition.bottom}px`,
+            left: `${footerPosition.left}px`,
+            width: `${footerPosition.width}px`,
+            zIndex: 1000,
+            backgroundColor: 'white',
+            borderTop: '1px solid #e5e7eb',
+            boxShadow: '0 -2px 4px rgba(0,0,0,0.1)',
+            overflow: 'hidden',
+            pointerEvents: 'auto',
+            display: showStickyFooter ? 'block' : 'none'
+          }}
+        />
     </div>
   );
+  };
 
   // Reusable Paginator Wrapper Component
   const PaginatorWrapper = useCallback(({ className = "" }) => {
@@ -2672,7 +3439,10 @@ export default function DataTableComponent({
       <FeatureStatusIndicators />
       <TableControls showFullscreenButton={true} enableFullscreenDialog={enableFullscreenDialog} />
       <FilterChips />
-      <TableView scrollHeight={scrollHeightValue} />
+      <TableView 
+        scrollHeight={scrollable ? scrollHeightValue : undefined}
+        tableName={tableName}
+      />
       <PaginatorWrapper />
 
       {/* Fullscreen Dialog */}
@@ -2717,6 +3487,7 @@ export default function DataTableComponent({
             scrollHeight="flex"
             containerClassName="flex-1"
             containerStyle={{ minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+            tableName={`${tableName}-dialog`}
           />
           <PaginatorWrapper className="shrink-0" />
         </div>

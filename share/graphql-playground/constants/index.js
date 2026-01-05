@@ -16,11 +16,14 @@ export const QUERY_TYPES = {
   SUBSCRIPTION: 'Subscription',
 };
 
-// Monaco Editor Configuration
-export const MONACO_EDITOR_CDN_URL = process.env.NEXT_PUBLIC_MONACO_EDITOR_CDN_URL || 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min';
-
 // Default Auth Token
-export const DEFAULT_AUTH_TOKEN = process.env.NEXT_PUBLIC_GRAPHQL_AUTH_TOKEN || '';
+export const DEFAULT_AUTH_TOKEN = '';
+
+// Endpoint-specific Auth Tokens
+export const ENDPOINT_TOKENS = {
+  UAT: process.env.NEXT_PUBLIC_GRAPHQL_AUTH_TOKEN_UAT || '',
+  ERP: process.env.NEXT_PUBLIC_GRAPHQL_AUTH_TOKEN_ERP || '',
+};
 
 // Get initial endpoint configuration
 export const getInitialEndpoint = () => {
@@ -47,5 +50,30 @@ export const getEndpointOptions = () => {
     options.push({ name: 'ERP', code: GRAPHQL_ENDPOINTS.ERP });
   }
   return options;
+};
+
+// Get endpoint configuration from urlKey
+export const getEndpointFromUrlKey = (urlKey) => {
+  if (!urlKey) return null;
+  
+  const upperKey = urlKey.toUpperCase();
+  if (upperKey === 'UAT' && GRAPHQL_ENDPOINTS.UAT) {
+    return { name: 'UAT', code: GRAPHQL_ENDPOINTS.UAT };
+  }
+  if (upperKey === 'ERP' && GRAPHQL_ENDPOINTS.ERP) {
+    return { name: 'ERP', code: GRAPHQL_ENDPOINTS.ERP };
+  }
+  return null;
+};
+
+// Get endpoint URL and token from urlKey
+export const getEndpointConfigFromUrlKey = (urlKey) => {
+  const endpoint = getEndpointFromUrlKey(urlKey);
+  if (!endpoint) return { endpointUrl: null, authToken: null };
+  
+  return {
+    endpointUrl: endpoint.code,
+    authToken: ENDPOINT_TOKENS[endpoint.name] || '',
+  };
 };
 

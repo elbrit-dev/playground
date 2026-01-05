@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "copy-shared": "npx degit VICTORVICKIE/datatable-component/src/components share --force && npx degit VICTORVICKIE/datatable-component/src/app/graphql-playground share/graphql-playground --force"
+    "copy-shared": "npx degit VICTORVICKIE/Elbrit-Play/src/components share --force && npx degit VICTORVICKIE/Elbrit-Play/src/app/graphql-playground share/graphql-playground --force && npx degit VICTORVICKIE/Elbrit-Play/src/app/datatable share/datatable --force"
   },
   "dependencies": {
     "@graphiql/plugin-explorer": "^5.1.1",

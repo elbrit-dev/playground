@@ -2,31 +2,34 @@
 
 import { explorerPlugin } from '@graphiql/plugin-explorer';
 import '@graphiql/plugin-explorer/style.css';
-import { ToolbarButton } from '@graphiql/react';
 import '@graphiql/react/style.css';
 import 'graphiql/graphiql.css';
 import 'graphiql/setup-workers/webpack';
 import 'graphiql/style.css';
-import Link from 'next/link';
 import { ConfirmDialog } from 'primereact/confirmdialog';
 import { Dropdown } from 'primereact/dropdown';
+import { SelectButton } from 'primereact/selectbutton';
+import { TabPanel, TabView } from 'primereact/tabview';
 import React, { useEffect, useMemo, useRef, useCallback, useState } from 'react';
 // Import extracted modules
 import './styles/graphql-playground.css';
-import { getEndpointOptions, MONACO_EDITOR_CDN_URL } from './constants';
+import { getEndpointOptions } from './constants';
 import { extractDataFromResponse } from './utils/data-extractor';
+import { fetchGraphQLRequest } from './utils/query-pipeline';
 import { useAppStore } from './stores';
 import {
   ToolbarPlaceholder,
   SaveControlsWrapper,
   createHistoryPlugin,
   GraphiQLWrapper,
-  TableDialog,
+  DataTransformerTab,
   TabChangeDetector,
-  ActiveTabTracker
+  ActiveTabTracker,
+  GraphiQLStateSync
 } from './components';
+import ProtectedRoute from '@/components/ProtectedRoute';
 
-export default function GraphQLPlayground() {
+function GraphQLPlayground() {
   // Zustand stores
   const {
     authToken,
@@ -36,16 +39,13 @@ export default function GraphQLPlayground() {
     selectedEndpoint,
     endpointUrl,
     setSelectedEndpoint,
-    tableMode,
-    setTableMode,
-    isTableDialogOpen,
-    setIsTableDialogOpen,
     setTabData,
   } = useAppStore();
 
   const saveControlsRef = useRef(null);
   const currentTabIndexRef = useRef(0);
   const [activeTabIndex, setActiveTabIndex] = useState(0);
+  const [activeMainTab, setActiveMainTab] = useState(0);
 
   // Get tab data for current tab (reactive to store changes)
   // Subscribe to entire tabData object to avoid selector closure issues
@@ -54,25 +54,39 @@ export default function GraphQLPlayground() {
   const hasSuccessfulQuery = currentTabData.hasSuccessfulQuery;
   const transformedData = currentTabData.transformedData;
 
+  const tabOptions = useMemo(() => [
+    { name: 'Data Source', value: 0 },
+    { name: 'Data Transformer', value: 1, disabled: !hasSuccessfulQuery }
+  ], [hasSuccessfulQuery]);
+
   // Update ref when tab changes
   useEffect(() => {
     currentTabIndexRef.current = activeTabIndex;
   }, [activeTabIndex]);
+
+  // Add tooltip to disabled Data Transformer button
+  useEffect(() => {
+    const addTooltip = () => {
+      const disabledButton = document.querySelector('.graphiql-tab-triggers .p-selectbutton .p-button.p-disabled');
+      if (disabledButton && !hasSuccessfulQuery) {
+        disabledButton.setAttribute('title', 'Run query to unlock Data Transformer');
+      }
+    };
+
+    // Try immediately
+    addTooltip();
+
+    // Also try after a short delay to ensure DOM is ready
+    const timeout = setTimeout(addTooltip, 100);
+
+    return () => clearTimeout(timeout);
+  }, [hasSuccessfulQuery, activeMainTab]);
 
   // Callback to update active tab index from ActiveTabTracker
   const handleTabIndexChange = useCallback((tabIndex) => {
     setActiveTabIndex(tabIndex);
   }, []);
 
-  // Auto-open dialog when data is available and table mode is enabled
-  useEffect(() => {
-    if (tableMode && transformedData) {
-      const queryKeys = Object.keys(transformedData).filter(key => transformedData[key] && transformedData[key].length > 0);
-      if (queryKeys.length > 0 && !isTableDialogOpen) {
-        setIsTableDialogOpen(true);
-      }
-    }
-  }, [tableMode, transformedData, isTableDialogOpen, setIsTableDialogOpen]);
 
   // Endpoint options - UAT and ERP (using extracted constant)
   const endpointOptions = useMemo(() => getEndpointOptions(), []);
@@ -109,16 +123,53 @@ export default function GraphQLPlayground() {
         graphQLParams.query?.includes('IntrospectionQuery') ||
         graphQLParams.operationName === 'IntrospectionQuery';
 
-      const data = await fetch(endpointUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(authToken && { 'Authorization': authToken }),
-        },
-        body: JSON.stringify(graphQLParams),
-      });
+      // Use shared GraphQL fetch function
+      let data;
+      try {
+        data = await fetchGraphQLRequest(
+          graphQLParams.query || '',
+          graphQLParams.variables || {},
+          { endpointUrl, authToken }
+        );
+      } catch (fetchError) {
+        // Handle network errors and HTTP errors gracefully
+        // Return error response that GraphiQL can display
+        const errorResponse = {
+          errors: [
+            {
+              message: fetchError.message || 'Failed to execute GraphQL query',
+              ...(fetchError.status && { extensions: { code: fetchError.status } })
+            }
+          ]
+        };
+        console.error('GraphQL request failed:', fetchError);
+        return errorResponse;
+      }
 
-      const response = await data.json().catch(() => data.text());
+      let response;
+      try {
+        response = await data.json();
+      } catch (parseError) {
+        // If JSON parsing fails, try to get text response
+        try {
+          const textResponse = await data.text();
+          return {
+            errors: [
+              {
+                message: `Invalid JSON response: ${textResponse.substring(0, 200)}`
+              }
+            ]
+          };
+        } catch (textError) {
+          return {
+            errors: [
+              {
+                message: `Failed to parse response: ${parseError.message}`
+              }
+            ]
+          };
+        }
+      }
 
       // Process and store data for non-introspection queries and successful responses
       if (!isIntrospectionQuery && data.ok) {
@@ -151,31 +202,8 @@ export default function GraphQLPlayground() {
 
 
   return (
-    <div className="h-dvh flex flex-col bg-gray-50">
+    <div className="flex flex-col bg-gray-50" style={{ height: 'calc(100vh - 65px)' }}>
       <ConfirmDialog />
-      <header className="bg-white border-b border-gray-200 shadow-sm z-20">
-        <div className="max-w-full mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">
-                GraphQL Playground
-              </h1>
-              <p className="text-xs sm:text-sm text-gray-600 mt-1">
-                GraphiQL with Explorer plugin
-              </p>
-            </div>
-            <div className="flex items-center gap-4">
-              <Link
-                href="/"
-                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-              >
-                ← Back to Home
-              </Link>
-            </div>
-          </div>
-        </div>
-      </header>
-
       {/* Controls Bar */}
       <div className="graphiql-controls-bar">
         <Dropdown
@@ -241,76 +269,81 @@ export default function GraphQLPlayground() {
             </button>
           </div>
         </div>
+        <div className="graphiql-tab-triggers">
+          <SelectButton
+            value={activeMainTab}
+            onChange={(e) => {
+              setActiveMainTab(e.value);
+            }}
+            options={tabOptions}
+            optionLabel="name"
+            optionValue="value"
+            optionDisabled="disabled"
+          />
+        </div>
         <div id="save-controls-container" style={{ display: 'contents' }}></div>
       </div>
 
       <div className="flex-1 overflow-hidden">
-        <GraphiQLWrapper
-          key={endpointUrl}
-          fetcher={fetcher}
-          plugins={[explorer, historyPlugin]}
-          defaultEditorToolsVisibility={"variables"}
-          isHeadersEditorEnabled={false}
-          initialVariables={null}
-          initialHeaders={null}
-          defaultTheme="light"
+        {/* SaveControlsWrapper outside GraphiQLWrapper so it's visible in both tabs */}
+        <SaveControlsWrapper saveControlsRef={saveControlsRef} />
+        
+        <TabView
+          activeIndex={activeMainTab}
+          onTabChange={(e) => setActiveMainTab(e.index)}
+          className="graphiql-main-tabview"
+          style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
         >
-          <SaveControlsWrapper saveControlsRef={saveControlsRef} />
-          <ToolbarPlaceholder>
-            {({ prettify, copy, merge }) => (
-              <>
-                <ToolbarButton
-                  label="Table View"
-                  onClick={() => {
-                    if (!hasSuccessfulQuery) return; // Disable if no successful query
-                    const newTableMode = !tableMode;
-                    setTableMode(newTableMode);
-                    // Close dialog when table mode is disabled
-                    if (!newTableMode) {
-                      setIsTableDialogOpen(false);
-                    }
-                  }}
-                  title={
-                    !hasSuccessfulQuery
-                      ? "Execute a query first to enable table view"
-                      : tableMode
-                        ? "Switch to JSON view"
-                        : "Switch to table view"
-                  }
-                >
-                  <i className={`pi pi-table graphiql-toolbar-icon mt-1 text-center text-lg ${tableMode ? 'text-blue-600' : ''} ${!hasSuccessfulQuery ? 'opacity-50' : ''}`} aria-hidden="true" />
-                </ToolbarButton>
-                <ToolbarButton
-                  label="Save"
-                  onClick={() => {
-                    if (saveControlsRef.current) {
-                      saveControlsRef.current.handleSave();
-                    }
-                  }}
-                >
-                  <i className="pi pi-save graphiql-toolbar-icon mt-1 text-center text-lg" aria-hidden="true" />
-                </ToolbarButton>
-                {prettify}
-                {merge}
-                {copy}
-              </>
+          <TabPanel>
+            <div className="h-full overflow-hidden">
+              <GraphiQLWrapper
+                key={endpointUrl}
+                fetcher={fetcher}
+                plugins={[explorer, historyPlugin]}
+                defaultEditorToolsVisibility={"variables"}
+                isHeadersEditorEnabled={false}
+                initialVariables={null}
+                initialHeaders={null}
+                defaultTheme="light"
+              >
+                <ToolbarPlaceholder>
+                  {({ prettify, copy, merge }) => (
+                    <>
+                      {prettify}
+                      {merge}
+                      {copy}
+                    </>
+                  )}
+                </ToolbarPlaceholder>
+                <ActiveTabTracker onTabIndexChange={handleTabIndexChange} />
+                <TabChangeDetector />
+                <GraphiQLStateSync />
+              </GraphiQLWrapper>
+            </div>
+          </TabPanel>
+          <TabPanel>
+            {hasSuccessfulQuery ? (
+              <DataTransformerTab responseData={transformedData} activeTabIndex={activeTabIndex} />
+            ) : (
+              <div className="flex items-center justify-center h-full bg-gray-50">
+                <div className="text-center p-8">
+                  <i className="pi pi-info-circle text-4xl text-gray-400 mb-4"></i>
+                  <p className="text-gray-600 font-medium">Run query to unlock Data Transformer</p>
+                </div>
+              </div>
             )}
-          </ToolbarPlaceholder>
-          <ActiveTabTracker onTabIndexChange={handleTabIndexChange} />
-          <TabChangeDetector
-          />
-          <TableDialog
-            visible={isTableDialogOpen}
-            onHide={() => {
-              setIsTableDialogOpen(false);
-              setTableMode(false);
-            }}
-            responseData={transformedData}
-          />
-        </GraphiQLWrapper>
+          </TabPanel>
+        </TabView>
       </div>
     </div>
   );
 }
 
+export default function GraphQLPlaygroundPage() {
+  return (
+    <ProtectedRoute>
+      <GraphQLPlayground />
+    </ProtectedRoute>
+  );
+}
 

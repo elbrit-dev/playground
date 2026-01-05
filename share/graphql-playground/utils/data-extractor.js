@@ -194,3 +194,9 @@ export function extractDataFromResponse(jsonData, queryString) {
   return null;
 }
 
+
+
+
+
+
+

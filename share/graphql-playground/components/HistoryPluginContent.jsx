@@ -3,11 +3,171 @@
 import { useEffect } from 'react';
 import { useGraphiQL, useGraphiQLActions } from '@graphiql/react';
 import { confirmDialog } from 'primereact/confirmdialog';
+import { Tooltip } from 'primereact/tooltip';
 import { useQueryHistoryStore } from '../stores/useQueryHistoryStore';
+import { useAppStore } from '../stores/useAppStore';
+import { getEndpointFromUrlKey } from '../constants';
+
+// Utility function to format timestamps as relative time
+const formatRelativeTime = (timestamp) => {
+  if (!timestamp) return 'Never';
+  
+  // Handle Firestore Timestamp
+  let date;
+  if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+    date = timestamp.toDate();
+  } else if (timestamp.seconds) {
+    date = new Date(timestamp.seconds * 1000);
+  } else if (timestamp instanceof Date) {
+    date = timestamp;
+  } else {
+    return 'Unknown';
+  }
+
+  const now = new Date();
+  const diffMs = now - date;
+  const diffSecs = Math.floor(diffMs / 1000);
+  const diffMins = Math.floor(diffSecs / 60);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  const diffWeeks = Math.floor(diffDays / 7);
+
+  // If older than a week, show absolute date
+  if (diffDays >= 7) {
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined 
+    });
+  }
+
+  if (diffSecs < 60) return 'Just now';
+  if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+  return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+};
+
+// Utility function to format variables JSON string
+const formatVariablesString = (variablesString) => {
+  if (!variablesString || typeof variablesString !== 'string') {
+    return variablesString || '';
+  }
+
+  const trimmed = variablesString.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  try {
+    // Attempt to parse as JSON
+    const parsed = JSON.parse(trimmed);
+    // Format with 2-space indentation
+    return JSON.stringify(parsed, null, 2);
+  } catch (e) {
+    // If parsing fails, return original string
+    return variablesString;
+  }
+};
+
+// TooltipContent component for rendering tooltip content
+function TooltipContent({ query, formatRelativeTime }) {
+  return (
+    <div style={{ padding: '0.5rem', lineHeight: '1.6', maxWidth: '250px' }}>
+      <div style={{ fontWeight: 600, marginBottom: '0.5rem', paddingBottom: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.2)' }}>
+        Query Details
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', fontSize: '0.75rem' }}>
+        <div>
+          <span style={{ color: '#9ca3af' }}>Body updated:</span>
+          <span style={{ color: '#ffffff', marginLeft: '0.25rem' }}>{formatRelativeTime(query.bodyUpdatedAt)}</span>
+        </div>
+        <div>
+          <span style={{ color: '#9ca3af' }}>Variables:</span>
+          <span style={{ color: '#ffffff', marginLeft: '0.25rem' }}>{formatRelativeTime(query.variablesUpdatedAt)}</span>
+        </div>
+        <div>
+          <span style={{ color: '#9ca3af' }}>Transformer:</span>
+          <span style={{ color: '#ffffff', marginLeft: '0.25rem' }}>{formatRelativeTime(query.transformerCodeUpdatedAt)}</span>
+        </div>
+        {query.lastUpdatedBy && (
+          <div>
+            <span style={{ color: '#9ca3af' }}>Last updated by:</span>
+            <span style={{ color: '#ffffff', marginLeft: '0.25rem', wordBreak: 'break-word', display: 'block', marginTop: '0.25rem' }}>
+              {query.lastUpdatedBy}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// QueryHistoryItem component with tooltip
+function QueryHistoryItem({ query, isSelected, onQueryClick, onDelete, formatRelativeTime }) {
+  // Check if query has any timestamp data to show
+  const hasTimestampData = query.bodyUpdatedAt || query.variablesUpdatedAt || query.transformerCodeUpdatedAt || query.lastUpdatedBy;
+
+  // Create unique ID for this tooltip target
+  const tooltipTargetId = `query-info-${query.id}`;
+
+  const handleInfoIconClick = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+  };
+
+  return (
+    <>
+      {hasTimestampData && (
+        <Tooltip target={`.${tooltipTargetId}`}>
+          <TooltipContent query={query} formatRelativeTime={formatRelativeTime} />
+        </Tooltip>
+      )}
+      <div
+        className={`graphiql-history-item px-3 py-2.5 mx-1 rounded transition-all duration-150 text-xs border border-transparent bg-white relative flex flex-col justify-center gap-1 min-h-[48px] cursor-pointer ${isSelected ? 'selected' : ''}`}
+        onClick={(e) => onQueryClick(query, e)}
+      >
+        <div className="flex items-center justify-between gap-2 min-h-[20px] leading-snug">
+          <div className="graphiql-history-item-name font-medium text-gray-800 leading-snug break-words flex-1 text-xs overflow-hidden text-ellipsis whitespace-nowrap flex items-center gap-1.5">
+            <span>{query.name}</span>
+            {hasTimestampData && (
+              <span
+                className={`${tooltipTargetId} inline-flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors`}
+                onClick={handleInfoIconClick}
+                style={{ fontSize: '0.75rem', cursor: 'help', flexShrink: 0 }}
+              >
+                <i className="pi pi-info-circle"></i>
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1 flex-wrap leading-snug">
+            <div className="flex items-center gap-1.5">
+              <span className={`text-[10px] font-medium ${query.clientSave ? 'text-green-700' : 'text-yellow-700'}`}>
+                {query.clientSave ? 'Client' : 'Live'}
+              </span>
+              <div
+                className={`w-2 h-2 rounded-full ${query.clientSave ? 'bg-green-500' : 'bg-yellow-500'}`}
+                title={query.clientSave ? 'Client' : 'Live'}
+              ></div>
+            </div>
+            <button
+              className="graphiql-history-delete-btn"
+              onClick={(e) => onDelete(query.id, query.name, e)}
+              title="Delete query"
+              aria-label="Delete query"
+            >
+              <i className="pi pi-trash" style={{ fontSize: '0.75rem' }}></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
 
 export function HistoryPluginContent() {
   const { queries, loading, selectedQueryId, setSelectedQueryId, loadQueries, deleteQuery } = useQueryHistoryStore();
   const { addTab, updateActiveTabValues } = useGraphiQLActions();
+  const { setSelectedEndpoint } = useAppStore();
   const queryEditor = useGraphiQL((state) => state.queryEditor);
   const variableEditor = useGraphiQL((state) => state.variableEditor);
   const currentQuery = useGraphiQL((state) => state.queryEditor?.getValue() || '');
@@ -38,6 +198,17 @@ export function HistoryPluginContent() {
   const handleQueryClick = (query, event) => {
     if (!query.body || !query.body.trim()) return;
 
+    // Restore endpoint from urlKey if available
+    if (query.urlKey) {
+      const endpoint = getEndpointFromUrlKey(query.urlKey);
+      if (endpoint) {
+        setSelectedEndpoint(endpoint);
+      }
+    }
+
+    // Format variables string before loading
+    const formattedVariables = formatVariablesString(query.variables || '');
+
     // Always open in new tab
     addTab();
     // The new tab will be created and become active
@@ -45,14 +216,14 @@ export function HistoryPluginContent() {
     setTimeout(() => {
       updateActiveTabValues({ 
         query: query.body,
-        variables: query.variables || ''
+        variables: formattedVariables
       });
       // Also update the editors if they exist
       if (queryEditor) {
         queryEditor.setValue(query.body);
       }
-      if (variableEditor && query.variables) {
-        variableEditor.setValue(query.variables);
+      if (variableEditor && formattedVariables) {
+        variableEditor.setValue(formattedVariables);
       }
     }, 10);
   };
@@ -130,35 +301,14 @@ export function HistoryPluginContent() {
           queries.map((query) => {
             const isSelected = selectedQueryId === query.id;
             return (
-              <div
+              <QueryHistoryItem
                 key={query.id}
-                className={`graphiql-history-item px-3 py-2.5 mx-1 rounded transition-all duration-150 text-xs border border-transparent bg-white relative flex flex-col justify-center gap-1 min-h-[48px] cursor-pointer ${isSelected ? 'selected' : ''}`}
-                onClick={(e) => handleQueryClick(query, e)}
-                title={query.body ? `Click to open in new tab: ${query.body.substring(0, 150)}` : ''}
-              >
-                <div className="flex items-center justify-between gap-2 min-h-[20px] leading-snug">
-                  <div className="graphiql-history-item-name font-medium text-gray-800 leading-snug break-words flex-1 text-xs overflow-hidden text-ellipsis whitespace-nowrap flex items-center">{query.name}</div>
-                  <div className="flex items-center gap-1 flex-wrap leading-snug">
-                    <div className="flex items-center gap-1.5">
-                      <span className={`text-[10px] font-medium ${query.clientSave ? 'text-green-700' : 'text-yellow-700'}`}>
-                        {query.clientSave ? 'Client' : 'Live'}
-                      </span>
-                      <div
-                        className={`w-2 h-2 rounded-full ${query.clientSave ? 'bg-green-500' : 'bg-yellow-500'}`}
-                        title={query.clientSave ? 'Client' : 'Live'}
-                      ></div>
-                    </div>
-                    <button
-                      className="graphiql-history-delete-btn"
-                      onClick={(e) => handleDeleteQuery(query.id, query.name, e)}
-                      title="Delete query"
-                      aria-label="Delete query"
-                    >
-                      <i className="pi pi-trash" style={{ fontSize: '0.75rem' }}></i>
-                    </button>
-                  </div>
-                </div>
-              </div>
+                query={query}
+                isSelected={isSelected}
+                onQueryClick={handleQueryClick}
+                onDelete={handleDeleteQuery}
+                formatRelativeTime={formatRelativeTime}
+              />
             );
           })
         )}

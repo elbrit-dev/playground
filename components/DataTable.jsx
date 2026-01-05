@@ -3,8 +3,8 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { Toast } from 'primereact/toast';
 import { Dropdown } from 'primereact/dropdown';
-import DataTableComponent from '../share/DataTable';
-import DataTableControls from '../share/DataTableControls';
+import DataTableComponent from '../share/datatable/components/DataTable';
+import DataTableControls from '../share/datatable/components/DataTableControls';
 import data from '../resource/data';
 import { uniq, flatMap, keys, isEmpty, startCase } from 'lodash';
 
