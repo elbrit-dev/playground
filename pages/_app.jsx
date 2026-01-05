@@ -1,8 +1,8 @@
 import { Geist, Geist_Mono } from "next/font/google";
+import "../styles/globals.css";
 import "primereact/resources/themes/lara-light-cyan/theme.css";
 import "primereact/resources/primereact.min.css";
 import "primeicons/primeicons.css";
-import "../styles/globals.css";
 
 // GraphQL Playground styles
 import '@graphiql/plugin-explorer/style.css';
