@@ -241,17 +241,41 @@ const DataTableWrapper = (props) => {
     enableFullscreenDialog: propEnableFullscreenDialog,
     scrollable: propScrollable,
     scrollHeight: propScrollHeight,
+    drawerTabs: propDrawerTabs,
+    controlsPanelSize: propControlsPanelSize = 20,
+    onSave,
   } = props;
 
-  // Sync props to localStorage BEFORE DataProvider mounts/remounts
-  // This ensures that when the key changes and DataProvider remounts, it sees the new values
+  // Sync all settings props to localStorage BEFORE component render
+  // This ensures that when the key changes and DataProvider/Wrappers remount, they see the new values
   if (typeof window !== 'undefined') {
-    if (propDataSource !== undefined) {
-      window.localStorage.setItem('datatable-dataSource', JSON.stringify(propDataSource));
-    }
-    if (propQueryKey !== undefined) {
-      window.localStorage.setItem('datatable-selectedQueryKey', JSON.stringify(propQueryKey));
-    }
+    const syncToStore = (key, value) => {
+      if (value !== undefined && value !== null) {
+        window.localStorage.setItem(key, JSON.stringify(value));
+      }
+    };
+
+    syncToStore('datatable-dataSource', propDataSource);
+    syncToStore('datatable-selectedQueryKey', propQueryKey);
+    syncToStore('datatable-enableSort', propEnableSort);
+    syncToStore('datatable-enableFilter', propEnableFilter);
+    syncToStore('datatable-enableSummation', propEnableSummation);
+    syncToStore('datatable-enableCellEdit', propEnableCellEdit);
+    syncToStore('datatable-rowsPerPageOptions', propRowsPerPageOptions);
+    syncToStore('datatable-defaultRows', propDefaultRows);
+    syncToStore('datatable-textFilterColumns', propTextFilterColumns);
+    syncToStore('datatable-visibleColumns', propVisibleColumns);
+    syncToStore('datatable-redFields', propRedFields);
+    syncToStore('datatable-greenFields', propGreenFields);
+    syncToStore('datatable-outerGroupField', propOuterGroupField);
+    syncToStore('datatable-innerGroupField', propInnerGroupField);
+    syncToStore('datatable-nonEditableColumns', propNonEditableColumns);
+    syncToStore('datatable-enableTargetData', propEnableTargetData);
+    syncToStore('datatable-targetOuterGroupField', propTargetOuterGroupField);
+    syncToStore('datatable-targetInnerGroupField', propTargetInnerGroupField);
+    syncToStore('datatable-targetValueField', propTargetValueField);
+    syncToStore('datatable-actualValueField', propActualValueField);
+    syncToStore('datatable-drawerTabs', propDrawerTabs);
   }
 
   const toast = useRef(null);
@@ -284,7 +308,7 @@ const DataTableWrapper = (props) => {
   // Drawer state
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [drawerData, setDrawerData] = useState([]);
-  const [drawerTabs, setDrawerTabs] = useLocalStorageArray('datatable-drawerTabs', [{ id: `tab-${Date.now()}`, name: '', outerGroup: null, innerGroup: null }]);
+  const [drawerTabsRawState, setDrawerTabs] = useLocalStorageArray('datatable-drawerTabs', [{ id: `tab-${Date.now()}`, name: '', outerGroup: null, innerGroup: null }]);
   const [activeDrawerTabIndex, setActiveDrawerTabIndex] = useState(0);
   const [clickedDrawerValues, setClickedDrawerValues] = useState({ outerValue: null, innerValue: null });
 
@@ -313,6 +337,7 @@ const DataTableWrapper = (props) => {
   const targetInnerGroupField = propTargetInnerGroupField !== undefined ? propTargetInnerGroupField : targetInnerGroupFieldRawState;
   const targetValueField = propTargetValueField !== undefined ? propTargetValueField : targetValueFieldRawState;
   const actualValueField = propActualValueField !== undefined ? propActualValueField : actualValueFieldRawState;
+  const drawerTabs = (propDrawerTabs !== undefined && propDrawerTabs !== null && propDrawerTabs.length > 0) ? propDrawerTabs : drawerTabsRawState;
   
   const originalTableDataRef = useRef(null);
 
@@ -429,6 +454,7 @@ const DataTableWrapper = (props) => {
     try {
       saveSettingsForDataSource(currentDataSource, settings);
       toast.current?.show({ severity: 'success', summary: 'Success', detail: 'Settings saved', life: 3000 });
+      if (onSave) onSave();
     } catch (error) {
       toast.current?.show({ severity: 'error', summary: 'Error', detail: 'Failed to save settings', life: 3000 });
     }
@@ -547,7 +573,7 @@ const DataTableWrapper = (props) => {
         <div className="flex-1 min-h-0">
           {showControls ? (
             <Splitter style={{ height: '100%' }} layout="horizontal">
-              <SplitterPanel className="flex flex-col min-w-0" size={80}>
+              <SplitterPanel className="flex flex-col min-w-0" size={100 - propControlsPanelSize}>
                 <div className="flex-1 p-4 overflow-auto">
                   {tableData === null ? (
                     <div className="flex flex-col items-center justify-center h-full text-center">
@@ -589,7 +615,7 @@ const DataTableWrapper = (props) => {
                 </div>
               </SplitterPanel>
 
-              <SplitterPanel className="flex flex-col min-w-0 border-l border-gray-200" size={20}>
+              <SplitterPanel className="flex flex-col min-w-0 border-l border-gray-200" size={propControlsPanelSize}>
                 <DataTableControls
                   enableSort={enableSort}
                   enableFilter={enableFilter}

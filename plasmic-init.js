@@ -132,6 +132,20 @@ PLASMIC.registerComponent(DataTable, {
       defaultValue: true,
       description: "Enable/disable fullscreen dialog feature",
     },
+    drawerTabs: {
+      type: "object",
+      description: "Array of tab configurations for the detail drawer (name, outerGroup, innerGroup)",
+      defaultValue: [],
+    },
+    controlsPanelSize: {
+      type: "number",
+      description: "The percentage width of the controls sidebar (0-100)",
+      defaultValue: 20,
+    },
+    onSave: {
+      type: "eventHandler",
+      argTypes: [],
+    },
   },
   importPath: "./components/DataTable",
 });
