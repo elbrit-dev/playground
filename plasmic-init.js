@@ -30,8 +30,25 @@ PLASMIC.registerComponent(TableDataProvider, {
     },
     variableOverrides: {
       type: "object",
-      description: "Overrides for query variables",
+      description: "Overrides for query variables (as an object)",
       defaultValue: {},
+    },
+    // Individual Variable Props
+    First: {
+      type: "number",
+      description: "Default value for 'First' variable",
+    },
+    Operator: {
+      type: "string",
+      description: "Default value for 'Operator' variable",
+    },
+    Status: {
+      type: "object",
+      description: "Default values for 'Status' variable (Array of strings)",
+    },
+    Customer: {
+      type: "object",
+      description: "Default values for 'Customer' variable (Array of strings)",
     },
     showSelectors: {
       type: "boolean",
@@ -45,14 +62,6 @@ PLASMIC.registerComponent(TableDataProvider, {
     onTableDataChange: {
       type: "eventHandler",
       argTypes: [{ name: "data", type: "object" }],
-    },
-    onVariablesChange: {
-      type: "eventHandler",
-      argTypes: [{ name: "variables", type: "object" }],
-    },
-    onDataSourceChange: {
-      type: "eventHandler",
-      argTypes: [{ name: "dataSource", type: "string" }],
     },
   },
   importPath: "./components/TableDataProvider",

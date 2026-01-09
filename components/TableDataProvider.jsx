@@ -15,6 +15,7 @@ const TableDataProvider = (props) => {
     onDataSourceChange,
     variableOverrides,
     showSelectors = true,
+    ...otherProps // Collect all other individual props to use as variables
   } = props;
 
   // Stable callback wrappers to prevent infinite loops in the shared DataProvider
@@ -44,8 +45,17 @@ const TableDataProvider = (props) => {
     onDataSourceChangeRef.current?.(ds);
   }, []);
 
-  // Stabilize variableOverrides to prevent infinite fetch loops
-  const stringifiedOverrides = JSON.stringify(variableOverrides || {});
+  // Merge individual props with the variableOverrides object
+  // Individual props (like 'First' or 'Operator') take precedence
+  const mergedVariables = useMemo(() => {
+    return {
+      ...otherProps,
+      ...(variableOverrides || {})
+    };
+  }, [JSON.stringify(otherProps), JSON.stringify(variableOverrides)]);
+
+  // Stabilize merged variables to prevent infinite fetch loops
+  const stringifiedOverrides = JSON.stringify(mergedVariables);
   const stableOverrides = useMemo(() => JSON.parse(stringifiedOverrides), [stringifiedOverrides]);
 
   // Sync props to localStorage safely
