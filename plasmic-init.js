@@ -1,6 +1,8 @@
 import { initPlasmicLoader } from "@plasmicapp/loader-nextjs";
 import DataTable from "./components/DataTable";
+import TableDataProvider from "./components/TableDataProvider";
 // import GraphQLPlaygroundCard from "./components/GraphQLPlaygroundCard";
+
 // import FirebaseUIComponent from "./components/FirebaseUIComponent";
 
 
@@ -14,6 +16,65 @@ export const PLASMIC = initPlasmicLoader({
   preview: true,
 });
 
+PLASMIC.registerComponent(TableDataProvider, {
+  name: "TableDataProvider",
+  props: {
+    dataSource: {
+      type: "string",
+      description: "The data source ID or 'offline' for local data",
+      defaultValue: "offline",
+    },
+    queryKey: {
+      type: "string",
+      description: "The specific key within the data source results to display",
+    },
+    variableOverrides: {
+      type: "object",
+      description: "Overrides for query variables",
+      defaultValue: {},
+    },
+    showSelectors: {
+      type: "boolean",
+      description: "Show/hide data source and query selectors",
+      defaultValue: true,
+    },
+    onDataChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "notification", type: "object" }],
+    },
+    onTableDataChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "data", type: "object" }],
+    },
+    onVariablesChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "variables", type: "object" }],
+    },
+    onDataSourceChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "dataSource", type: "string" }],
+    },
+  },
+  states: {
+    tableData: {
+      type: "readonly",
+      variableType: "array",
+      onChangeProp: "onTableDataChange",
+    },
+    queryVariables: {
+      type: "readonly",
+      variableType: "object",
+      onChangeProp: "onVariablesChange",
+    },
+    currentDataSource: {
+      type: "readonly",
+      variableType: "string",
+      onChangeProp: "onDataSourceChange",
+    },
+  },
+  importPath: "./components/TableDataProvider",
+});
+
 PLASMIC.registerComponent(DataTable, {
   name: "DataTable",
   props: {
@@ -21,6 +82,15 @@ PLASMIC.registerComponent(DataTable, {
       type: "object",
       description: "The array of data to display in the table",
       defaultValue: [],
+    },
+    queryVariables: {
+      type: "object",
+      description: "Base variables for the query (provided by DataProvider)",
+      defaultValue: {},
+    },
+    onVariableOverridesChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "overrides", type: "object" }],
     },
     showControls: {
       type: "boolean",
