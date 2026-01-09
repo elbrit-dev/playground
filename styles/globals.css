@@ -72,22 +72,6 @@
     --color-foreground: var(--foreground);
     --font-sans: var(--font-geist-sans);
     --font-mono: var(--font-geist-mono);
-    --color-primary: #3b82f6;
-    --color-primary-dark: #2563eb;
-    --color-surface-border: #e5e7eb;
-}
-
-/* Custom utility for PrimeFlex compatibility */
-.text-primary {
-    color: var(--color-primary);
-}
-
-.surface-border {
-    border-color: var(--color-surface-border);
-}
-
-.border-bottom-1 {
-    border-bottom-width: 1px;
 }
 
 html {

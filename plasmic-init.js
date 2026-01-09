@@ -55,23 +55,6 @@ PLASMIC.registerComponent(TableDataProvider, {
       argTypes: [{ name: "dataSource", type: "string" }],
     },
   },
-  states: {
-    tableData: {
-      type: "readonly",
-      variableType: "array",
-      onChangeProp: "onTableDataChange",
-    },
-    queryVariables: {
-      type: "readonly",
-      variableType: "object",
-      onChangeProp: "onVariablesChange",
-    },
-    currentDataSource: {
-      type: "readonly",
-      variableType: "string",
-      onChangeProp: "onDataSourceChange",
-    },
-  },
   importPath: "./components/TableDataProvider",
 });
 
