@@ -249,51 +249,54 @@ const DataTableWrapper = (props) => {
   } = props;
 
   // Sync all settings props to localStorage in a useEffect to avoid render-phase side effects
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const syncToStore = (key, value) => {
-        if (value !== undefined && value !== null) {
-          window.localStorage.setItem(key, JSON.stringify(value));
-        }
-      };
+  // We exclude dataSource and queryKey here as they are managed by TableDataProvider
+  const settingsString = JSON.stringify({
+    propEnableSort, propEnableFilter, propEnableSummation, propEnableCellEdit,
+    propRowsPerPageOptions, propDefaultRows, propTextFilterColumns, propVisibleColumns,
+    propRedFields, propGreenFields, propOuterGroupField, propInnerGroupField,
+    propNonEditableColumns, propEnableTargetData, propTargetOuterGroupField,
+    propTargetInnerGroupField, propTargetValueField, propActualValueField, propDrawerTabs
+  });
 
-      syncToStore('datatable-dataSource', propDataSource);
-      syncToStore('datatable-selectedQueryKey', propQueryKey);
-      syncToStore('datatable-enableSort', propEnableSort);
-      syncToStore('datatable-enableFilter', propEnableFilter);
-      syncToStore('datatable-enableSummation', propEnableSummation);
-      syncToStore('datatable-enableCellEdit', propEnableCellEdit);
-      syncToStore('datatable-rowsPerPageOptions', propRowsPerPageOptions);
-      syncToStore('datatable-defaultRows', propDefaultRows);
-      syncToStore('datatable-textFilterColumns', propTextFilterColumns);
-      syncToStore('datatable-visibleColumns', propVisibleColumns);
-      syncToStore('datatable-redFields', propRedFields);
-      syncToStore('datatable-greenFields', propGreenFields);
-      syncToStore('datatable-outerGroupField', propOuterGroupField);
-      syncToStore('datatable-innerGroupField', propInnerGroupField);
-      syncToStore('datatable-nonEditableColumns', propNonEditableColumns);
-      syncToStore('datatable-enableTargetData', propEnableTargetData);
-      syncToStore('datatable-targetOuterGroupField', propTargetOuterGroupField);
-      syncToStore('datatable-targetInnerGroupField', propTargetInnerGroupField);
-      syncToStore('datatable-targetValueField', propTargetValueField);
-      syncToStore('datatable-actualValueField', propActualValueField);
-      syncToStore('datatable-drawerTabs', propDrawerTabs);
-    }
-  }, [
-    propDataSource, propQueryKey, propEnableSort, propEnableFilter, 
-    propEnableSummation, propEnableCellEdit, propRowsPerPageOptions, 
-    propDefaultRows, propTextFilterColumns, propVisibleColumns, 
-    propRedFields, propGreenFields, propOuterGroupField, propInnerGroupField, 
-    propNonEditableColumns, propEnableTargetData, propTargetOuterGroupField, 
-    propTargetInnerGroupField, propTargetValueField, propActualValueField, 
-    propDrawerTabs
-  ]);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const syncToStore = (key, value) => {
+      if (value !== undefined && value !== null) {
+        const stringified = JSON.stringify(value);
+        if (window.localStorage.getItem(key) !== stringified) {
+          window.localStorage.setItem(key, stringified);
+        }
+      }
+    };
+
+    syncToStore('datatable-enableSort', propEnableSort);
+    syncToStore('datatable-enableFilter', propEnableFilter);
+    syncToStore('datatable-enableSummation', propEnableSummation);
+    syncToStore('datatable-enableCellEdit', propEnableCellEdit);
+    syncToStore('datatable-rowsPerPageOptions', propRowsPerPageOptions);
+    syncToStore('datatable-defaultRows', propDefaultRows);
+    syncToStore('datatable-textFilterColumns', propTextFilterColumns);
+    syncToStore('datatable-visibleColumns', propVisibleColumns);
+    syncToStore('datatable-redFields', propRedFields);
+    syncToStore('datatable-greenFields', propGreenFields);
+    syncToStore('datatable-outerGroupField', propOuterGroupField);
+    syncToStore('datatable-innerGroupField', propInnerGroupField);
+    syncToStore('datatable-nonEditableColumns', propNonEditableColumns);
+    syncToStore('datatable-enableTargetData', propEnableTargetData);
+    syncToStore('datatable-targetOuterGroupField', propTargetOuterGroupField);
+    syncToStore('datatable-targetInnerGroupField', propTargetInnerGroupField);
+    syncToStore('datatable-targetValueField', propTargetValueField);
+    syncToStore('datatable-actualValueField', propActualValueField);
+    syncToStore('datatable-drawerTabs', propDrawerTabs);
+  }, [settingsString]);
 
   const toast = useRef(null);
   const [isLoading, setIsLoading] = useState(false);
   const [tableData, setTableData] = useState(props.data || data);
 
-  // Sync tableData with props.data when it changes externally
+  // Sync tableData with props.data using stringified check to prevent loops
+  const stringifiedData = JSON.stringify(props.data);
   useEffect(() => {
     if (props.data !== undefined) {
       setTableData(props.data);
@@ -301,11 +304,11 @@ const DataTableWrapper = (props) => {
         originalTableDataRef.current = props.data;
       }
     }
-  }, [props.data]);
+  }, [stringifiedData]);
 
   const [currentDataSource, setCurrentDataSource] = useState(props.dataSource || null);
 
-  // Sync currentDataSource with props.dataSource when it changes externally
+  // Sync currentDataSource with props.dataSource
   useEffect(() => {
     if (props.dataSource !== undefined) {
       setCurrentDataSource(props.dataSource);
@@ -333,12 +336,13 @@ const DataTableWrapper = (props) => {
   
   const [queryVariables, setQueryVariables] = useState(propQueryVariables || {});
 
-  // Sync queryVariables with props.queryVariables when it changes externally
+  // Sync queryVariables with props.queryVariables using stringified check
+  const stringifiedVariables = JSON.stringify(propQueryVariables);
   useEffect(() => {
     if (propQueryVariables !== undefined) {
       setQueryVariables(propQueryVariables);
     }
-  }, [propQueryVariables]);
+  }, [stringifiedVariables]);
 
   const [variableOverrides, setVariableOverrides] = useState({});
 
