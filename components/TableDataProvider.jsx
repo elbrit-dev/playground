@@ -17,14 +17,16 @@ const TableDataProvider = (props) => {
   } = props;
 
   // Sync props to localStorage so DataProvider can see them
-  if (typeof window !== 'undefined') {
-    if (dataSource !== undefined && dataSource !== null) {
-      window.localStorage.setItem('datatable-dataSource', JSON.stringify(dataSource));
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (dataSource !== undefined && dataSource !== null) {
+        window.localStorage.setItem('datatable-dataSource', JSON.stringify(dataSource));
+      }
+      if (queryKey !== undefined && queryKey !== null) {
+        window.localStorage.setItem('datatable-selectedQueryKey', JSON.stringify(queryKey));
+      }
     }
-    if (queryKey !== undefined && queryKey !== null) {
-      window.localStorage.setItem('datatable-selectedQueryKey', JSON.stringify(queryKey));
-    }
-  }
+  }, [dataSource, queryKey]);
 
   return (
     <DataProvider

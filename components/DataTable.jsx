@@ -248,40 +248,49 @@ const DataTableWrapper = (props) => {
     onVariableOverridesChange,
   } = props;
 
-  // Sync all settings props to localStorage BEFORE component render
-  // This ensures that when the key changes and DataProvider/Wrappers remount, they see the new values
-  if (typeof window !== 'undefined') {
-    const syncToStore = (key, value) => {
-      if (value !== undefined && value !== null) {
-        window.localStorage.setItem(key, JSON.stringify(value));
-      }
-    };
+  // Sync all settings props to localStorage in a useEffect to avoid render-phase side effects
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const syncToStore = (key, value) => {
+        if (value !== undefined && value !== null) {
+          window.localStorage.setItem(key, JSON.stringify(value));
+        }
+      };
 
-    syncToStore('datatable-dataSource', propDataSource);
-    syncToStore('datatable-selectedQueryKey', propQueryKey);
-    syncToStore('datatable-enableSort', propEnableSort);
-    syncToStore('datatable-enableFilter', propEnableFilter);
-    syncToStore('datatable-enableSummation', propEnableSummation);
-    syncToStore('datatable-enableCellEdit', propEnableCellEdit);
-    syncToStore('datatable-rowsPerPageOptions', propRowsPerPageOptions);
-    syncToStore('datatable-defaultRows', propDefaultRows);
-    syncToStore('datatable-textFilterColumns', propTextFilterColumns);
-    syncToStore('datatable-visibleColumns', propVisibleColumns);
-    syncToStore('datatable-redFields', propRedFields);
-    syncToStore('datatable-greenFields', propGreenFields);
-    syncToStore('datatable-outerGroupField', propOuterGroupField);
-    syncToStore('datatable-innerGroupField', propInnerGroupField);
-    syncToStore('datatable-nonEditableColumns', propNonEditableColumns);
-    syncToStore('datatable-enableTargetData', propEnableTargetData);
-    syncToStore('datatable-targetOuterGroupField', propTargetOuterGroupField);
-    syncToStore('datatable-targetInnerGroupField', propTargetInnerGroupField);
-    syncToStore('datatable-targetValueField', propTargetValueField);
-    syncToStore('datatable-actualValueField', propActualValueField);
-    syncToStore('datatable-drawerTabs', propDrawerTabs);
-  }
+      syncToStore('datatable-dataSource', propDataSource);
+      syncToStore('datatable-selectedQueryKey', propQueryKey);
+      syncToStore('datatable-enableSort', propEnableSort);
+      syncToStore('datatable-enableFilter', propEnableFilter);
+      syncToStore('datatable-enableSummation', propEnableSummation);
+      syncToStore('datatable-enableCellEdit', propEnableCellEdit);
+      syncToStore('datatable-rowsPerPageOptions', propRowsPerPageOptions);
+      syncToStore('datatable-defaultRows', propDefaultRows);
+      syncToStore('datatable-textFilterColumns', propTextFilterColumns);
+      syncToStore('datatable-visibleColumns', propVisibleColumns);
+      syncToStore('datatable-redFields', propRedFields);
+      syncToStore('datatable-greenFields', propGreenFields);
+      syncToStore('datatable-outerGroupField', propOuterGroupField);
+      syncToStore('datatable-innerGroupField', propInnerGroupField);
+      syncToStore('datatable-nonEditableColumns', propNonEditableColumns);
+      syncToStore('datatable-enableTargetData', propEnableTargetData);
+      syncToStore('datatable-targetOuterGroupField', propTargetOuterGroupField);
+      syncToStore('datatable-targetInnerGroupField', propTargetInnerGroupField);
+      syncToStore('datatable-targetValueField', propTargetValueField);
+      syncToStore('datatable-actualValueField', propActualValueField);
+      syncToStore('datatable-drawerTabs', propDrawerTabs);
+    }
+  }, [
+    propDataSource, propQueryKey, propEnableSort, propEnableFilter, 
+    propEnableSummation, propEnableCellEdit, propRowsPerPageOptions, 
+    propDefaultRows, propTextFilterColumns, propVisibleColumns, 
+    propRedFields, propGreenFields, propOuterGroupField, propInnerGroupField, 
+    propNonEditableColumns, propEnableTargetData, propTargetOuterGroupField, 
+    propTargetInnerGroupField, propTargetValueField, propActualValueField, 
+    propDrawerTabs
+  ]);
 
   const toast = useRef(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [tableData, setTableData] = useState(props.data || data);
 
   // Sync tableData with props.data when it changes externally
@@ -421,13 +430,9 @@ const DataTableWrapper = (props) => {
     };
   }, [drawerVisible]);
 
-  // Clean up localStorage and set loading false
+  // Set loading false on mount
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      requestAnimationFrame(() => setIsLoading(false));
-    } else {
-      setIsLoading(false);
-    }
+    setIsLoading(false);
   }, []);
 
   const handleTableDataChange = (newTableData) => {
