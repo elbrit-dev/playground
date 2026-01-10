@@ -32,14 +32,22 @@ const ICON_REGISTRY = {
 const transformItem = (item) => {
   const newItem = { ...item };
 
-  const renderIcon = (iconValue, isLogo) => {
+  const renderIcon = (iconValue, isLogo, isActive) => {
     if (!iconValue || typeof iconValue !== 'string') return iconValue;
 
     if (iconValue.startsWith('/') || iconValue.startsWith('http')) {
-      const size = isLogo ? 56 : 24; 
+      // Match Navigation.jsx logo sizes: 56 for active, 52 for inactive
+      const size = isLogo ? (isActive ? 56 : 52) : 24; 
       return (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Image src={iconValue} width={size} height={size} alt="icon" priority />
+          <Image 
+            src={iconValue} 
+            width={size} 
+            height={size} 
+            alt="icon" 
+            priority={isLogo}
+            className="transition-all duration-300"
+          />
         </div>
       );
     }
@@ -48,11 +56,13 @@ const transformItem = (item) => {
     return IconComp ? <IconComp width={24} height={24} /> : iconValue;
   };
 
+  const isLogo = item.mobileOnly && item.isDefault;
+
   if (item.iconActive) {
-    newItem.iconActive = renderIcon(item.iconActive, item.mobileOnly && item.isDefault);
+    newItem.iconActive = renderIcon(item.iconActive, isLogo, true);
   }
   if (item.iconInactive) {
-    newItem.iconInactive = renderIcon(item.iconInactive, item.mobileOnly && item.isDefault);
+    newItem.iconInactive = renderIcon(item.iconInactive, isLogo, false);
   }
 
   return newItem;
@@ -63,25 +73,28 @@ const transformItem = (item) => {
  * that acts as a Layout Shell with a children slot.
  */
 export default function PlasmicNavigation(props) {
-  const { children, items, ...rest } = props;
+  const { children, items, enableSwipe = true, ...rest } = props;
   
   // Transform string icon names into JSX elements
-  const transformedItems = items && Array.isArray(items) 
-    ? items.map(transformItem) 
-    : undefined;
+  const transformedItems = React.useMemo(() => {
+    if (items && Array.isArray(items)) {
+      return items.map(transformItem);
+    }
+    return undefined;
+  }, [items]);
 
   // Get swipe handlers for the content area
   const swipeHandlers = useSwipeNavigation();
 
   return (
-    <div className="h-screen flex bg-gray-50 overflow-hidden w-full">
+    <div className="h-dvh flex bg-gray-50 overflow-hidden w-full relative">
       {/* The Navigation bars (Sidebar/Bottom Bar) */}
       <Navigation {...rest} items={transformedItems} />
       
       {/* The Content Area (The Slot) */}
       <div 
         className="flex-1 overflow-y-auto relative" 
-        {...(swipeHandlers || {})}
+        {...(enableSwipe ? (swipeHandlers || {}) : {})}
       >
         {children}
       </div>

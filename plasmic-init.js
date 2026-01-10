@@ -218,11 +218,17 @@ PLASMIC.registerComponent(PlasmicNavigation, {
   props: {
     items: {
       type: "object",
-      description: "Array of navigation items. Each item: { label, path, iconActive, iconInactive, mobileFullscreen, mobileOnly, isDefault }",
+      description: "JSON array of items. Use icon names (e.g., 'ChatIconActive') or image paths (e.g., '/logo.jpeg')",
     },
     defaultIndex: {
       type: "number",
       defaultValue: 0,
+      description: "Fallback index if no URL path matches",
+    },
+    enableSwipe: {
+      type: "boolean",
+      defaultValue: true,
+      description: "Enable swipe gestures on mobile to switch between pages",
     },
     children: {
       type: "slot",

@@ -116,14 +116,8 @@ const Navigation = ({ items, defaultIndex = 0 }) => {
     });
     if (index >= 0 && index !== activeIndex) {
       setActiveIndex(index);
-    } else if (index < 0 && navigationItems.length > 0) {
-      // If current path doesn't match any item, redirect to default
-      const defaultItem = navigationItems.find(item => item.isDefault === true) || navigationItems[calculatedDefaultIndex];
-      if (defaultItem?.path) {
-        router.push(defaultItem.path, { scroll: false });
-      }
     }
-  }, [mounted, pathname, navigationItems, activeIndex, calculatedDefaultIndex, router]);
+  }, [mounted, pathname, navigationItems, activeIndex]);
 
   const navigateToIndex = (index) => {
     const maxIndex = navigationItems.length - 1;

@@ -34,48 +34,43 @@ export function useSwipeNavigation(items) {
   }, []);
 
   const onTouchEnd = useCallback(() => {
+    // Only enable swipe on mobile-sized screens
+    if (typeof window !== 'undefined' && window.innerWidth >= 1024) return;
+
     if (!touchStart || !touchEnd || !touchStartY || !touchEndY) return;
 
     const xDistance = touchStart - touchEnd;
     const yDistance = touchStartY - touchEndY;
     
     // Check if it's more of a horizontal swipe than vertical
-    const isHorizontalSwipe = Math.abs(xDistance) > Math.abs(yDistance);
+    // and that the swipe distance is significant enough
+    const isHorizontalSwipe = Math.abs(xDistance) > Math.abs(yDistance) * 1.5;
     const isLeftSwipe = xDistance > minSwipeDistance;
     const isRightSwipe = xDistance < -minSwipeDistance;
 
     if (isHorizontalSwipe && (isLeftSwipe || isRightSwipe)) {
       if (sharedNavigationItems.length === 0) return;
 
-      const currentIndex = sharedNavigationItems.findIndex(item => {
+      // Filter items to only those that have a path and are not mobileOnly (unless we are on mobile)
+      // Actually, it's better to just use all items that have a path as they appear in the bottom nav.
+      const validItems = sharedNavigationItems.filter(item => item.path || item.route);
+      
+      const currentIndex = validItems.findIndex(item => {
         const itemPath = item.path || item.route;
-        if (!itemPath) return false;
         return pathname === itemPath || pathname.startsWith(itemPath + '/');
       });
 
       if (currentIndex === -1) return;
 
-      if (isLeftSwipe && currentIndex < sharedNavigationItems.length - 1) {
-        // Find next valid item with a path
-        let nextIndex = currentIndex + 1;
-        while (nextIndex < sharedNavigationItems.length) {
-          const nextItem = sharedNavigationItems[nextIndex];
-          if (nextItem?.path) {
-            router.push(nextItem.path, { scroll: false });
-            break;
-          }
-          nextIndex++;
+      if (isLeftSwipe && currentIndex < validItems.length - 1) {
+        const nextItem = validItems[currentIndex + 1];
+        if (nextItem?.path) {
+          router.push(nextItem.path, { scroll: false });
         }
       } else if (isRightSwipe && currentIndex > 0) {
-        // Find previous valid item with a path
-        let prevIndex = currentIndex - 1;
-        while (prevIndex >= 0) {
-          const prevItem = sharedNavigationItems[prevIndex];
-          if (prevItem?.path) {
-            router.push(prevItem.path, { scroll: false });
-            break;
-          }
-          prevIndex--;
+        const prevItem = validItems[currentIndex - 1];
+        if (prevItem?.path) {
+          router.push(prevItem.path, { scroll: false });
         }
       }
     }
@@ -93,4 +88,3 @@ export function useSwipeNavigation(items) {
     onTouchEnd
   };
 }
-
