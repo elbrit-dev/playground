@@ -1103,6 +1103,45 @@ export const SaveControls = React.forwardRef((props, ref) => {
             <p className="font-semibold text-sm mb-1">Type:</p>
             <p className="text-sm text-gray-700">{clientSave ? 'Client' : 'Live'}</p>
           </div>
+          <div>
+            <p className="font-semibold text-sm mb-1">Variables:</p>
+            <div style={{
+              padding: '0.75rem',
+              borderRadius: '0.375rem',
+              border: '1px solid #d1d5db',
+              backgroundColor: '#f9fafb',
+              maxHeight: '200px',
+              overflow: 'auto'
+            }}>
+              {(() => {
+                try {
+                  if (!variablesString || !variablesString.trim()) {
+                    return <p className="text-sm text-gray-500 font-mono">No variables</p>;
+                  }
+                  // Try to parse and format the variables
+                  let parsedVariables = {};
+                  try {
+                    parsedVariables = parseJsonc(variablesString);
+                  } catch (e) {
+                    try {
+                      const stripped = stripComments(variablesString);
+                      parsedVariables = JSON.parse(stripped);
+                    } catch {
+                      return <p className="text-sm text-red-600 font-mono">Invalid JSON</p>;
+                    }
+                  }
+                  const formattedJson = JSON.stringify(parsedVariables, null, 2);
+                  return (
+                    <pre className="text-xs text-gray-700 font-mono" style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                      {formattedJson}
+                    </pre>
+                  );
+                } catch (error) {
+                  return <p className="text-sm text-red-600 font-mono">Error parsing variables</p>;
+                }
+              })()}
+            </div>
+          </div>
           {clientSave && (
             <div>
               <p className="font-semibold text-sm mb-1">Index Field:</p>

@@ -1,6 +1,7 @@
 import { initPlasmicLoader } from "@plasmicapp/loader-nextjs";
 import DataTable from "./components/DataTable";
 import TableDataProvider from "./components/TableDataProvider";
+import PlasmicNavigation from "./components/PlasmicNavigation";
 // import GraphQLPlaygroundCard from "./components/GraphQLPlaygroundCard";
 
 // import FirebaseUIComponent from "./components/FirebaseUIComponent";
@@ -210,6 +211,21 @@ PLASMIC.registerComponent(DataTable, {
     },
   },
   importPath: "./components/DataTable",
+});
+
+PLASMIC.registerComponent(PlasmicNavigation, {
+  name: "Navigation",
+  props: {
+    items: {
+      type: "object",
+      description: "Array of navigation items. Each item: { label, path, iconActive, iconInactive, mobileFullscreen, mobileOnly, isDefault }",
+    },
+    defaultIndex: {
+      type: "number",
+      defaultValue: 0,
+    },
+  },
+  importPath: "./components/PlasmicNavigation",
 });
 
 /*

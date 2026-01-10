@@ -174,36 +174,21 @@ export function DataTransformerTab({ responseData, activeTabIndex = 0 }) {
     applyTransformer();
   }, [applyTransformer]);
 
-  // Early returns after all hooks
-  if (!rawResponseData) {
-    return (
-      <div className="flex items-center justify-center h-full bg-gray-50">
-        <div className="text-center p-8">
-          <i className="pi pi-info-circle text-4xl text-gray-400 mb-4"></i>
-          <p className="text-gray-600 font-medium">Run query to unlock Data Transformer</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (queryKeys.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-full bg-gray-50">
-        <div className="text-center p-8">
-          <i className="pi pi-info-circle text-4xl text-gray-400 mb-4"></i>
-          <p className="text-gray-600 font-medium">Run query to unlock Data Transformer</p>
-        </div>
-      </div>
-    );
-  }
-
+  // Always show splitter layout, conditionally render table or message
   return (
     <div className="h-full overflow-hidden">
       <Splitter style={{ height: '100%' }} layout="horizontal">
-        {/* Left side: Table/TabView*/}
+        {/* Left side: Table/TabView or Message*/}
         <SplitterPanel className="flex flex-col min-w-0" size={70} minSize={30}>
           <div className="h-full flex flex-col overflow-hidden min-h-0">
-            {queryKeys.length > 1 ? (
+            {!rawResponseData || queryKeys.length === 0 ? (
+              <div className="flex items-center justify-center h-full bg-gray-50">
+                <div className="text-center p-8">
+                  <i className="pi pi-info-circle text-4xl text-gray-400 mb-4"></i>
+                  <p className="text-gray-600 font-medium">Run query to unlock Data Transformer</p>
+                </div>
+              </div>
+            ) : queryKeys.length > 1 ? (
               <TabView
                 activeIndex={activeTab}
                 onTabChange={(e) => {
@@ -262,7 +247,7 @@ export function DataTransformerTab({ responseData, activeTabIndex = 0 }) {
                         : "Apply transformer function"
                   }
                   loading={isRunning}
-                  disabled={!transformerCode || transformerCode.trim() === ''}
+                  disabled={!transformerCode || transformerCode.trim() === '' || !rawResponseData || !currentTabInfo.hasSuccessfulQuery}
                   style={{
                     minWidth: '100px',
                     padding: '0.5rem 1rem',
