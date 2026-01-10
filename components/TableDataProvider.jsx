@@ -65,26 +65,44 @@ const TableDataProvider = (props) => {
   const stringifiedOverrides = JSON.stringify(mergedVariables);
   const stableOverrides = useMemo(() => JSON.parse(stringifiedOverrides), [stringifiedOverrides]);
 
-  // Sync props to localStorage safely
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const syncToStore = (key, value) => {
-        if (value !== undefined && value !== null) {
-          const stringified = JSON.stringify(value);
-          if (window.localStorage.getItem(key) !== stringified) {
-            window.localStorage.setItem(key, stringified);
-          }
-        }
-      };
+  // Use state for the re-mount key and refs for change detection
+  const [instanceKey, setInstanceKey] = useState(`initial-${dataSource || 'offline'}-${queryKey || 'default'}`);
+  const lastPropsRef = useRef({ dataSource, queryKey });
+  const isInitialMount = useRef(true);
 
-      syncToStore('datatable-dataSource', dataSource || 'offline');
-      syncToStore('datatable-selectedQueryKey', queryKey);
+  // Sync props to localStorage and manage re-mount key only on genuine prop changes
+  useEffect(() => {
+    // Skip the initial mount to prevent automatic execution on load
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
+    // Only proceed if dataSource or queryKey has actually changed from what we last handled
+    if (dataSource !== lastPropsRef.current.dataSource || queryKey !== lastPropsRef.current.queryKey) {
+      if (typeof window !== 'undefined') {
+        const syncToStore = (key, value) => {
+          if (value !== undefined && value !== null) {
+            const stringified = JSON.stringify(value);
+            if (window.localStorage.getItem(key) !== stringified) {
+              window.localStorage.setItem(key, stringified);
+            }
+          }
+        };
+
+        syncToStore('datatable-dataSource', dataSource || 'offline');
+        syncToStore('datatable-selectedQueryKey', queryKey);
+        
+        // Update the key to force a re-mount of the DataProvider only when these specific props change
+        setInstanceKey(`${dataSource || 'offline'}-${queryKey || 'default'}-${Date.now()}`);
+        lastPropsRef.current = { dataSource, queryKey };
+      }
     }
   }, [dataSource, queryKey]);
 
   return (
     <DataProvider
-      key={`${dataSource || 'offline'}-${queryKey || 'default'}`}
+      key={instanceKey}
       offlineData={data}
       onDataChange={stableOnDataChange}
       onTableDataChange={stableOnTableDataChange}
@@ -102,7 +120,9 @@ const TableDataProvider = (props) => {
       <PlasmicDataProvider name="tableData" data={currentTableData}>
         <PlasmicDataProvider name="queryVariables" data={currentVariables}>
           {children}
-          {dataSlot}
+          <div style={{ height: 'auto' }}>
+            {dataSlot}
+          </div>
         </PlasmicDataProvider>
       </PlasmicDataProvider>
     </DataProvider>
