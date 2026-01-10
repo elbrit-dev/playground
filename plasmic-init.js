@@ -64,7 +64,12 @@ PLASMIC.registerComponent(TableDataProvider, {
       type: "eventHandler",
       argTypes: [{ name: "data", type: "object" }],
     },
+    dataSlot: {
+      type: "slot",
+      description: "Slot to add custom UI components that can access the table data",
+    },
   },
+  providesData: true,
   importPath: "./components/TableDataProvider",
 });
 

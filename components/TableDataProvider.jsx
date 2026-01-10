@@ -1,12 +1,14 @@
 'use client';
 
-import React, { useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useEffect, useRef, useCallback, useMemo, useState } from 'react';
 import DataProvider from '../share/datatable/components/DataProvider';
 import data from '../resource/data';
+import { DataProvider as PlasmicDataProvider } from "@plasmicapp/loader-nextjs";
 
 const TableDataProvider = (props) => {
   const {
     children,
+    dataSlot,
     dataSource,
     queryKey,
     onDataChange,
@@ -15,11 +17,11 @@ const TableDataProvider = (props) => {
     onDataSourceChange,
     variableOverrides,
     showSelectors = true,
-    hideControls = false, // New prop to control selector visibility
     ...otherProps // Collect all other individual props to use as variables
   } = props;
 
-  const lastExecutingRef = useRef(false);
+  const [currentTableData, setCurrentTableData] = useState(null);
+  const [currentVariables, setCurrentVariables] = useState({});
 
   // Stable callback wrappers to prevent infinite loops in the shared DataProvider
   const onTableDataChangeRef = useRef(onTableDataChange);
@@ -33,90 +35,16 @@ const TableDataProvider = (props) => {
   useEffect(() => { onDataSourceChangeRef.current = onDataSourceChange; }, [onDataSourceChange]);
 
   const stableOnTableDataChange = useCallback((data) => {
+    setCurrentTableData(data);
     onTableDataChangeRef.current?.(data);
   }, []);
 
   const stableOnDataChange = useCallback((notif) => {
-    // Forward the notification from DataProvider
     onDataChangeRef.current?.(notif);
   }, []);
 
-  // Stable header control renderer that can filter UI elements
-  const stableRenderHeaderControls = useCallback((selectorsJSX) => {
-    // Detect execution status from the loading indicator presence in selectorsJSX
-    // selectorsJSX is a Fragment containing a div. That div has two children: 
-    // [0] is the controls div, [1] is the loading indicator (or false)
-    const rootDiv = selectorsJSX?.props?.children;
-    const childrenArr = rootDiv?.props?.children;
-    const isCurrentlyExecuting = !!(Array.isArray(childrenArr) && childrenArr[1]);
-    
-    if (isCurrentlyExecuting !== lastExecutingRef.current) {
-      lastExecutingRef.current = isCurrentlyExecuting;
-      // Trigger execution notification for background/toast when it starts
-      if (isCurrentlyExecuting) {
-        setTimeout(() => {
-          onDataChangeRef.current?.({
-            severity: 'info',
-            summary: 'Executing',
-            detail: 'Processing request...',
-            life: 3000
-          });
-        }, 0);
-      }
-    }
-
-    if (!showSelectors) return null;
-
-    if (!hideControls) {
-      return (
-        <div className="px-4 py-3 border-b border-gray-200 bg-white">
-          <div className="flex items-end gap-3 flex-wrap">
-            {selectorsJSX}
-          </div>
-        </div>
-      );
-    }
-
-    // Minimal mode: Filter out Data Source and Query Key selectors
-    try {
-      const controlsDiv = childrenArr[0];
-      const allControls = React.Children.toArray(controlsDiv.props.children);
-      
-      const filteredControls = allControls.filter(child => {
-        if (!child || !child.props) return true;
-        
-        // Find the label text to identify the control
-        // DataProvider uses: <div className="..."><label>Label Text</label>...</div>
-        const labelElement = child.props.children && child.props.children[0];
-        const labelText = labelElement && labelElement.props && labelElement.props.children;
-        
-        // Hide only Data Source and Query Key dropdowns
-        if (labelText === 'Data Source' || labelText === 'Query Key') {
-          return false;
-        }
-        return true;
-      });
-
-      return (
-        <div className="px-4 py-3 border-b border-gray-200 bg-white">
-          <div className="flex items-end gap-3 flex-wrap">
-            {filteredControls}
-          </div>
-        </div>
-      );
-    } catch (error) {
-      console.warn('TableDataProvider: Failed to filter selectors, falling back to default', error);
-      return (
-        <div className="px-4 py-3 border-b border-gray-200 bg-white">
-          <div className="flex items-end gap-3 flex-wrap">
-            {selectorsJSX}
-          </div>
-        </div>
-      );
-    }
-  }, [showSelectors, hideControls]);
-
   const stableOnVariablesChange = useCallback((vars) => {
+    setCurrentVariables(vars);
     onVariablesChangeRef.current?.(vars);
   }, []);
 
@@ -163,9 +91,20 @@ const TableDataProvider = (props) => {
       onVariablesChange={stableOnVariablesChange}
       onDataSourceChange={stableOnDataSourceChange}
       variableOverrides={stableOverrides}
-      renderHeaderControls={stableRenderHeaderControls}
+      renderHeaderControls={(selectorsJSX) => showSelectors ? (
+        <div className="px-4 py-3 border-b border-gray-200 bg-white">
+          <div className="flex items-end gap-3 flex-wrap">
+            {selectorsJSX}
+          </div>
+        </div>
+      ) : null}
     >
-      {children}
+      <PlasmicDataProvider name="tableData" data={currentTableData}>
+        <PlasmicDataProvider name="queryVariables" data={currentVariables}>
+          {children}
+          {dataSlot}
+        </PlasmicDataProvider>
+      </PlasmicDataProvider>
     </DataProvider>
   );
 };
