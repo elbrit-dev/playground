@@ -95,6 +95,7 @@ export default function PlasmicNavigation(props) {
       <div 
         className="flex-1 overflow-y-auto relative" 
         {...(enableSwipe ? (swipeHandlers || {}) : {})}
+        style={{ cursor: enableSwipe && typeof window !== 'undefined' && window.innerWidth < 1024 ? 'grab' : 'default' }}
       >
         {children}
       </div>

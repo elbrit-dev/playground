@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
 // Shared state for navigation items across hook instances
@@ -7,10 +7,11 @@ let sharedNavigationItems = [];
 export function useSwipeNavigation(items) {
   const router = useRouter();
   const pathname = usePathname();
-  const [touchStart, setTouchStart] = useState(null);
-  const [touchEnd, setTouchEnd] = useState(null);
-  const [touchStartY, setTouchStartY] = useState(null);
-  const [touchEndY, setTouchEndY] = useState(null);
+  
+  // Using refs to track coordinates to avoid re-renders during move
+  const dragStart = useRef({ x: null, y: null });
+  const dragEnd = useRef({ x: null, y: null });
+  const isDragging = useRef(false);
 
   // Update shared items when they change
   useEffect(() => {
@@ -21,29 +22,33 @@ export function useSwipeNavigation(items) {
 
   const minSwipeDistance = 50;
 
-  const onTouchStart = useCallback((e) => {
-    setTouchEnd(null);
-    setTouchEndY(null);
-    setTouchStart(e.targetTouches[0].clientX);
-    setTouchStartY(e.targetTouches[0].clientY);
-  }, []);
+  const handleStart = (clientX, clientY) => {
+    dragStart.current = { x: clientX, y: clientY };
+    dragEnd.current = { x: clientX, y: clientY };
+    isDragging.current = true;
+  };
 
-  const onTouchMove = useCallback((e) => {
-    setTouchEnd(e.targetTouches[0].clientX);
-    setTouchEndY(e.targetTouches[0].clientY);
-  }, []);
+  const handleMove = (clientX, clientY) => {
+    if (!isDragging.current) return;
+    dragEnd.current = { x: clientX, y: clientY };
+  };
 
-  const onTouchEnd = useCallback(() => {
+  const handleEnd = useCallback(() => {
+    if (!isDragging.current) return;
+    isDragging.current = false;
+
     // Only enable swipe on mobile-sized screens
     if (typeof window !== 'undefined' && window.innerWidth >= 1024) return;
 
-    if (!touchStart || !touchEnd || !touchStartY || !touchEndY) return;
+    const { x: startX, y: startY } = dragStart.current;
+    const { x: endX, y: endY } = dragEnd.current;
 
-    const xDistance = touchStart - touchEnd;
-    const yDistance = touchStartY - touchEndY;
+    if (startX === null || endX === null || startY === null || endY === null) return;
+
+    const xDistance = startX - endX;
+    const yDistance = startY - endY;
     
-    // Check if it's more of a horizontal swipe than vertical
-    // and that the swipe distance is significant enough
+    // Check if it's more of a horizontal swipe than vertical (1.5x threshold)
     const isHorizontalSwipe = Math.abs(xDistance) > Math.abs(yDistance) * 1.5;
     const isLeftSwipe = xDistance > minSwipeDistance;
     const isRightSwipe = xDistance < -minSwipeDistance;
@@ -51,10 +56,7 @@ export function useSwipeNavigation(items) {
     if (isHorizontalSwipe && (isLeftSwipe || isRightSwipe)) {
       if (sharedNavigationItems.length === 0) return;
 
-      // Filter items to only those that have a path and are not mobileOnly (unless we are on mobile)
-      // Actually, it's better to just use all items that have a path as they appear in the bottom nav.
       const validItems = sharedNavigationItems.filter(item => item.path || item.route);
-      
       const currentIndex = validItems.findIndex(item => {
         const itemPath = item.path || item.route;
         return pathname === itemPath || pathname.startsWith(itemPath + '/');
@@ -64,27 +66,39 @@ export function useSwipeNavigation(items) {
 
       if (isLeftSwipe && currentIndex < validItems.length - 1) {
         const nextItem = validItems[currentIndex + 1];
-        if (nextItem?.path) {
-          router.push(nextItem.path, { scroll: false });
-        }
+        if (nextItem?.path) router.push(nextItem.path, { scroll: false });
       } else if (isRightSwipe && currentIndex > 0) {
         const prevItem = validItems[currentIndex - 1];
-        if (prevItem?.path) {
-          router.push(prevItem.path, { scroll: false });
-        }
+        if (prevItem?.path) router.push(prevItem.path, { scroll: false });
       }
     }
-  }, [touchStart, touchEnd, touchStartY, touchEndY, pathname, router]);
+
+    // Reset coordinates
+    dragStart.current = { x: null, y: null };
+    dragEnd.current = { x: null, y: null };
+  }, [pathname, router]);
+
+  // Touch Handlers
+  const onTouchStart = (e) => handleStart(e.targetTouches[0].clientX, e.targetTouches[0].clientY);
+  const onTouchMove = (e) => handleMove(e.targetTouches[0].clientX, e.targetTouches[0].clientY);
+  const onTouchEnd = handleEnd;
+
+  // Mouse Handlers (for testing on desktop)
+  const onMouseDown = (e) => handleStart(e.clientX, e.clientY);
+  const onMouseMove = (e) => handleMove(e.clientX, e.clientY);
+  const onMouseUp = handleEnd;
+  const onMouseLeave = handleEnd; // Stop dragging if mouse leaves the area
 
   // If items are passed, we just want to register them
-  if (items) {
-    return null;
-  }
+  if (items) return null;
 
-  // Otherwise return handlers
   return {
     onTouchStart,
     onTouchMove,
-    onTouchEnd
+    onTouchEnd,
+    onMouseDown,
+    onMouseMove,
+    onMouseUp,
+    onMouseLeave
   };
 }
