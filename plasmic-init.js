@@ -230,6 +230,7 @@ PLASMIC.registerComponent(PlasmicNavigation, {
       defaultValue: true,
       description: "Enable swipe gestures on mobile to switch between pages",
     },
+    className: "string",
     children: {
       type: "slot",
       defaultValue: {

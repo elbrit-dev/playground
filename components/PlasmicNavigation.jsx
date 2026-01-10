@@ -73,7 +73,7 @@ const transformItem = (item) => {
  * that acts as a Layout Shell with a children slot.
  */
 export default function PlasmicNavigation(props) {
-  const { children, items, enableSwipe = true, ...rest } = props;
+  const { children, items, enableSwipe = true, className, ...rest } = props;
   
   // Transform string icon names into JSX elements
   const transformedItems = React.useMemo(() => {
@@ -87,7 +87,7 @@ export default function PlasmicNavigation(props) {
   const swipeHandlers = useSwipeNavigation();
 
   return (
-    <div className="h-dvh flex bg-gray-50 overflow-hidden w-full relative">
+    <div className={`h-dvh flex bg-gray-50 overflow-hidden w-full relative ${className || ''}`}>
       {/* The Navigation bars (Sidebar/Bottom Bar) */}
       <Navigation {...rest} items={transformedItems} />
       
