@@ -224,6 +224,13 @@ PLASMIC.registerComponent(PlasmicNavigation, {
       type: "number",
       defaultValue: 0,
     },
+    children: {
+      type: "slot",
+      defaultValue: {
+        type: "text",
+        value: "Drop page content here",
+      },
+    },
   },
   importPath: "./components/PlasmicNavigation",
 });
