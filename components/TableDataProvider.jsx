@@ -17,6 +17,7 @@ const TableDataProvider = (props) => {
     onDataSourceChange,
     variableOverrides,
     showSelectors = true,
+    hideDataSourceAndQueryKey,
     ...otherProps // Collect all other individual props to use as variables
   } = props;
 
@@ -109,6 +110,7 @@ const TableDataProvider = (props) => {
       onVariablesChange={stableOnVariablesChange}
       onDataSourceChange={stableOnDataSourceChange}
       variableOverrides={stableOverrides}
+      hideDataSourceAndQueryKey={hideDataSourceAndQueryKey !== undefined ? hideDataSourceAndQueryKey : !showSelectors}
       renderHeaderControls={(selectorsJSX) => showSelectors ? (
         <div className="px-4 py-3 border-b border-gray-200 bg-white">
           <div className="flex items-end gap-3 flex-wrap">
