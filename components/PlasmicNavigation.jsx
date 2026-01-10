@@ -87,7 +87,9 @@ export default function PlasmicNavigation(props) {
   const swipeHandlers = useSwipeNavigation();
 
   return (
-    <div className={`h-dvh flex bg-gray-50 overflow-hidden w-full relative ${className || ''}`}>
+    <div 
+      className={`flex bg-gray-50 overflow-hidden relative ${className || ''}`}
+    >
       {/* The Navigation bars (Sidebar/Bottom Bar) */}
       <Navigation {...rest} items={transformedItems} />
       
