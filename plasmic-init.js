@@ -378,6 +378,14 @@ PLASMIC.registerComponent(PlasmicNavigation, {
       type: "string",
       defaultValue: "16rem",
     },
+    desktopHeight: {
+      type: "string",
+      defaultValue: "auto",
+    },
+    mobileWidth: {
+      type: "string",
+      defaultValue: "100%",
+    },
     mobileHeight: {
       type: "string",
       defaultValue: "4rem",
