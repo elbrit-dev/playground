@@ -86,8 +86,8 @@ export default function PlasmicNavigation(props) {
     return undefined;
   }, [items]);
 
-  // Get swipe handlers for the content area
-  const swipeHandlers = useSwipeNavigation();
+  // Get swipe handlers for the content area, passing the items to the hook
+  const swipeHandlers = useSwipeNavigation(transformedItems);
 
   return (
     <div 

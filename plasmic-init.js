@@ -95,6 +95,34 @@ PLASMIC.registerComponent(TableDataProvider, {
       type: "eventHandler",
       argTypes: [{ name: "data", type: "object" }],
     },
+    onVariablesChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "variables", type: "object" }],
+    },
+    onDataSourceChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "dataSource", type: "string" }],
+    },
+    onSavedQueriesChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "queries", type: "object" }],
+    },
+    onLoadingQueriesChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "loading", type: "boolean" }],
+    },
+    onExecutingQueryChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "executing", type: "boolean" }],
+    },
+    onAvailableQueryKeysChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "keys", type: "object" }],
+    },
+    onSelectedQueryKeyChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "key", type: "string" }],
+    },
     dataSlot: {
       type: "slot",
       description: "Slot to add custom UI components that can access the table data",
@@ -345,6 +373,14 @@ PLASMIC.registerComponent(PlasmicNavigation, {
       type: "boolean",
       defaultValue: false,
       description: "Disable all navigation items (grey out and non-interactive)",
+    },
+    desktopWidth: {
+      type: "string",
+      defaultValue: "16rem",
+    },
+    mobileHeight: {
+      type: "string",
+      defaultValue: "4rem",
     },
     className: "string",
     children: {
