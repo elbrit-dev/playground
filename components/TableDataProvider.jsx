@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useCallback, useMemo, useState } from 'react'
 import DataProvider from '../share/datatable/components/DataProvider';
 import data from '../resource/data';
 import { DataProvider as PlasmicDataProvider } from "@plasmicapp/loader-nextjs";
+import { TableProvider } from './TableContext';
 
 const TableDataProvider = (props) => {
   const {
@@ -22,7 +23,6 @@ const TableDataProvider = (props) => {
     onExecutingQueryChange,
     onAvailableQueryKeysChange,
     onSelectedQueryKeyChange,
-    onLoadingDataChange,
     variableOverrides,
     showSelectors = true,
     hideDataSourceAndQueryKey,
@@ -45,7 +45,6 @@ const TableDataProvider = (props) => {
   const [executingQuery, setExecutingQuery] = useState(false);
   const [availableQueryKeys, setAvailableQueryKeys] = useState([]);
   const [selectedQueryKey, setSelectedQueryKey] = useState(queryKey);
-  const [loadingData, setLoadingData] = useState(false);
 
   // Stable callback wrappers to prevent infinite loops in the shared DataProvider
   const onTableDataChangeRef = useRef(onTableDataChange);
@@ -60,7 +59,6 @@ const TableDataProvider = (props) => {
   const onExecutingQueryChangeRef = useRef(onExecutingQueryChange);
   const onAvailableQueryKeysChangeRef = useRef(onAvailableQueryKeysChange);
   const onSelectedQueryKeyChangeRef = useRef(onSelectedQueryKeyChange);
-  const onLoadingDataChangeRef = useRef(onLoadingDataChange);
 
   useEffect(() => { onTableDataChangeRef.current = onTableDataChange; }, [onTableDataChange]);
   useEffect(() => { onRawDataChangeRef.current = onRawDataChange; }, [onRawDataChange]);
@@ -73,7 +71,6 @@ const TableDataProvider = (props) => {
   useEffect(() => { onExecutingQueryChangeRef.current = onExecutingQueryChange; }, [onExecutingQueryChange]);
   useEffect(() => { onAvailableQueryKeysChangeRef.current = onAvailableQueryKeysChange; }, [onAvailableQueryKeysChange]);
   useEffect(() => { onSelectedQueryKeyChangeRef.current = onSelectedQueryKeyChange; }, [onSelectedQueryKeyChange]);
-  useEffect(() => { onLoadingDataChangeRef.current = onLoadingDataChange; }, [onLoadingDataChange]);
 
   const stableOnTableDataChange = useCallback((data) => {
     setCurrentTableData(prev => {
@@ -148,14 +145,6 @@ const TableDataProvider = (props) => {
     onSelectedQueryKeyChangeRef.current?.(key);
   }, []);
 
-  const stableOnLoadingDataChange = useCallback((loading) => {
-    setLoadingData(prev => {
-      if (prev === loading) return prev;
-      return loading;
-    });
-    onLoadingDataChangeRef.current?.(loading);
-  }, []);
-
   // Merge individual props with the variableOverrides object
   // Individual props (like 'First' or 'Operator') take precedence
   const mergedVariables = useMemo(() => {
@@ -206,7 +195,6 @@ const TableDataProvider = (props) => {
       onExecutingQueryChange={stableOnExecutingQueryChange}
       onAvailableQueryKeysChange={stableOnAvailableQueryKeysChange}
       onSelectedQueryKeyChange={stableOnSelectedQueryKeyChange}
-      onLoadingDataChange={stableOnLoadingDataChange}
       variableOverrides={stableOverrides}
       isAdminMode={isAdminMode}
       salesTeamColumn={salesTeamColumn}
@@ -222,19 +210,39 @@ const TableDataProvider = (props) => {
         </div>
       ) : null}
     >
-      <PlasmicDataProvider name="tableData" data={currentTableData}>
-        <PlasmicDataProvider name="rawTableData" data={currentRawData}>
-          <PlasmicDataProvider name="queryVariables" data={currentVariables}>
-            <PlasmicDataProvider name="savedQueries" data={savedQueries}>
-              <PlasmicDataProvider name="loadingQueries" data={loadingQueries}>
-                <PlasmicDataProvider name="executingQuery" data={executingQuery}>
-                  <PlasmicDataProvider name="availableQueryKeys" data={availableQueryKeys}>
-                    <PlasmicDataProvider name="selectedQueryKey" data={selectedQueryKey}>
-                      <PlasmicDataProvider name="loadingData" data={loadingData}>
-                        {children}
-                        <div style={{ height: 'auto' }}>
-                          {dataSlot}
-                        </div>
+      <TableProvider value={{
+        dataSource,
+        queryKey,
+        isAdminMode,
+        salesTeamColumn,
+        salesTeamValues,
+        hqColumn,
+        hqValues
+      }}>
+        <PlasmicDataProvider name="tableData" data={currentTableData}>
+          <PlasmicDataProvider name="rawTableData" data={currentRawData}>
+            <PlasmicDataProvider name="queryVariables" data={currentVariables}>
+              <PlasmicDataProvider name="savedQueries" data={savedQueries}>
+                <PlasmicDataProvider name="loadingQueries" data={loadingQueries}>
+                  <PlasmicDataProvider name="executingQuery" data={executingQuery}>
+                    <PlasmicDataProvider name="availableQueryKeys" data={availableQueryKeys}>
+                      <PlasmicDataProvider name="selectedQueryKey" data={selectedQueryKey}>
+                        <PlasmicDataProvider name="dataSource" data={dataSource}>
+                          <PlasmicDataProvider name="isAdminMode" data={isAdminMode}>
+                            <PlasmicDataProvider name="salesTeamColumn" data={salesTeamColumn}>
+                              <PlasmicDataProvider name="salesTeamValues" data={salesTeamValues}>
+                                <PlasmicDataProvider name="hqColumn" data={hqColumn}>
+                                  <PlasmicDataProvider name="hqValues" data={hqValues}>
+                                    {children}
+                                    <div style={{ height: 'auto' }}>
+                                      {dataSlot}
+                                    </div>
+                                  </PlasmicDataProvider>
+                                </PlasmicDataProvider>
+                              </PlasmicDataProvider>
+                            </PlasmicDataProvider>
+                          </PlasmicDataProvider>
+                        </PlasmicDataProvider>
                       </PlasmicDataProvider>
                     </PlasmicDataProvider>
                   </PlasmicDataProvider>
@@ -243,7 +251,7 @@ const TableDataProvider = (props) => {
             </PlasmicDataProvider>
           </PlasmicDataProvider>
         </PlasmicDataProvider>
-      </PlasmicDataProvider>
+      </TableProvider>
     </DataProvider>
   );
 };
