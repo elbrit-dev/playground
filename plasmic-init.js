@@ -123,6 +123,10 @@ PLASMIC.registerComponent(TableDataProvider, {
       type: "eventHandler",
       argTypes: [{ name: "key", type: "string" }],
     },
+    onLoadingDataChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "loading", type: "boolean" }],
+    },
     dataSlot: {
       type: "slot",
       description: "Slot to add custom UI components that can access the table data",
@@ -178,6 +182,24 @@ PLASMIC.registerComponent(DataTable, {
     scrollHeight: {
       type: "string",
       defaultValue: "600px",
+    },
+    stickyHeaderOffset: {
+      type: "number",
+      defaultValue: 0,
+    },
+    stickyHeaderZIndex: {
+      type: "number",
+      defaultValue: 1000,
+    },
+    appHeaderOffset: {
+      type: "number",
+    },
+    appFooterOffset: {
+      type: "number",
+    },
+    tableName: {
+      type: "string",
+      defaultValue: "table",
     },
     enableSort: {
       type: "boolean",
@@ -261,32 +283,6 @@ PLASMIC.registerComponent(DataTable, {
       description: "Array of allowed HQ values",
       defaultValue: [],
     },
-    enableTargetData: {
-      type: "boolean",
-      defaultValue: false,
-      description: "Enable target vs actual comparison",
-    },
-    targetData: {
-      type: "object",
-      description: "The array of target data to compare against",
-      defaultValue: [],
-    },
-    targetOuterGroupField: {
-      type: "string",
-      description: "The field in target data that corresponds to the outer group",
-    },
-    targetInnerGroupField: {
-      type: "string",
-      description: "The field in target data that corresponds to the inner group",
-    },
-    targetValueField: {
-      type: "string",
-      description: "The field in target data that contains the target value",
-    },
-    actualValueField: {
-      type: "string",
-      description: "The field in the main data that contains the actual value",
-    },
     enableFullscreenDialog: {
       type: "boolean",
       defaultValue: true,
@@ -351,6 +347,12 @@ PLASMIC.registerComponent(PlasmicNavigation, {
           mobileFullscreen: true,
           iconActive: 'ChatIconActive',
           iconInactive: 'ChatIconInactive',
+        },
+        {
+          label: 'Test',
+          path: '/test',
+          iconActive: 'PlannerIconActive',
+          iconInactive: 'PlannerIconInactive',
         },
       ],
     },
