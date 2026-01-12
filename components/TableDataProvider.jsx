@@ -50,6 +50,7 @@ const TableDataProvider = (props) => {
   const [availableQueryKeys, setAvailableQueryKeys] = useState([]);
   const [selectedQueryKey, setSelectedQueryKey] = useState(queryKey);
   const [loadingData, setLoadingData] = useState(false);
+  const [variablesLoaded, setVariablesLoaded] = useState(false);
 
   // Stable callback wrappers to prevent infinite loops in the shared DataProvider
   const onTableDataChangeRef = useRef(onTableDataChange);
@@ -106,6 +107,7 @@ const TableDataProvider = (props) => {
   }, []);
 
   const stableOnVariablesChange = useCallback((vars) => {
+    setVariablesLoaded(true);
     setCurrentVariables(prev => {
       if (JSON.stringify(prev) === JSON.stringify(vars)) return prev;
       return vars;
@@ -166,17 +168,45 @@ const TableDataProvider = (props) => {
     onLoadingDataChangeRef.current?.(loading);
   }, []);
 
-  // Merge individual props with the variableOverrides object
-  // Individual props (like 'First' or 'Operator') take precedence
-  const mergedVariables = useMemo(() => {
-    return {
+  // Stabilize merged variables to prevent infinite fetch loops
+  // We only pass variables as "overrides" if they actually differ from the base variables
+  // reported by the core DataProvider. This allows the core to use its cache-first
+  // logic for the initial load if the props match the query defaults.
+  const stableOverrides = useMemo(() => {
+    const combined = {
       ...otherProps,
       ...(variableOverrides || {})
     };
-  }, [JSON.stringify(otherProps), JSON.stringify(variableOverrides)]);
+    
+    // If variables haven't been loaded from the query doc yet, we don't pass any
+    // overrides to allow the core DataProvider to check its cache first.
+    if (!variablesLoaded) {
+      return {};
+    }
 
-  // Stabilize merged variables to prevent infinite fetch loops
-  const stableOverrides = useMemo(() => mergedVariables, [JSON.stringify(mergedVariables)]);
+    // Filter out values that match currentVariables to avoid redundant triggers
+    const delta = {};
+    let hasActualOverride = false;
+    
+    Object.keys(combined).forEach(key => {
+      const value = combined[key];
+      const defaultValue = currentVariables[key];
+      
+      // If the variable is present in the query defaults and is different, it's an override.
+      // If the variable is NOT in the query defaults but is provided in props, it's also an override.
+      if (currentVariables.hasOwnProperty(key)) {
+        if (JSON.stringify(value) !== JSON.stringify(defaultValue)) {
+          delta[key] = value;
+          hasActualOverride = true;
+        }
+      } else if (value !== undefined) {
+        delta[key] = value;
+        hasActualOverride = true;
+      }
+    });
+    
+    return hasActualOverride ? delta : {};
+  }, [variablesLoaded, JSON.stringify(otherProps), JSON.stringify(variableOverrides), JSON.stringify(currentVariables)]);
 
   const consolidatedData = useMemo(() => ({
     tableData: currentTableData,
