@@ -36,6 +36,8 @@ const TableDataProvider = (props) => {
     salesTeamValues = [],
     hqColumn = null,
     hqValues = [],
+    className,
+    style,
     ...otherProps // Collect all other individual props to use as variables
   } = props;
 
@@ -192,14 +194,17 @@ const TableDataProvider = (props) => {
       const value = combined[key];
       const defaultValue = currentVariables[key];
       
-      // If the variable is present in the query defaults and is different, it's an override.
-      // If the variable is NOT in the query defaults but is provided in props, it's also an override.
+      // We only consider something an override if it's already present in the query defaults
+      // or if it's one of the explicitly defined variable props in Plasmic.
+      // This prevents 'className', 'style', etc. from triggering redundant queries.
+      const isExplicitVariable = ['First', 'Operator', 'Status', 'Customer'].includes(key);
+
       if (currentVariables.hasOwnProperty(key)) {
         if (JSON.stringify(value) !== JSON.stringify(defaultValue)) {
           delta[key] = value;
           hasActualOverride = true;
         }
-      } else if (value !== undefined) {
+      } else if (isExplicitVariable && value !== undefined && value !== null) {
         delta[key] = value;
         hasActualOverride = true;
       }
