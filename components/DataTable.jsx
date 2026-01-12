@@ -250,15 +250,18 @@ const DataTableWrapper = (props) => {
   } = props;
 
   // Use props if provided, otherwise fallback to context from TableDataProvider
-  const propData = props.data !== undefined ? props.data : context?.tableData;
-  const propRawData = props.rawTableData !== undefined ? props.rawTableData : context?.rawTableData;
-  const propDataSource = props.dataSource !== undefined ? props.dataSource : context?.dataSource;
-  const propQueryVariables = props.queryVariables !== undefined ? props.queryVariables : context?.queryVariables;
+  // We check for emptiness/defaults to allow "zero-config" inheritance in Plasmic
+  const propData = (props.data && Array.isArray(props.data) && props.data.length > 0) ? props.data : context?.tableData;
+  const propRawData = (props.rawTableData && Array.isArray(props.rawTableData) && props.rawTableData.length > 0) ? props.rawTableData : context?.rawTableData;
+  const propDataSource = (props.dataSource && props.dataSource !== 'offline') ? props.dataSource : context?.dataSource;
+  const propQueryVariables = (props.queryVariables && Object.keys(props.queryVariables).length > 0) ? props.queryVariables : context?.queryVariables;
+  
+  // For boolean/string auth props, we only fallback if explicitly undefined
   const propIsAdminMode = props.isAdminMode !== undefined ? props.isAdminMode : context?.isAdminMode;
   const propSalesTeamColumn = props.salesTeamColumn !== undefined ? props.salesTeamColumn : context?.salesTeamColumn;
-  const propSalesTeamValues = props.salesTeamValues !== undefined ? props.salesTeamValues : context?.salesTeamValues;
+  const propSalesTeamValues = (props.salesTeamValues && props.salesTeamValues.length > 0) ? props.salesTeamValues : context?.salesTeamValues;
   const propHqColumn = props.hqColumn !== undefined ? props.hqColumn : context?.hqColumn;
-  const propHqValues = props.hqValues !== undefined ? props.hqValues : context?.hqValues;
+  const propHqValues = (props.hqValues && props.hqValues.length > 0) ? props.hqValues : context?.hqValues;
 
   // Sync all settings props to localStorage in a useEffect to avoid render-phase side effects
   // We exclude dataSource and queryKey here as they are managed by TableDataProvider

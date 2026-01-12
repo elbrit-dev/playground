@@ -146,12 +146,10 @@ PLASMIC.registerComponent(DataTable, {
     data: {
       type: "object",
       description: "The array of data to display in the table",
-      defaultValue: [],
     },
     queryVariables: {
       type: "object",
       description: "Base variables for the query (provided by DataProvider)",
-      defaultValue: {},
     },
     onVariableOverridesChange: {
       type: "eventHandler",
@@ -165,7 +163,6 @@ PLASMIC.registerComponent(DataTable, {
     dataSource: {
       type: "string",
       description: "The data source ID or 'offline' for local data",
-      defaultValue: "offline",
     },
     queryKey: {
       type: "string",
