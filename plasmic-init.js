@@ -1,11 +1,12 @@
-import { initPlasmicLoader } from "@plasmicapp/loader-nextjs";
+import React from 'react';
+import { initPlasmicLoader, DataProvider as PlasmicDataProvider } from "@plasmicapp/loader-nextjs";
 import DataTable from "./components/DataTable";
 import TableDataProvider from "./components/TableDataProvider";
 import PlasmicNavigation from "./components/PlasmicNavigation";
-// import GraphQLPlaygroundCard from "./components/GraphQLPlaygroundCard";
-
-// import FirebaseUIComponent from "./components/FirebaseUIComponent";
-
+import jmespath_plus from '@metrichor/jmespath-plus';
+import * as jmespath from 'jmespath';
+import jsonata from 'jsonata';
+import _ from 'lodash';
 
 export const PLASMIC = initPlasmicLoader({
   projects: [
@@ -15,6 +16,48 @@ export const PLASMIC = initPlasmicLoader({
     }
   ],
   preview: true,
+});
+
+// Helper component to provide global utilities
+export const GlobalUtils = ({ children }) => {
+  return (
+    <PlasmicDataProvider name="utils" data={{ _, jmespath, jmespath_plus, jsonata }}>
+      {children}
+    </PlasmicDataProvider>
+  );
+};
+
+PLASMIC.registerGlobalContext(GlobalUtils, {
+  name: "GlobalUtils",
+  props: {},
+  providesData: true,
+  importPath: "./plasmic-init",
+});
+
+PLASMIC.registerFunction(jmespath_plus.search, {
+  name: "jmespath_plus",
+  params: [
+    { name: "data", type: "object" },
+    { name: "expression", type: "string" }
+  ],
+  description: "Execute a JMESPath Plus expression on data"
+});
+
+PLASMIC.registerFunction(jmespath.search, {
+  name: "jmespath_search",
+  params: [
+    { name: "data", type: "object" },
+    { name: "expression", type: "string" }
+  ],
+  description: "Execute a standard JMESPath expression on data"
+});
+
+PLASMIC.registerFunction(jsonata, {
+  name: "jsonata",
+  params: [
+    { name: "expression", type: "string" }
+  ],
+  description: "Create a JSONata expression"
 });
 
 PLASMIC.registerComponent(TableDataProvider, {
@@ -220,7 +263,7 @@ PLASMIC.registerComponent(DataTable, {
     enableDivideBy1Lakh: {
       type: "boolean",
       defaultValue: false,
-      description: "Toggle dividing numerical values by 1,00,000 (1 Lakh)",
+      description: "Toggle dividing numerical values by 1,0,00,000 (1 Lakh)",
     },
     percentageColumns: {
       type: "object",
@@ -404,40 +447,3 @@ PLASMIC.registerComponent(PlasmicNavigation, {
   },
   importPath: "./components/PlasmicNavigation",
 });
-
-/*
-PLASMIC.registerComponent(GraphQLPlaygroundCard, {
-  name: "GraphQLPlaygroundCard",
-  props: {
-    title: {
-      type: "string",
-      defaultValue: "GraphQL Playground",
-    },
-    description: {
-      type: "string",
-      defaultValue: "Explore GraphQL APIs with GraphiQL and the Explorer plugin",
-    }
-  },
-  importPath: "./components/GraphQLPlaygroundCard",
-});
-
-PLASMIC.registerComponent(FirebaseUIComponent, {
-  name: "FirebaseUIComponent",
-  description: "Native Firebase Authentication UI (Microsoft & Phone)",
-  isDefaultExport: true,
-  importPath: "./components/FirebaseUIComponent",
-  props: {
-    className: {
-      type: "string",
-    },
-    onSuccess: {
-      type: "eventHandler",
-      argTypes: [{ name: "data", type: "object" }],
-    },
-    onError: {
-      type: "eventHandler",
-      argTypes: [{ name: "error", type: "object" }],
-    },
-  },
-})
-*/
