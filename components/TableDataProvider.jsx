@@ -109,11 +109,11 @@ const TableDataProvider = (props) => {
   }, []);
 
   const stableOnVariablesChange = useCallback((vars) => {
-    setVariablesLoaded(true);
     setCurrentVariables(prev => {
       if (JSON.stringify(prev) === JSON.stringify(vars)) return prev;
       return vars;
     });
+    setVariablesLoaded(true);
     onVariablesChangeRef.current?.(vars);
   }, []);
 
@@ -191,12 +191,13 @@ const TableDataProvider = (props) => {
     let hasActualOverride = false;
     
     Object.keys(combined).forEach(key => {
+      // Skip startDate/endDate and standard React/Plasmic props
+      if (['startDate', 'endDate', 'className', 'style'].includes(key)) return;
+
       const value = combined[key];
       const defaultValue = currentVariables[key];
       
-      // We only consider something an override if it's already present in the query defaults
-      // or if it's one of the explicitly defined variable props in Plasmic.
-      // This prevents 'className', 'style', etc. from triggering redundant queries.
+      // Explicitly defined variable props in Plasmic
       const isExplicitVariable = ['First', 'Operator', 'Status', 'Customer'].includes(key);
 
       if (currentVariables.hasOwnProperty(key)) {
@@ -209,6 +210,10 @@ const TableDataProvider = (props) => {
         hasActualOverride = true;
       }
     });
+    
+    if (hasActualOverride) {
+      console.log('TableDataProvider: Detected variable overrides:', delta);
+    }
     
     return hasActualOverride ? delta : {};
   }, [variablesLoaded, JSON.stringify(otherProps), JSON.stringify(variableOverrides), JSON.stringify(currentVariables)]);
