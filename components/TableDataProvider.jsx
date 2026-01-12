@@ -173,7 +173,7 @@ const TableDataProvider = (props) => {
       ...otherProps,
       ...(variableOverrides || {})
     };
-  }, [JSON.stringify(variableOverrides)]); 
+  }, [JSON.stringify(otherProps), JSON.stringify(variableOverrides)]);
 
   // Stabilize merged variables to prevent infinite fetch loops
   const stableOverrides = useMemo(() => mergedVariables, [JSON.stringify(mergedVariables)]);
@@ -201,31 +201,8 @@ const TableDataProvider = (props) => {
     hqColumn, hqValues
   ]);
 
-  // Use state for the re-mount key and refs for change detection
-  const [instanceKey, setInstanceKey] = useState(`initial-${dataSource || 'offline'}-${queryKey || 'default'}`);
-  const lastPropsRef = useRef({ dataSource, queryKey });
-  const isInitialMount = useRef(true);
-
-  // Sync props to internal state and manage re-mount key only on genuine prop changes
-  useEffect(() => {
-    // Skip the initial mount to prevent automatic execution on load
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
-
-    // Only proceed if dataSource or queryKey has actually changed from what we last handled
-    if (dataSource !== lastPropsRef.current.dataSource || queryKey !== lastPropsRef.current.queryKey) {
-      // Update the key to force a re-mount of the DataProvider only when these specific props change
-      // We removed the global localStorage sync to prevent interference between different pages/instances
-      setInstanceKey(`${dataSource || 'offline'}-${queryKey || 'default'}-${Date.now()}`);
-      lastPropsRef.current = { dataSource, queryKey };
-    }
-  }, [dataSource, queryKey]);
-
   return (
     <DataProvider
-      key={instanceKey}
       offlineData={data}
       dataSource={dataSource}
       selectedQueryKey={queryKey}
