@@ -174,6 +174,10 @@ PLASMIC.registerComponent(TableDataProvider, {
       type: "eventHandler",
       argTypes: [{ name: "loading", type: "boolean" }],
     },
+    onLastUpdatedAtChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "timestamp", type: "string" }],
+    },
     dataSlot: {
       type: "slot",
       description: "Slot to add custom UI components that can access the table data",
@@ -226,20 +230,6 @@ PLASMIC.registerComponent(DataTable, {
     scrollHeight: {
       type: "string",
       defaultValue: "600px",
-    },
-    stickyHeaderOffset: {
-      type: "number",
-      defaultValue: 0,
-    },
-    stickyHeaderZIndex: {
-      type: "number",
-      defaultValue: 1000,
-    },
-    appHeaderOffset: {
-      type: "number",
-    },
-    appFooterOffset: {
-      type: "number",
     },
     tableName: {
       type: "string",
