@@ -465,10 +465,10 @@ const TableDataProvider = (props) => {
             <div className="w-full wrapper-selectors-container">
               {selectorsJSX}
               
-              {/* Corrected Last Updated Display - Shown only if we have a value and the internal one is hidden/N/A */}
-              {dataSource && dataSource !== 'offline' && lastUpdatedAt && (
-                <div className="mt-2 text-xs text-blue-600 font-medium">
-                  Last verified: {formatLastUpdatedDate(lastUpdatedAt)}
+              {/* Corrected Last Updated Display - Following DataProvider.jsx wording/style */}
+              {dataSource && dataSource !== 'offline' && (
+                <div className="mt-2 text-xs text-gray-700">
+                  Last updated: {lastUpdatedAt ? formatLastUpdatedDate(lastUpdatedAt) : <span className="text-gray-400">N/A</span>}
                 </div>
               )}
             </div>
