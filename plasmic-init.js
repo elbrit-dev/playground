@@ -131,6 +131,62 @@ PLASMIC.registerComponent(TableDataProvider, {
       description: "Override column types (e.g., { fieldName: 'number' })",
       defaultValue: { is_internal_customer: "number" },
     },
+    useOrchestrationLayer: {
+      type: "boolean",
+      description: "Use the new improved data orchestration layer",
+      defaultValue: true,
+    },
+    // Configuration props for New Layer
+    enableSort: {
+      type: "boolean",
+      defaultValue: true,
+    },
+    enableFilter: {
+      type: "boolean",
+      defaultValue: true,
+    },
+    enableSummation: {
+      type: "boolean",
+      defaultValue: true,
+    },
+    enableGrouping: {
+      type: "boolean",
+      defaultValue: true,
+    },
+    textFilterColumns: {
+      type: "object",
+      defaultValue: [],
+    },
+    visibleColumns: {
+      type: "object",
+      defaultValue: [],
+    },
+    percentageColumns: {
+      type: "object",
+      defaultValue: [],
+    },
+    outerGroupField: {
+      type: "string",
+    },
+    innerGroupField: {
+      type: "string",
+    },
+    redFields: {
+      type: "object",
+      defaultValue: [],
+    },
+    greenFields: {
+      type: "object",
+      defaultValue: [],
+    },
+    enableDivideBy1Lakh: {
+      type: "boolean",
+      defaultValue: false,
+    },
+    drawerTabs: {
+      type: "object",
+      defaultValue: [],
+    },
     onDataChange: {
       type: "eventHandler",
       argTypes: [{ name: "notification", type: "object" }],
@@ -239,6 +295,10 @@ PLASMIC.registerComponent(DataTable, {
     tableName: {
       type: "string",
       defaultValue: "table",
+    },
+    useOrchestrationLayer: {
+      type: "boolean",
+      description: "Use the new improved data orchestration layer",
     },
     enableSort: {
       type: "boolean",
