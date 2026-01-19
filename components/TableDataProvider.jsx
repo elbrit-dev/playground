@@ -43,6 +43,21 @@ const TableDataProvider = (props) => {
     hqValues = [],
     columnTypes = { is_internal_customer: "number" },
     useOrchestrationLayer = false,
+    enableSort = true,
+    enableFilter = true,
+    enableSummation = true,
+    enableGrouping = true,
+    enableDivideBy1Lakh = false,
+    textFilterColumns = [],
+    visibleColumns = [],
+    redFields = [],
+    greenFields = [],
+    outerGroupField = null,
+    innerGroupField = null,
+    percentageColumns = [],
+    drawerTabs = [],
+    onVisibleColumnsChange: propOnVisibleColumnsChange,
+    onDrawerTabsChange: propOnDrawerTabsChange,
     className,
     style,
     ...otherProps // Collect all other individual props to use as variables
@@ -373,12 +388,28 @@ const TableDataProvider = (props) => {
     hqColumn,
     hqValues,
     columnTypes,
-    useOrchestrationLayer
+    useOrchestrationLayer,
+    enableSort,
+    enableFilter,
+    enableSummation,
+    enableGrouping,
+    enableDivideBy1Lakh,
+    textFilterColumns,
+    visibleColumns,
+    redFields,
+    greenFields,
+    outerGroupField,
+    innerGroupField,
+    percentageColumns,
+    drawerTabs
   }), [
     currentTableData, currentRawData, currentVariables, savedQueries,
     loadingQueries, executingQuery, availableQueryKeys, selectedQueryKey,
     loadingData, lastUpdatedAt, dataSource, isAdminMode, salesTeamColumn, salesTeamValues,
-    hqColumn, hqValues, columnTypes, useOrchestrationLayer
+    hqColumn, hqValues, columnTypes, useOrchestrationLayer,
+    enableSort, enableFilter, enableSummation, enableGrouping,
+    enableDivideBy1Lakh, textFilterColumns, visibleColumns, redFields, greenFields,
+    outerGroupField, innerGroupField, percentageColumns, drawerTabs
   ]);
 
   return (
@@ -407,6 +438,22 @@ const TableDataProvider = (props) => {
       hqColumn={hqColumn}
       hqValues={hqValues}
       columnTypes={columnTypes}
+      columnTypesOverride={columnTypes}
+      enableSort={enableSort}
+      enableFilter={enableFilter}
+      enableSummation={enableSummation}
+      enableGrouping={enableGrouping}
+      enableDivideBy1Lakh={enableDivideBy1Lakh}
+      textFilterColumns={textFilterColumns}
+      visibleColumns={visibleColumns}
+      redFields={redFields}
+      greenFields={greenFields}
+      outerGroupField={outerGroupField}
+      innerGroupField={innerGroupField}
+      percentageColumns={percentageColumns}
+      drawerTabs={drawerTabs}
+      onVisibleColumnsChange={propOnVisibleColumnsChange}
+      onDrawerTabsChange={propOnDrawerTabsChange}
       hideDataSourceAndQueryKey={hideDataSourceAndQueryKey !== undefined ? hideDataSourceAndQueryKey : !showSelectors}
       renderHeaderControls={(selectorsJSX) => showSelectors ? (
         <div className="px-4 py-3 border-b border-gray-200 bg-white">

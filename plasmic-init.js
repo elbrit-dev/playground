@@ -136,6 +136,52 @@ PLASMIC.registerComponent(TableDataProvider, {
       description: "Enable the new orchestration layer for data processing",
       defaultValue: false,
     },
+    enableSort: {
+      type: "boolean",
+      defaultValue: true,
+    },
+    enableFilter: {
+      type: "boolean",
+      defaultValue: true,
+    },
+    enableSummation: {
+      type: "boolean",
+      defaultValue: true,
+    },
+    enableGrouping: {
+      type: "boolean",
+      defaultValue: true,
+    },
+    enableDivideBy1Lakh: {
+      type: "boolean",
+      defaultValue: false,
+    },
+    outerGroupField: {
+      type: "string",
+    },
+    innerGroupField: {
+      type: "string",
+    },
+    visibleColumns: {
+      type: "object",
+      defaultValue: [],
+    },
+    textFilterColumns: {
+      type: "object",
+      defaultValue: [],
+    },
+    redFields: {
+      type: "object",
+      defaultValue: [],
+    },
+    greenFields: {
+      type: "object",
+      defaultValue: [],
+    },
+    percentageColumns: {
+      type: "object",
+      defaultValue: [],
+    },
     onDataChange: {
       type: "eventHandler",
       argTypes: [{ name: "notification", type: "object" }],
@@ -351,6 +397,11 @@ PLASMIC.registerComponent(DataTable, {
       type: "boolean",
       description: "Enable the new orchestration layer for data processing",
       defaultValue: false,
+    },
+    enableGrouping: {
+      type: "boolean",
+      defaultValue: true,
+      description: "Show/hide grouping controls within the header",
     },
     onSave: {
       type: "eventHandler",

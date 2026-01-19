@@ -287,7 +287,8 @@ const DataTableWrapper = (props) => {
     scrollHeight: propScrollHeight,
     drawerTabs: propDrawerTabs,
     controlsPanelSize: propControlsPanelSize = 20,
-    useOrchestrationLayer = false,
+    useOrchestrationLayer: propUseOrchestrationLayer,
+    enableGrouping: propEnableGrouping,
     onSave,
     onVariableOverridesChange,
     tableName: propTableName = 'main',
@@ -353,7 +354,9 @@ const DataTableWrapper = (props) => {
     syncToStore('datatable-hqValues', propHqValues);
     syncToStore('datatable-drawerTabs', propDrawerTabs);
     syncToStore('datatable-columnTypes', propColumnTypes);
-  }, [settingsString]);
+    syncToStore('datatable-useOrchestrationLayer', useOrchestrationLayer);
+    syncToStore('datatable-enableGrouping', enableGrouping);
+  }, [settingsString, useOrchestrationLayer, enableGrouping]);
 
   const toast = useRef(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -447,6 +450,8 @@ const DataTableWrapper = (props) => {
   const enableFullscreenDialog = propEnableFullscreenDialog !== undefined ? propEnableFullscreenDialog : enableFullscreenDialogState;
   const percentageColumns = propPercentageColumns !== undefined ? propPercentageColumns : percentageColumnsRawState;
   const isAdminMode = propIsAdminMode !== undefined ? propIsAdminMode : isAdminModeState;
+  const useOrchestrationLayer = propUseOrchestrationLayer !== undefined ? propUseOrchestrationLayer : (context?.useOrchestrationLayer || false);
+  const enableGrouping = propEnableGrouping !== undefined ? propEnableGrouping : (context?.enableGrouping || true);
   const salesTeamColumn = propSalesTeamColumn !== undefined ? propSalesTeamColumn : salesTeamColumnRawState;
   const salesTeamValues = propSalesTeamValues !== undefined ? propSalesTeamValues : salesTeamValuesRawState;
   const hqColumn = propHqColumn !== undefined ? propHqColumn : hqColumnRawState;
@@ -511,12 +516,12 @@ const DataTableWrapper = (props) => {
     }
 
     const settings = {
-      enableSort, enableFilter, enableSummation, enableCellEdit,
+      enableSort, enableFilter, enableSummation, enableCellEdit, enableGrouping,
       rowsPerPageOptions, defaultRows, textFilterColumns, visibleColumns,
       redFields, greenFields, outerGroupField, innerGroupField,
       nonEditableColumns, drawerTabs,
       enableDivideBy1Lakh, enableFullscreenDialog, percentageColumns, isAdminMode, salesTeamColumn,
-      salesTeamValues, hqColumn, hqValues, columnTypes
+      salesTeamValues, hqColumn, hqValues, columnTypes, useOrchestrationLayer
     };
 
     try {
