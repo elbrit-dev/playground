@@ -64,8 +64,8 @@ const TableDataProvider = (props) => {
     ...otherProps // Collect all other individual props to use as variables
   } = props;
 
-  const [currentTableData, setCurrentTableData] = useState(null);
-  const [currentRawData, setCurrentRawData] = useState(null);
+  const [currentTableData, setCurrentTableData] = useState(data);
+  const [currentRawData, setCurrentRawData] = useState(data);
   const [currentVariables, setCurrentVariables] = useState({});
   
   // New internal state to expose to Plasmic
@@ -222,18 +222,12 @@ const TableDataProvider = (props) => {
   useEffect(() => { onLastUpdatedAtChangeRef.current = onLastUpdatedAtChange; }, [onLastUpdatedAtChange]);
 
   const stableOnTableDataChange = useCallback((data) => {
-    setCurrentTableData(prev => {
-      if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
-      return data;
-    });
+    setCurrentTableData(data);
     onTableDataChangeRef.current?.(data);
   }, []);
 
   const stableOnRawDataChange = useCallback((data) => {
-    setCurrentRawData(prev => {
-      if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
-      return data;
-    });
+    setCurrentRawData(data);
     onRawDataChangeRef.current?.(data);
   }, []);
 

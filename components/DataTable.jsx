@@ -361,16 +361,19 @@ const DataTableWrapper = (props) => {
   const [isLoading, setIsLoading] = useState(false);
   const [tableData, setTableData] = useState(propData || data);
 
-  // Sync tableData with propData using stringified check to prevent loops
-  const stringifiedData = JSON.stringify(propData);
+  // Sync tableData with propData
   useEffect(() => {
     if (propData !== undefined) {
-      setTableData(propData);
+      setTableData(prev => {
+        // Simple reference check is enough for large arrays
+        if (prev === propData) return prev;
+        return propData;
+      });
       if (propData && Array.isArray(propData)) {
         originalTableDataRef.current = propData;
       }
     }
-  }, [stringifiedData]);
+  }, [propData]);
 
   const [currentDataSource, setCurrentDataSource] = useState(propDataSource || null);
 
