@@ -136,6 +136,63 @@ PLASMIC.registerComponent(TableDataProvider, {
       description: "Enable the new orchestration layer for data processing",
       defaultValue: false,
     },
+    enableSort: {
+      type: "boolean",
+      defaultValue: true,
+      description: "Initial sort state for orchestration layer",
+    },
+    enableFilter: {
+      type: "boolean",
+      defaultValue: true,
+      description: "Initial filter state for orchestration layer",
+    },
+    enableSummation: {
+      type: "boolean",
+      defaultValue: true,
+      description: "Initial summation state for orchestration layer",
+    },
+    enableGrouping: {
+      type: "boolean",
+      defaultValue: true,
+      description: "Initial grouping state for orchestration layer",
+    },
+    enableDivideBy1Lakh: {
+      type: "boolean",
+      defaultValue: false,
+      description: "Initial divide by 1 lakh state for orchestration layer",
+    },
+    textFilterColumns: {
+      type: "object",
+      defaultValue: [],
+      description: "Columns to use text search in orchestration layer",
+    },
+    visibleColumns: {
+      type: "object",
+      defaultValue: [],
+      description: "Initial visible columns for orchestration layer",
+    },
+    redFields: {
+      type: "object",
+      defaultValue: [],
+    },
+    greenFields: {
+      type: "object",
+      defaultValue: [],
+    },
+    outerGroupField: {
+      type: "string",
+    },
+    innerGroupField: {
+      type: "string",
+    },
+    percentageColumns: {
+      type: "object",
+      defaultValue: [],
+    },
+    drawerTabs: {
+      type: "object",
+      defaultValue: [],
+    },
     onDataChange: {
       type: "eventHandler",
       argTypes: [{ name: "notification", type: "object" }],
@@ -187,6 +244,22 @@ PLASMIC.registerComponent(TableDataProvider, {
     onLastUpdatedAtChange: {
       type: "eventHandler",
       argTypes: [{ name: "timestamp", type: "string" }],
+    },
+    onVisibleColumnsChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "columns", type: "object" }],
+    },
+    onDrawerTabsChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "tabs", type: "object" }],
+    },
+    onColumnTypesChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "columnTypes", type: "object" }],
+    },
+    onAdminModeChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "isAdminMode", type: "boolean" }],
     },
     dataSlot: {
       type: "slot",
@@ -260,6 +333,11 @@ PLASMIC.registerComponent(DataTable, {
       defaultValue: true,
       description: "Show/hide summation controls within the header",
     },
+    enableGrouping: {
+      type: "boolean",
+      defaultValue: true,
+      description: "Initial grouping state for orchestration layer",
+    },
     enableDivideBy1Lakh: {
       type: "boolean",
       defaultValue: false,
@@ -279,6 +357,10 @@ PLASMIC.registerComponent(DataTable, {
       type: "object",
       description: "Array of fields to display (empty = all)",
       defaultValue: [],
+    },
+    onVisibleColumnsChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "columns", type: "object" }],
     },
     redFields: {
       type: "object",
@@ -337,6 +419,10 @@ PLASMIC.registerComponent(DataTable, {
       description: "Array of tab configurations for the detail drawer (name, outerGroup, innerGroup)",
       defaultValue: [],
     },
+    onDrawerTabsChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "tabs", type: "object" }],
+    },
     controlsPanelSize: {
       type: "number",
       description: "The percentage width of the controls sidebar (0-100)",
@@ -347,6 +433,10 @@ PLASMIC.registerComponent(DataTable, {
       description: "Override column types (e.g., { fieldName: 'number' })",
       defaultValue: { is_internal_customer: "number" },
     },
+    onColumnTypesChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "columnTypes", type: "object" }],
+    },
     useOrchestrationLayer: {
       type: "boolean",
       description: "Enable the new orchestration layer for data processing",
@@ -355,6 +445,10 @@ PLASMIC.registerComponent(DataTable, {
     onSave: {
       type: "eventHandler",
       argTypes: [],
+    },
+    onAdminModeChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "isAdminMode", type: "boolean" }],
     },
   },
   importPath: "./components/DataTable",
