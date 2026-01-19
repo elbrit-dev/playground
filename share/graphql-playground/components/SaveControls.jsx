@@ -1958,6 +1958,11 @@ export const SaveControls = React.forwardRef((props, ref) => {
 
           const lastUpdatedBy = getUserIdentifier(user);
 
+          // Read searchFields and sortFields fresh from currentTabData to avoid stale closures
+          const currentTabDataForSave = getTabData(activeTabIndex);
+          const currentSearchFields = currentTabDataForSave?.searchFields || {};
+          const currentSortFields = currentTabDataForSave?.sortFields || {};
+
           const saveData = {
             body: queryToSave || '',
             urlKey: urlKey || '',
@@ -1972,8 +1977,8 @@ export const SaveControls = React.forwardRef((props, ref) => {
             ...(transformerCode && transformerCode.trim() && {
               transformerCode: transformerCode,
             }),
-            searchFields: searchFields || {},  // Object: {user: ["profile.name"], ...}
-            sortFields: sortFields || {},      // Object: {user: ["profile.name"], ...}
+            searchFields: currentSearchFields,  // Object: {user: ["profile.name"], ...}
+            sortFields: currentSortFields,      // Object: {user: ["profile.name"], ...}
             // Timestamp tracking - only update if field changed, otherwise preserve existing timestamp
             bodyUpdatedAt: bodyChanged ? now : (existingData?.bodyUpdatedAt || null),
             variablesUpdatedAt: variablesChanged ? now : (existingData?.variablesUpdatedAt || null),

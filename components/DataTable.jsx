@@ -283,11 +283,11 @@ const DataTableWrapper = (props) => {
     percentageColumns: propPercentageColumns,
     enableFullscreenDialog: propEnableFullscreenDialog,
     columnTypes: propColumnTypes,
-    useOrchestrationLayer: propUseOrchestrationLayer,
     scrollable: propScrollable = true,
     scrollHeight: propScrollHeight,
     drawerTabs: propDrawerTabs,
     controlsPanelSize: propControlsPanelSize = 20,
+    useOrchestrationLayer = false,
     onSave,
     onVariableOverridesChange,
     tableName: propTableName = 'main',
@@ -306,7 +306,6 @@ const DataTableWrapper = (props) => {
   const propSalesTeamValues = (props.salesTeamValues && props.salesTeamValues.length > 0) ? props.salesTeamValues : context?.salesTeamValues;
   const propHqColumn = props.hqColumn !== undefined ? props.hqColumn : context?.hqColumn;
   const propHqValues = (props.hqValues && props.hqValues.length > 0) ? props.hqValues : context?.hqValues;
-  const propUseOrchestrationLayerValue = propUseOrchestrationLayer !== undefined ? propUseOrchestrationLayer : context?.useOrchestrationLayer;
 
   // Sync all settings props to localStorage in a useEffect to avoid render-phase side effects
   // We exclude dataSource and queryKey here as they are managed by TableDataProvider
@@ -316,7 +315,7 @@ const DataTableWrapper = (props) => {
     propRedFields, propGreenFields, propOuterGroupField, propInnerGroupField,
     propNonEditableColumns,
     propEnableDivideBy1Lakh, propEnableFullscreenDialog, propPercentageColumns, propIsAdminMode, propSalesTeamColumn,
-    propSalesTeamValues, propHqColumn, propHqValues, propColumnTypes, propUseOrchestrationLayer
+    propSalesTeamValues, propHqColumn, propHqValues, propColumnTypes
   });
 
   useEffect(() => {
@@ -354,26 +353,22 @@ const DataTableWrapper = (props) => {
     syncToStore('datatable-hqValues', propHqValues);
     syncToStore('datatable-drawerTabs', propDrawerTabs);
     syncToStore('datatable-columnTypes', propColumnTypes);
-    syncToStore('datatable-useOrchestrationLayer', propUseOrchestrationLayer);
   }, [settingsString]);
 
   const toast = useRef(null);
   const [isLoading, setIsLoading] = useState(false);
   const [tableData, setTableData] = useState(propData || data);
 
-  // Sync tableData with propData
+  // Sync tableData with propData using stringified check to prevent loops
+  const stringifiedData = JSON.stringify(propData);
   useEffect(() => {
     if (propData !== undefined) {
-      setTableData(prev => {
-        // Simple reference check is enough for large arrays
-        if (prev === propData) return prev;
-        return propData;
-      });
+      setTableData(propData);
       if (propData && Array.isArray(propData)) {
         originalTableDataRef.current = propData;
       }
     }
-  }, [propData]);
+  }, [stringifiedData]);
 
   const [currentDataSource, setCurrentDataSource] = useState(propDataSource || null);
 
@@ -406,7 +401,6 @@ const DataTableWrapper = (props) => {
   const [hqColumnRawState, setHqColumnRaw] = useLocalStorageString('datatable-hqColumn', null);
   const [hqValuesRawState, setHqValuesRaw] = useLocalStorageArray('datatable-hqValues', []);
   const [columnTypesRawState, setColumnTypesRaw] = useLocalStorageObject('datatable-columnTypes', {});
-  const [useOrchestrationLayerState, setUseOrchestrationLayer] = useLocalStorageBoolean('datatable-useOrchestrationLayer', true);
   
   const [queryVariables, setQueryVariables] = useState(propQueryVariables || {});
 
@@ -435,36 +429,35 @@ const DataTableWrapper = (props) => {
   const [activeDrawerTabIndex, setActiveDrawerTabIndex] = useState(0);
   const [clickedDrawerValues, setClickedDrawerValues] = useState({ outerValue: null, innerValue: null });
 
-  // Derived values that prefer props over context over localStorage state
-  const enableSort = propEnableSort !== undefined ? propEnableSort : (context?.enableSort !== undefined ? context.enableSort : enableSortState);
-  const enableFilter = propEnableFilter !== undefined ? propEnableFilter : (context?.enableFilter !== undefined ? context.enableFilter : enableFilterState);
-  const enableSummation = propEnableSummation !== undefined ? propEnableSummation : (context?.enableSummation !== undefined ? context.enableSummation : enableSummationState);
-  const enableCellEdit = propEnableCellEdit !== undefined ? propEnableCellEdit : (context?.enableCellEdit !== undefined ? context.enableCellEdit : enableCellEditState);
-  const rowsPerPageOptions = propRowsPerPageOptions !== undefined ? propRowsPerPageOptions : (context?.rowsPerPageOptions !== undefined ? context.rowsPerPageOptions : rowsPerPageOptionsRawState);
-  const defaultRows = propDefaultRows !== undefined ? propDefaultRows : (context?.defaultRows !== undefined ? context.defaultRows : defaultRowsRawState);
-  const textFilterColumns = propTextFilterColumns !== undefined ? propTextFilterColumns : (context?.textFilterColumns !== undefined ? context.textFilterColumns : textFilterColumnsRawState);
-  const visibleColumns = propVisibleColumns !== undefined ? propVisibleColumns : (context?.visibleColumns !== undefined ? context.visibleColumns : visibleColumnsRawState);
-  const redFields = propRedFields !== undefined ? propRedFields : (context?.redFields !== undefined ? context.redFields : redFieldsRawState);
-  const greenFields = propGreenFields !== undefined ? propGreenFields : (context?.greenFields !== undefined ? context.greenFields : greenFieldsRawState);
-  const outerGroupField = propOuterGroupField !== undefined ? propOuterGroupField : (context?.outerGroupField !== undefined ? context.outerGroupField : outerGroupFieldRawState);
-  const innerGroupField = propInnerGroupField !== undefined ? propInnerGroupField : (context?.innerGroupField !== undefined ? context.innerGroupField : innerGroupFieldRawState);
-  const nonEditableColumns = propNonEditableColumns !== undefined ? propNonEditableColumns : (context?.nonEditableColumns !== undefined ? context.nonEditableColumns : nonEditableColumnsRawState);
-  const enableDivideBy1Lakh = propEnableDivideBy1Lakh !== undefined ? propEnableDivideBy1Lakh : (context?.enableDivideBy1Lakh !== undefined ? context.enableDivideBy1Lakh : enableDivideBy1LakhState);
-  const enableFullscreenDialog = propEnableFullscreenDialog !== undefined ? propEnableFullscreenDialog : (context?.enableFullscreenDialog !== undefined ? context.enableFullscreenDialog : enableFullscreenDialogState);
-  const percentageColumns = (propPercentageColumns && propPercentageColumns.length > 0) ? propPercentageColumns : (context?.percentageColumns && context.percentageColumns.length > 0 ? context.percentageColumns : percentageColumnsRawState);
-  const isAdminMode = propIsAdminMode !== undefined ? propIsAdminMode : (context?.isAdminMode !== undefined ? context.isAdminMode : isAdminModeState);
-  const salesTeamColumn = propSalesTeamColumn !== undefined ? propSalesTeamColumn : (context?.salesTeamColumn !== undefined ? context.salesTeamColumn : salesTeamColumnRawState);
-  const salesTeamValues = (propSalesTeamValues && propSalesTeamValues.length > 0) ? propSalesTeamValues : (context?.salesTeamValues && context.salesTeamValues.length > 0 ? context.salesTeamValues : salesTeamValuesRawState);
-  const hqColumn = propHqColumn !== undefined ? propHqColumn : (context?.hqColumn !== undefined ? context.hqColumn : hqColumnRawState);
-  const hqValues = (propHqValues && propHqValues.length > 0) ? propHqValues : (context?.hqValues && context.hqValues.length > 0 ? context.hqValues : hqValuesRawState);
-  const useOrchestrationLayer = propUseOrchestrationLayerValue !== undefined ? propUseOrchestrationLayerValue : (context?.useOrchestrationLayer !== undefined ? context.useOrchestrationLayer : useOrchestrationLayerState);
+  // Derived values that prefer props over localStorage state
+  const enableSort = propEnableSort !== undefined ? propEnableSort : enableSortState;
+  const enableFilter = propEnableFilter !== undefined ? propEnableFilter : enableFilterState;
+  const enableSummation = propEnableSummation !== undefined ? propEnableSummation : enableSummationState;
+  const enableCellEdit = propEnableCellEdit !== undefined ? propEnableCellEdit : enableCellEditState;
+  const rowsPerPageOptions = propRowsPerPageOptions !== undefined ? propRowsPerPageOptions : rowsPerPageOptionsRawState;
+  const defaultRows = propDefaultRows !== undefined ? propDefaultRows : defaultRowsRawState;
+  const textFilterColumns = propTextFilterColumns !== undefined ? propTextFilterColumns : textFilterColumnsRawState;
+  const visibleColumns = propVisibleColumns !== undefined ? propVisibleColumns : visibleColumnsRawState;
+  const redFields = propRedFields !== undefined ? propRedFields : redFieldsRawState;
+  const greenFields = propGreenFields !== undefined ? propGreenFields : greenFieldsRawState;
+  const outerGroupField = propOuterGroupField !== undefined ? propOuterGroupField : outerGroupFieldRawState;
+  const innerGroupField = propInnerGroupField !== undefined ? propInnerGroupField : innerGroupFieldRawState;
+  const nonEditableColumns = propNonEditableColumns !== undefined ? propNonEditableColumns : nonEditableColumnsRawState;
+  const enableDivideBy1Lakh = propEnableDivideBy1Lakh !== undefined ? propEnableDivideBy1Lakh : enableDivideBy1LakhState;
+  const enableFullscreenDialog = propEnableFullscreenDialog !== undefined ? propEnableFullscreenDialog : enableFullscreenDialogState;
+  const percentageColumns = propPercentageColumns !== undefined ? propPercentageColumns : percentageColumnsRawState;
+  const isAdminMode = propIsAdminMode !== undefined ? propIsAdminMode : isAdminModeState;
+  const salesTeamColumn = propSalesTeamColumn !== undefined ? propSalesTeamColumn : salesTeamColumnRawState;
+  const salesTeamValues = propSalesTeamValues !== undefined ? propSalesTeamValues : salesTeamValuesRawState;
+  const hqColumn = propHqColumn !== undefined ? propHqColumn : hqColumnRawState;
+  const hqValues = propHqValues !== undefined ? propHqValues : hqValuesRawState;
   const columnTypes = useMemo(() => {
     const contextTypes = context?.columnTypes || {};
     const storedTypes = columnTypesRawState || {};
     const manualTypes = propColumnTypes || {};
     return { ...contextTypes, ...storedTypes, ...manualTypes };
   }, [propColumnTypes, context?.columnTypes, columnTypesRawState]);
-  const drawerTabs = (propDrawerTabs !== undefined && propDrawerTabs !== null && propDrawerTabs.length > 0) ? propDrawerTabs : (context?.drawerTabs !== undefined && context.drawerTabs !== null && context.drawerTabs.length > 0 ? context.drawerTabs : drawerTabsRawState);
+  const drawerTabs = (propDrawerTabs !== undefined && propDrawerTabs !== null && propDrawerTabs.length > 0) ? propDrawerTabs : drawerTabsRawState;
 
   const originalTableDataRef = useRef(null);
 
@@ -508,7 +501,6 @@ const DataTableWrapper = (props) => {
       if (savedSettings.hqValues !== undefined) setHqValuesRaw(savedSettings.hqValues);
       if (savedSettings.drawerTabs !== undefined) setDrawerTabs(savedSettings.drawerTabs);
       if (savedSettings.columnTypes !== undefined) setColumnTypesRaw(savedSettings.columnTypes);
-      if (savedSettings.useOrchestrationLayer !== undefined) setUseOrchestrationLayer(savedSettings.useOrchestrationLayer);
     }
   }, []);
 
@@ -524,7 +516,7 @@ const DataTableWrapper = (props) => {
       redFields, greenFields, outerGroupField, innerGroupField,
       nonEditableColumns, drawerTabs,
       enableDivideBy1Lakh, enableFullscreenDialog, percentageColumns, isAdminMode, salesTeamColumn,
-      salesTeamValues, hqColumn, hqValues, columnTypes, useOrchestrationLayer
+      salesTeamValues, hqColumn, hqValues, columnTypes
     };
 
     try {
@@ -636,6 +628,7 @@ const DataTableWrapper = (props) => {
                 ) : (
                   <DataTableComponent
                     data={tableData}
+                    useOrchestrationLayer={useOrchestrationLayer}
                     rowsPerPageOptions={rowsPerPageOptions}
                     defaultRows={defaultRows}
                     scrollable={propScrollable}
@@ -659,7 +652,6 @@ const DataTableWrapper = (props) => {
                     onOuterGroupClick={handleOuterGroupClick}
                     onInnerGroupClick={handleInnerGroupClick}
                     columnTypes={columnTypes}
-                    useOrchestrationLayer={useOrchestrationLayer}
                     tableName={propTableName}
                   />
                 )}
@@ -720,7 +712,7 @@ const DataTableWrapper = (props) => {
                 onSalesTeamValuesChange={setSalesTeamValuesRaw}
                 onHqColumnChange={setHqColumnRaw}
                 onHqValuesChange={setHqValuesRaw}
-                columnTypesOverride={columnTypesRawState}
+                columnTypesOverride={columnTypes}
                 onColumnTypesOverrideChange={setColumnTypesRaw}
               />
             </SplitterPanel>
@@ -735,6 +727,7 @@ const DataTableWrapper = (props) => {
             ) : (
               <DataTableComponent
                 data={tableData}
+                useOrchestrationLayer={useOrchestrationLayer}
                 rowsPerPageOptions={rowsPerPageOptions}
                 defaultRows={defaultRows}
                 scrollable={propScrollable}
@@ -768,7 +761,7 @@ const DataTableWrapper = (props) => {
       <Sidebar
         position="bottom"
         blockScroll
-        visible={!useOrchestrationLayer && drawerVisible}
+        visible={drawerVisible}
         onHide={() => setDrawerVisible(false)}
         style={{ height: '100vh' }}
         header={
@@ -787,6 +780,7 @@ const DataTableWrapper = (props) => {
                   {drawerData.length > 0 ? (
                     <DataTableComponent
                       data={drawerData}
+                      useOrchestrationLayer={useOrchestrationLayer}
                       rowsPerPageOptions={rowsPerPageOptions}
                       defaultRows={defaultRows}
                       scrollable={propScrollable}

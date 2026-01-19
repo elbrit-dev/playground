@@ -42,30 +42,14 @@ const TableDataProvider = (props) => {
     hqColumn = null,
     hqValues = [],
     columnTypes = { is_internal_customer: "number" },
-    useOrchestrationLayer = true,
-    // Configuration props for New Layer
-    enableSort = true,
-    enableFilter = true,
-    enableSummation = true,
-    enableGrouping = true,
-    textFilterColumns = [],
-    visibleColumns = [],
-    onVisibleColumnsChange,
-    percentageColumns = [],
-    outerGroupField = null,
-    innerGroupField = null,
-    redFields = [],
-    greenFields = [],
-    enableDivideBy1Lakh = false,
-    drawerTabs = [],
-    onDrawerTabsChange,
+    useOrchestrationLayer = false,
     className,
     style,
     ...otherProps // Collect all other individual props to use as variables
   } = props;
 
-  const [currentTableData, setCurrentTableData] = useState(data);
-  const [currentRawData, setCurrentRawData] = useState(data);
+  const [currentTableData, setCurrentTableData] = useState(null);
+  const [currentRawData, setCurrentRawData] = useState(null);
   const [currentVariables, setCurrentVariables] = useState({});
   
   // New internal state to expose to Plasmic
@@ -222,12 +206,18 @@ const TableDataProvider = (props) => {
   useEffect(() => { onLastUpdatedAtChangeRef.current = onLastUpdatedAtChange; }, [onLastUpdatedAtChange]);
 
   const stableOnTableDataChange = useCallback((data) => {
-    setCurrentTableData(data);
+    setCurrentTableData(prev => {
+      if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
+      return data;
+    });
     onTableDataChangeRef.current?.(data);
   }, []);
 
   const stableOnRawDataChange = useCallback((data) => {
-    setCurrentRawData(data);
+    setCurrentRawData(prev => {
+      if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
+      return data;
+    });
     onRawDataChangeRef.current?.(data);
   }, []);
 
@@ -383,29 +373,12 @@ const TableDataProvider = (props) => {
     hqColumn,
     hqValues,
     columnTypes,
-    useOrchestrationLayer,
-    // Pass config props to consolidatedData
-    enableSort,
-    enableFilter,
-    enableSummation,
-    enableGrouping,
-    textFilterColumns,
-    visibleColumns,
-    percentageColumns,
-    outerGroupField,
-    innerGroupField,
-    redFields,
-    greenFields,
-    enableDivideBy1Lakh,
-    drawerTabs
+    useOrchestrationLayer
   }), [
     currentTableData, currentRawData, currentVariables, savedQueries,
     loadingQueries, executingQuery, availableQueryKeys, selectedQueryKey,
     loadingData, lastUpdatedAt, dataSource, isAdminMode, salesTeamColumn, salesTeamValues,
-    hqColumn, hqValues, columnTypes, useOrchestrationLayer,
-    enableSort, enableFilter, enableSummation, enableGrouping, textFilterColumns,
-    visibleColumns, percentageColumns, outerGroupField, innerGroupField,
-    redFields, greenFields, enableDivideBy1Lakh, drawerTabs
+    hqColumn, hqValues, columnTypes, useOrchestrationLayer
   ]);
 
   return (
@@ -413,6 +386,7 @@ const TableDataProvider = (props) => {
       offlineData={data}
       dataSource={dataSource}
       selectedQueryKey={queryKey}
+      useOrchestrationLayer={useOrchestrationLayer}
       onDataChange={stableOnDataChange}
       onError={stableOnError}
       onTableDataChange={stableOnTableDataChange}
@@ -433,23 +407,6 @@ const TableDataProvider = (props) => {
       hqColumn={hqColumn}
       hqValues={hqValues}
       columnTypes={columnTypes}
-      useOrchestrationLayer={useOrchestrationLayer}
-      // New Config Props
-      enableSort={enableSort}
-      enableFilter={enableFilter}
-      enableSummation={enableSummation}
-      enableGrouping={enableGrouping}
-      textFilterColumns={textFilterColumns}
-      visibleColumns={visibleColumns}
-      onVisibleColumnsChange={onVisibleColumnsChange}
-      percentageColumns={percentageColumns}
-      outerGroupField={outerGroupField}
-      innerGroupField={innerGroupField}
-      redFields={redFields}
-      greenFields={greenFields}
-      enableDivideBy1Lakh={enableDivideBy1Lakh}
-      drawerTabs={drawerTabs}
-      onDrawerTabsChange={onDrawerTabsChange}
       hideDataSourceAndQueryKey={hideDataSourceAndQueryKey !== undefined ? hideDataSourceAndQueryKey : !showSelectors}
       renderHeaderControls={(selectorsJSX) => showSelectors ? (
         <div className="px-4 py-3 border-b border-gray-200 bg-white">
