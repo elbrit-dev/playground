@@ -824,6 +824,71 @@ const DataTableWrapper = (props) => {
           </div>
         )}
       </div>
+
+      <Sidebar
+        position="bottom"
+        blockScroll
+        visible={!useOrchestrationLayer && drawerVisible}
+        onHide={() => setDrawerVisible(false)}
+        style={{ height: '100dvh' }}
+        header={
+          <h2 className="text-lg font-semibold m-0">
+            {clickedDrawerValues.innerValue 
+              ? `${clickedDrawerValues.outerValue} : ${clickedDrawerValues.innerValue}`
+              : clickedDrawerValues.outerValue || 'Details'}
+          </h2>
+        }
+      >
+        <div className="flex flex-col h-full">
+          <TabView activeIndex={activeDrawerTabIndex} onTabChange={(e) => setActiveDrawerTabIndex(e.index)}>
+            {drawerTabs.map((tab) => (
+              <TabPanel key={tab.id} header={tab.name || `Tab ${drawerTabs.indexOf(tab) + 1}`}>
+                <div className="h-full flex flex-col py-4">
+                  {drawerData.length > 0 ? (
+                    <TableOperationsContext.Provider value={{
+                      ...orchestrationContext,
+                      paginatedData: drawerData,
+                      pagination: { first: 0, rows: drawerData.length },
+                      visibleColumns: [], // Show all in drawer
+                      enableFilter: enableFilter,
+                      enableSort: enableSort,
+                      enableSummation: enableSummation,
+                      outerGroupField: tab.outerGroup,
+                      innerGroupField: tab.innerGroup,
+                    }}>
+                      <DataTableComponent
+                        data={drawerData}
+                        useOrchestrationLayer={true} // Force true to use the provider we just created
+                        rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
+                        defaultRows={10}
+                        scrollable={true}
+                        scrollHeight="calc(100dvh - 180px)"
+                        enableSort={enableSort}
+                        enableFilter={enableFilter}
+                        enableSummation={enableSummation}
+                        textFilterColumns={textFilterColumns}
+                        visibleColumns={visibleColumns}
+                        onVisibleColumnsChange={handleVisibleColumnsChange}
+                        redFields={redFields}
+                        greenFields={greenFields}
+                        outerGroupField={tab.outerGroup}
+                        innerGroupField={tab.innerGroup}
+                        percentageColumns={percentageColumns}
+                        enableDivideBy1Lakh={enableDivideBy1Lakh}
+                        enableCellEdit={false}
+                        columnTypes={columnTypes}
+                        tableName="sidebar"
+                      />
+                    </TableOperationsContext.Provider>
+                  ) : (
+                    <p className="text-center text-gray-500">No data available</p>
+                  )}
+                </div>
+              </TabPanel>
+            ))}
+          </TabView>
+        </div>
+      </Sidebar>
     </div>
   );
 };

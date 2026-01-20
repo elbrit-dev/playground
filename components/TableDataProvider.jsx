@@ -797,6 +797,57 @@ const TableDataProvider = (props) => {
             .wrapper-selectors-container .whitespace-nowrap:not(.p-button-label) {
               display: none !important;
             }
+            
+            /* Fix for Drawer scrolling issues */
+            .p-sidebar-bottom.p-sidebar-sm {
+              height: 100dvh !important;
+            }
+            
+            .p-sidebar-bottom .p-sidebar-content {
+              height: 100%;
+              display: flex;
+              flex-direction: column;
+              overflow: hidden !important;
+              padding: 0 !important;
+            }
+            
+            .p-sidebar-bottom .p-tabview {
+              display: flex;
+              flex-direction: column;
+              height: 100%;
+              min-height: 0;
+            }
+            
+            .p-sidebar-bottom .p-tabview-nav-container {
+              flex-shrink: 0;
+            }
+            
+            .p-sidebar-bottom .p-tabview-panels {
+              flex: 1;
+              min-height: 0;
+              display: flex;
+              flex-direction: column;
+              padding: 0 !important;
+            }
+            
+            .p-sidebar-bottom .p-tabview-panel {
+              flex: 1;
+              display: flex;
+              flex-direction: column;
+              min-height: 0;
+              height: 100%;
+            }
+            
+            /* Target both the manual overflow-auto div and PrimeReact's internal wrapper */
+            .p-sidebar-bottom .overflow-auto,
+            .p-sidebar-bottom .p-datatable-wrapper,
+            .p-sidebar-bottom .p-datatable-scrollable-body {
+              flex: 1;
+              min-height: 0;
+              overflow-y: auto !important;
+              -webkit-overflow-scrolling: touch;
+              overscroll-behavior: contain;
+            }
           `}} />
         </div>
       ) : null}
