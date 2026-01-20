@@ -729,59 +729,32 @@ const TableDataProvider = (props) => {
 
   const openDrawerWithData = useCallback((data, outerValue, innerValue) => {
     let filteredData = data || [];
-    
-    console.log('🔍 Drawer Debug - Initial data count:', filteredData.length);
-    console.log('🔍 Drawer Debug - drawerSalesTeamColumn:', drawerSalesTeamColumn);
-    console.log('🔍 Drawer Debug - drawerSalesTeamValues:', drawerSalesTeamValues);
-    console.log('🔍 Drawer Debug - drawerHqColumn:', drawerHqColumn);
-    console.log('🔍 Drawer Debug - drawerHqValues:', drawerHqValues);
 
     // Apply drawer-specific group filters for sales team and HQ (works like clicking a row)
     // These are data filters, not auth filters, so we apply them regardless of admin mode
     if (drawerSalesTeamColumn && drawerSalesTeamValues && drawerSalesTeamValues.length > 0) {
       // Flatten values in case Plasmic passed nested arrays like [["Team A"]]
       const filterTeams = lodashFilter(flatMap([drawerSalesTeamValues], v => v), v => !isNil(v)).map(v => String(v).trim().toLowerCase());
-      console.log('🔍 Drawer Debug - Filtering by sales teams:', filterTeams);
       
-      const beforeCount = filteredData.length;
       filteredData = lodashFilter(filteredData, (row) => {
         const rowValue = get(row, drawerSalesTeamColumn);
         if (Array.isArray(rowValue)) {
           return rowValue.some(rv => filterTeams.includes(String(rv).trim().toLowerCase()));
         }
-        const match = !isNil(rowValue) && filterTeams.includes(String(rowValue).trim().toLowerCase());
-        return match;
+        return !isNil(rowValue) && filterTeams.includes(String(rowValue).trim().toLowerCase());
       });
-      console.log('🔍 Drawer Debug - After sales team filter:', beforeCount, '->', filteredData.length);
-      
-      // Show sample HQ values to help debug
-      if (filteredData.length > 0 && drawerHqColumn) {
-        const sampleHqValues = filteredData.slice(0, 10).map(row => get(row, drawerHqColumn));
-        const uniqueHqValues = [...new Set(filteredData.map(row => get(row, drawerHqColumn)))];
-        console.log('🔍 Drawer Debug - Sample HQ values in filtered data:', sampleHqValues);
-        console.log('🔍 Drawer Debug - Unique HQ values (first 20):', uniqueHqValues.slice(0, 20));
-      }
     }
     if (drawerHqColumn && drawerHqValues && drawerHqValues.length > 0) {
       // Flatten values
       const filterHqs = lodashFilter(flatMap([drawerHqValues], v => v), v => !isNil(v)).map(v => String(v).trim().toLowerCase());
-      console.log('🔍 Drawer Debug - Filtering by HQ:', filterHqs);
 
-      const beforeCount = filteredData.length;
       filteredData = lodashFilter(filteredData, (row) => {
         const rowValue = get(row, drawerHqColumn);
         if (Array.isArray(rowValue)) {
           return rowValue.some(rv => filterHqs.includes(String(rv).trim().toLowerCase()));
         }
-        const match = !isNil(rowValue) && filterHqs.includes(String(rowValue).trim().toLowerCase());
-        return match;
+        return !isNil(rowValue) && filterHqs.includes(String(rowValue).trim().toLowerCase());
       });
-      console.log('🔍 Drawer Debug - After HQ filter:', beforeCount, '->', filteredData.length);
-    }
-    
-    console.log('🔍 Drawer Debug - Final filtered data count:', filteredData.length);
-    if (filteredData.length > 0) {
-      console.log('🔍 Drawer Debug - Sample row:', filteredData[0]);
     }
 
     setDrawerData(filteredData);
@@ -821,21 +794,14 @@ const TableDataProvider = (props) => {
 
   // Sync propDrawerVisible with state
   useEffect(() => {
-    console.log('🔍 Drawer Visibility Changed:', propDrawerVisible);
-    console.log('🔍 currentRawData length:', currentRawData?.length);
-    console.log('🔍 currentTableData length:', currentTableData?.length);
-    
     setDrawerVisible(propDrawerVisible);
     
     // If opened manually (e.g., via Plasmic prop), use raw data so drawer filters work correctly
     if (propDrawerVisible) {
       // Use raw data (not filtered table data) so that drawer-specific filters can be applied
       const initialData = currentRawData || currentTableData || [];
-      console.log('🔍 Opening drawer with data length:', initialData.length);
       if (initialData.length > 0) {
         openDrawerWithData(initialData, null, null);
-      } else {
-        console.warn('⚠️ No data available to open drawer with!');
       }
     }
   }, [propDrawerVisible, currentRawData, currentTableData, openDrawerWithData]);
@@ -1175,101 +1141,75 @@ const TableDataProvider = (props) => {
       >
         <div className="flex flex-col h-full">
           <div className="flex-1">
-            {drawerTabs && Array.isArray(drawerTabs) && drawerTabs.length > 0 ? (
+            {drawerTabs && drawerTabs.length > 0 ? (
               <TabView
                 activeIndex={Math.min(activeDrawerTabIndex, Math.max(0, drawerTabs.length - 1))}
                 onTabChange={(e) => setActiveDrawerTabIndex(e.index)}
                 className="h-full flex flex-col"
               >
-                {drawerTabs.map((tab) => {
-                  // Ensure tab has valid structure
-                  const safeTab = {
-                    id: tab?.id || `tab-${Math.random()}`,
-                    name: tab?.name || 'Tab',
-                    outerGroup: tab?.outerGroup || null,
-                    innerGroup: tab?.innerGroup || null,
-                  };
-                  return (
-                    <TabPanel
-                      key={safeTab.id}
-                      header={safeTab.name || `Tab ${drawerTabs.indexOf(tab) + 1}`}
-                      className="h-full flex flex-col"
-                    >
-                      <div className="flex-1 overflow-auto">
-                        {drawerData && drawerData.length > 0 ? (
+                {drawerTabs.map((tab) => (
+                  <TabPanel
+                    key={tab.id}
+                    header={tab.name || `Tab ${drawerTabs.indexOf(tab) + 1}`}
+                    className="h-full flex flex-col"
+                  >
+                    <div className="flex-1 overflow-auto">
+                      {drawerData && drawerData.length > 0 ? (
                         <TableOperationsContext.Provider value={{
-                          // Create a minimal, safe context for drawer
-                          tableData: drawerData,
-                          rawTableData: drawerData,
+                          ...consolidatedData,
                           paginatedData: drawerData,
                           pagination: { first: 0, rows: drawerData.length },
-                          visibleColumns: [],
-                          enableFilter: enableFilter || false,
-                          enableSort: enableSort || false,
-                          enableSummation: enableSummation || false,
-                          enableGrouping: false,
-                          enableDivideBy1Lakh: enableDivideBy1Lakh || false,
-                          outerGroupField: safeTab.outerGroup || null,
-                          innerGroupField: safeTab.innerGroup || null,
-                          textFilterColumns: [],
-                          redFields: [],
-                          greenFields: [],
-                          percentageColumns: [],
-                          columnTypes: {},
-                          isAdminMode: true,
+                          visibleColumns: [], // Show all in drawer
+                          enableFilter: enableFilter,
+                          enableSort: enableSort,
+                          enableSummation: enableSummation,
+                          outerGroupField: tab.outerGroup,
+                          innerGroupField: tab.innerGroup,
+                          // Don't apply auth filters here - data is already filtered by openDrawerWithData
                           salesTeamColumn: null,
                           salesTeamValues: [],
                           hqColumn: null,
                           hqValues: [],
-                          // Provide empty functions for operations
-                          updateFilter: () => {},
-                          clearFilter: () => {},
-                          clearAllFilters: () => {},
-                          updateSort: () => {},
-                          updatePagination: () => {},
-                          updateExpandedRows: () => {},
-                          updateVisibleColumns: () => {},
                         }}>
-                            <DataTableComponent
-                              data={drawerData}
-                              useOrchestrationLayer={true}
-                              rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
-                              defaultRows={10}
-                              scrollable={false}
-                              enableSort={enableSort}
-                              enableFilter={enableFilter}
-                              enableSummation={enableSummation}
-                              textFilterColumns={textFilterColumns || []}
-                              visibleColumns={[]}
-                              onVisibleColumnsChange={stableOnVisibleColumnsChange}
-                              redFields={redFields || []}
-                              greenFields={greenFields || []}
-                              outerGroupField={safeTab.outerGroup}
-                              innerGroupField={safeTab.innerGroup}
-                              percentageColumns={percentageColumns || []}
-                              enableDivideBy1Lakh={enableDivideBy1Lakh}
-                              enableCellEdit={false}
-                              columnTypes={columnTypes || {}}
-                              tableName="sidebar"
-                              isAdminMode={true}
-                              // Don't apply auth filters here - data is already filtered by openDrawerWithData
-                              salesTeamColumn={null}
-                              salesTeamValues={[]}
-                              hqColumn={null}
-                              hqValues={[]}
-                            />
-                          </TableOperationsContext.Provider>
-                        ) : (
-                          <div className="flex flex-col items-center justify-center h-full text-center">
-                            <i className="pi pi-inbox text-4xl text-gray-400 mb-4"></i>
-                            <p className="text-gray-600 font-medium">No data available</p>
-                            <p className="text-sm text-gray-500 mt-1">No matching rows found</p>
-                          </div>
-                        )}
-                      </div>
-                    </TabPanel>
-                  );
-                })}
+                          <DataTableComponent
+                            data={drawerData}
+                            useOrchestrationLayer={true}
+                            rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
+                            defaultRows={10}
+                            scrollable={false}
+                            enableSort={enableSort}
+                            enableFilter={enableFilter}
+                            enableSummation={enableSummation}
+                            textFilterColumns={textFilterColumns}
+                            visibleColumns={visibleColumns}
+                            onVisibleColumnsChange={stableOnVisibleColumnsChange}
+                            redFields={redFields}
+                            greenFields={greenFields}
+                            outerGroupField={tab.outerGroup}
+                            innerGroupField={tab.innerGroup}
+                            percentageColumns={percentageColumns}
+                            enableDivideBy1Lakh={enableDivideBy1Lakh}
+                            enableCellEdit={false}
+                            columnTypes={columnTypes}
+                            tableName="sidebar"
+                            isAdminMode={true}
+                            // Don't apply auth filters here - data is already filtered by openDrawerWithData
+                            salesTeamColumn={null}
+                            salesTeamValues={[]}
+                            hqColumn={null}
+                            hqValues={[]}
+                          />
+                        </TableOperationsContext.Provider>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center h-full text-center">
+                          <i className="pi pi-inbox text-4xl text-gray-400 mb-4"></i>
+                          <p className="text-gray-600 font-medium">No data available</p>
+                          <p className="text-sm text-gray-500 mt-1">No matching rows found</p>
+                        </div>
+                      )}
+                    </div>
+                  </TabPanel>
+                ))}
               </TabView>
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-center">
