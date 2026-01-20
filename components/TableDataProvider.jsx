@@ -792,30 +792,16 @@ const TableDataProvider = (props) => {
   }, [propOnDrawerVisibleChange, drawerSalesTeamColumn, JSON.stringify(drawerSalesTeamValues), drawerHqColumn, JSON.stringify(drawerHqValues)]);
 
   const openDrawerForOuterGroup = useCallback((value) => {
-    console.log('🎯 ROW CLICK - Opening drawer for OUTER group');
-    console.log('🎯 ROW CLICK - Outer field:', outerGroupField);
-    console.log('🎯 ROW CLICK - Outer value:', value);
-    
     // Use raw data so drawer can apply its own filters (sales team, HQ, etc.)
     const dataToFilter = currentRawData || currentTableData || [];
     const filtered = lodashFilter(dataToFilter, (row) => {
       const rowValue = get(row, outerGroupField);
       return isNil(value) ? isNil(rowValue) : String(rowValue) === String(value);
     });
-    
-    console.log('🎯 ROW CLICK - Filtered data count:', filtered.length);
-    if (filtered.length > 0) {
-      console.log('🎯 ROW CLICK - Sample row:', filtered[0]);
-    }
-    
     openDrawerWithData(filtered, value, null);
   }, [currentRawData, currentTableData, outerGroupField, openDrawerWithData]);
 
   const openDrawerForInnerGroup = useCallback((outerValue, value) => {
-    console.log('🎯 ROW CLICK - Opening drawer for INNER group');
-    console.log('🎯 ROW CLICK - Outer field:', outerGroupField, '=', outerValue);
-    console.log('🎯 ROW CLICK - Inner field:', innerGroupField, '=', value);
-    
     // Use raw data so drawer can apply its own filters (sales team, HQ, etc.)
     const dataToFilter = currentRawData || currentTableData || [];
     const filtered = lodashFilter(dataToFilter, (row) => {
@@ -825,12 +811,6 @@ const TableDataProvider = (props) => {
       if (!outerMatch) return false;
       return isNil(value) ? isNil(rowInnerValue) : String(rowInnerValue) === String(value);
     });
-    
-    console.log('🎯 ROW CLICK - Filtered data count:', filtered.length);
-    if (filtered.length > 0) {
-      console.log('🎯 ROW CLICK - Sample row:', filtered[0]);
-    }
-    
     openDrawerWithData(filtered, outerValue, value);
   }, [currentRawData, currentTableData, outerGroupField, innerGroupField, openDrawerWithData]);
 
@@ -1234,17 +1214,17 @@ const TableDataProvider = (props) => {
                             enableSort={enableSort}
                             enableFilter={enableFilter}
                             enableSummation={enableSummation}
-                            textFilterColumns={textFilterColumns}
-                            visibleColumns={visibleColumns}
+                            textFilterColumns={textFilterColumns || []}
+                            visibleColumns={[]}
                             onVisibleColumnsChange={stableOnVisibleColumnsChange}
-                            redFields={redFields}
-                            greenFields={greenFields}
+                            redFields={redFields || []}
+                            greenFields={greenFields || []}
                             outerGroupField={tab.outerGroup}
                             innerGroupField={tab.innerGroup}
-                            percentageColumns={percentageColumns}
+                            percentageColumns={percentageColumns || []}
                             enableDivideBy1Lakh={enableDivideBy1Lakh}
                             enableCellEdit={false}
-                            columnTypes={columnTypes}
+                            columnTypes={columnTypes || {}}
                             tableName="sidebar"
                             isAdminMode={true}
                             // Don't apply auth filters here - data is already filtered by openDrawerWithData
