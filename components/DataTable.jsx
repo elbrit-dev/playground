@@ -597,10 +597,32 @@ const DataTableWrapper = (props) => {
     setClickedDrawerValues({ outerValue: value, innerValue: null });
     setActiveDrawerTabIndex(0);
 
-    const filteredData = lodashFilter(originalData, (row) => {
+    let filteredData = lodashFilter(originalData, (row) => {
       const rowValue = get(row, outerGroupField);
       return isNil(value) ? isNil(rowValue) : String(rowValue) === String(value);
     });
+
+    // Apply auth filters for drawer if not admin
+    if (!isAdminMode) {
+      if (salesTeamColumn && salesTeamValues && salesTeamValues.length > 0) {
+        filteredData = lodashFilter(filteredData, (row) => {
+          const rowValue = get(row, salesTeamColumn);
+          if (Array.isArray(rowValue)) {
+            return rowValue.some(rv => salesTeamValues.some(v => String(v) === String(rv)));
+          }
+          return salesTeamValues.some(v => !isNil(rowValue) && String(v) === String(rowValue));
+        });
+      }
+      if (hqColumn && hqValues && hqValues.length > 0) {
+        filteredData = lodashFilter(filteredData, (row) => {
+          const rowValue = get(row, hqColumn);
+          if (Array.isArray(rowValue)) {
+            return rowValue.some(rv => hqValues.some(v => String(v) === String(rv)));
+          }
+          return hqValues.some(v => !isNil(rowValue) && String(v) === String(rowValue));
+        });
+      }
+    }
 
     setDrawerData(filteredData);
     setDrawerVisible(true);
@@ -614,7 +636,7 @@ const DataTableWrapper = (props) => {
     setClickedDrawerValues({ outerValue, innerValue: value });
     setActiveDrawerTabIndex(0);
 
-    const filteredData = lodashFilter(originalData, (row) => {
+    let filteredData = lodashFilter(originalData, (row) => {
       const rowOuterValue = get(row, outerGroupField);
       const rowInnerValue = get(row, innerGroupField);
 
@@ -623,6 +645,28 @@ const DataTableWrapper = (props) => {
 
       return isNil(value) ? isNil(rowInnerValue) : String(rowInnerValue) === String(value);
     });
+
+    // Apply auth filters for drawer if not admin
+    if (!isAdminMode) {
+      if (salesTeamColumn && salesTeamValues && salesTeamValues.length > 0) {
+        filteredData = lodashFilter(filteredData, (row) => {
+          const rowValue = get(row, salesTeamColumn);
+          if (Array.isArray(rowValue)) {
+            return rowValue.some(rv => salesTeamValues.some(v => String(v) === String(rv)));
+          }
+          return salesTeamValues.some(v => !isNil(rowValue) && String(v) === String(rowValue));
+        });
+      }
+      if (hqColumn && hqValues && hqValues.length > 0) {
+        filteredData = lodashFilter(filteredData, (row) => {
+          const rowValue = get(row, hqColumn);
+          if (Array.isArray(rowValue)) {
+            return rowValue.some(rv => hqValues.some(v => String(v) === String(rv)));
+          }
+          return hqValues.some(v => !isNil(rowValue) && String(v) === String(rowValue));
+        });
+      }
+    }
 
     setDrawerData(filteredData);
     setDrawerVisible(true);

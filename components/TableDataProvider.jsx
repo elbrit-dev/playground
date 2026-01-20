@@ -733,12 +733,36 @@ const TableDataProvider = (props) => {
   }, []);
 
   const openDrawerWithData = useCallback((data, outerValue, innerValue) => {
-    setDrawerData(data || []);
+    let filteredData = data || [];
+
+    // Apply drawer-specific auth filters if not admin
+    if (!isAdminMode) {
+      if (drawerSalesTeamColumn && drawerSalesTeamValues && drawerSalesTeamValues.length > 0) {
+        filteredData = lodashFilter(filteredData, (row) => {
+          const rowValue = get(row, drawerSalesTeamColumn);
+          if (Array.isArray(rowValue)) {
+            return rowValue.some(rv => drawerSalesTeamValues.some(v => String(v) === String(rv)));
+          }
+          return drawerSalesTeamValues.some(v => !isNil(rowValue) && String(v) === String(rowValue));
+        });
+      }
+      if (drawerHqColumn && drawerHqValues && drawerHqValues.length > 0) {
+        filteredData = lodashFilter(filteredData, (row) => {
+          const rowValue = get(row, drawerHqColumn);
+          if (Array.isArray(rowValue)) {
+            return rowValue.some(rv => drawerHqValues.some(v => String(v) === String(rv)));
+          }
+          return drawerHqValues.some(v => !isNil(rowValue) && String(v) === String(rowValue));
+        });
+      }
+    }
+
+    setDrawerData(filteredData);
     setClickedDrawerValues({ outerValue, innerValue });
     setActiveDrawerTabIndex(0);
     setDrawerVisible(true);
     propOnDrawerVisibleChange?.(true);
-  }, [propOnDrawerVisibleChange]);
+  }, [propOnDrawerVisibleChange, isAdminMode, drawerSalesTeamColumn, JSON.stringify(drawerSalesTeamValues), drawerHqColumn, JSON.stringify(drawerHqValues)]);
 
   const openDrawerForOuterGroup = useCallback((value) => {
     // We use currentTableData which is the filtered data from DataProvider
@@ -1126,6 +1150,10 @@ const TableDataProvider = (props) => {
                           enableSummation: enableSummation,
                           outerGroupField: tab.outerGroup,
                           innerGroupField: tab.innerGroup,
+                          salesTeamColumn: drawerSalesTeamColumn,
+                          salesTeamValues: drawerSalesTeamValues,
+                          hqColumn: drawerHqColumn,
+                          hqValues: drawerHqValues,
                         }}>
                           <DataTableComponent
                             data={drawerData}
