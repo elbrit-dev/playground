@@ -605,21 +605,23 @@ const DataTableWrapper = (props) => {
     // Apply auth filters for drawer if not admin
     if (!isAdminMode) {
       if (salesTeamColumn && salesTeamValues && salesTeamValues.length > 0) {
+        const allowedTeams = lodashFilter(flatMap([salesTeamValues], v => v), v => !isNil(v)).map(v => String(v).trim().toLowerCase());
         filteredData = lodashFilter(filteredData, (row) => {
           const rowValue = get(row, salesTeamColumn);
           if (Array.isArray(rowValue)) {
-            return rowValue.some(rv => salesTeamValues.some(v => String(v) === String(rv)));
+            return rowValue.some(rv => allowedTeams.includes(String(rv).trim().toLowerCase()));
           }
-          return salesTeamValues.some(v => !isNil(rowValue) && String(v) === String(rowValue));
+          return !isNil(rowValue) && allowedTeams.includes(String(rowValue).trim().toLowerCase());
         });
       }
       if (hqColumn && hqValues && hqValues.length > 0) {
+        const allowedHqs = lodashFilter(flatMap([hqValues], v => v), v => !isNil(v)).map(v => String(v).trim().toLowerCase());
         filteredData = lodashFilter(filteredData, (row) => {
           const rowValue = get(row, hqColumn);
           if (Array.isArray(rowValue)) {
-            return rowValue.some(rv => hqValues.some(v => String(v) === String(rv)));
+            return rowValue.some(rv => allowedHqs.includes(String(rv).trim().toLowerCase()));
           }
-          return hqValues.some(v => !isNil(rowValue) && String(v) === String(rowValue));
+          return !isNil(rowValue) && allowedHqs.includes(String(rowValue).trim().toLowerCase());
         });
       }
     }
@@ -649,21 +651,23 @@ const DataTableWrapper = (props) => {
     // Apply auth filters for drawer if not admin
     if (!isAdminMode) {
       if (salesTeamColumn && salesTeamValues && salesTeamValues.length > 0) {
+        const allowedTeams = lodashFilter(flatMap([salesTeamValues], v => v), v => !isNil(v)).map(v => String(v).trim().toLowerCase());
         filteredData = lodashFilter(filteredData, (row) => {
           const rowValue = get(row, salesTeamColumn);
           if (Array.isArray(rowValue)) {
-            return rowValue.some(rv => salesTeamValues.some(v => String(v) === String(rv)));
+            return rowValue.some(rv => allowedTeams.includes(String(rv).trim().toLowerCase()));
           }
-          return salesTeamValues.some(v => !isNil(rowValue) && String(v) === String(rowValue));
+          return !isNil(rowValue) && allowedTeams.includes(String(rowValue).trim().toLowerCase());
         });
       }
       if (hqColumn && hqValues && hqValues.length > 0) {
+        const allowedHqs = lodashFilter(flatMap([hqValues], v => v), v => !isNil(v)).map(v => String(v).trim().toLowerCase());
         filteredData = lodashFilter(filteredData, (row) => {
           const rowValue = get(row, hqColumn);
           if (Array.isArray(rowValue)) {
-            return rowValue.some(rv => hqValues.some(v => String(v) === String(rv)));
+            return rowValue.some(rv => allowedHqs.includes(String(rv).trim().toLowerCase()));
           }
-          return hqValues.some(v => !isNil(rowValue) && String(v) === String(rowValue));
+          return !isNil(rowValue) && allowedHqs.includes(String(rowValue).trim().toLowerCase());
         });
       }
     }

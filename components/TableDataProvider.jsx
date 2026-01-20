@@ -357,7 +357,16 @@ const TableDataProvider = (props) => {
   // Sync propDrawerVisible with state
   useEffect(() => {
     setDrawerVisible(propDrawerVisible);
-  }, [propDrawerVisible]);
+    
+    // If opened manually (e.g., via Plasmic prop) and we have no data yet, 
+    // attempt to populate it with all available table data for previewing.
+    if (propDrawerVisible && (!drawerData || drawerData.length === 0)) {
+      const initialData = currentTableData || [];
+      if (initialData.length > 0) {
+        openDrawerWithData(initialData, null, null);
+      }
+    }
+  }, [propDrawerVisible, currentTableData, openDrawerWithData]);
 
   // New internal state to expose to Plasmic
   const [savedQueries, setSavedQueries] = useState([]);
@@ -738,21 +747,27 @@ const TableDataProvider = (props) => {
     // Apply drawer-specific auth filters if not admin
     if (!isAdminMode) {
       if (drawerSalesTeamColumn && drawerSalesTeamValues && drawerSalesTeamValues.length > 0) {
+        // Flatten values in case Plasmic passed nested arrays like [["Team A"]]
+        const allowedTeams = lodashFilter(flatMap([drawerSalesTeamValues], v => v), v => !isNil(v)).map(v => String(v).trim().toLowerCase());
+        
         filteredData = lodashFilter(filteredData, (row) => {
           const rowValue = get(row, drawerSalesTeamColumn);
           if (Array.isArray(rowValue)) {
-            return rowValue.some(rv => drawerSalesTeamValues.some(v => String(v) === String(rv)));
+            return rowValue.some(rv => allowedTeams.includes(String(rv).trim().toLowerCase()));
           }
-          return drawerSalesTeamValues.some(v => !isNil(rowValue) && String(v) === String(rowValue));
+          return !isNil(rowValue) && allowedTeams.includes(String(rowValue).trim().toLowerCase());
         });
       }
       if (drawerHqColumn && drawerHqValues && drawerHqValues.length > 0) {
+        // Flatten values
+        const allowedHqs = lodashFilter(flatMap([drawerHqValues], v => v), v => !isNil(v)).map(v => String(v).trim().toLowerCase());
+
         filteredData = lodashFilter(filteredData, (row) => {
           const rowValue = get(row, drawerHqColumn);
           if (Array.isArray(rowValue)) {
-            return rowValue.some(rv => drawerHqValues.some(v => String(v) === String(rv)));
+            return rowValue.some(rv => allowedHqs.includes(String(rv).trim().toLowerCase()));
           }
-          return drawerHqValues.some(v => !isNil(rowValue) && String(v) === String(rowValue));
+          return !isNil(rowValue) && allowedHqs.includes(String(rowValue).trim().toLowerCase());
         });
       }
     }
