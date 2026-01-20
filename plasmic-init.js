@@ -193,6 +193,28 @@ PLASMIC.registerComponent(TableDataProvider, {
       type: "object",
       defaultValue: [],
     },
+    drawerSalesTeamColumn: {
+      type: "string",
+      description: "Drawer-specific column name for Sales Team filtering",
+    },
+    drawerSalesTeamValues: {
+      type: "object",
+      description: "Drawer-specific array of allowed Sales Team values",
+      defaultValue: [],
+    },
+    drawerHqColumn: {
+      type: "string",
+      description: "Drawer-specific column name for HQ filtering",
+    },
+    drawerHqValues: {
+      type: "object",
+      description: "Drawer-specific array of allowed HQ values",
+      defaultValue: [],
+    },
+    drawerVisible: {
+      type: "boolean",
+      defaultValue: false,
+    },
     enableReport: {
       type: "boolean",
       defaultValue: false,
@@ -263,6 +285,10 @@ PLASMIC.registerComponent(TableDataProvider, {
     onDrawerTabsChange: {
       type: "eventHandler",
       argTypes: [{ name: "tabs", type: "object" }],
+    },
+    onDrawerVisibleChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "visible", type: "boolean" }],
     },
     onColumnTypesChange: {
       type: "eventHandler",

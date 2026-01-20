@@ -7,10 +7,9 @@ import { DataProvider as PlasmicDataProvider } from "@plasmicapp/loader-nextjs";
 import { Dropdown } from 'primereact/dropdown';
 import { Sidebar } from 'primereact/sidebar';
 import { TabView, TabPanel } from 'primereact/tabview';
-import DataTableComponent from '../share/datatable/components/DataTable';
+import DataTableOldComponent from '../share/datatable/components/DataTableOld';
 import { startCase, filter as lodashFilter, get, isNil } from 'lodash';
 import { TableProvider } from './TableContext';
-import { TableOperationsContext } from '../share/datatable/contexts/TableOperationsContext';
 import dayjs from 'dayjs';
 import { firestoreService } from '../share/graphql-playground/services/firestoreService';
 import { indexedDBService } from '../share/datatable/utils/indexedDBService';
@@ -225,6 +224,12 @@ const TableDataProvider = (props) => {
     onBreakdownTypeChange: propOnBreakdownTypeChange,
     onOuterGroupFieldChange: propOnOuterGroupFieldChange,
     onInnerGroupFieldChange: propOnInnerGroupFieldChange,
+    drawerSalesTeamColumn: propDrawerSalesTeamColumn = null,
+    drawerSalesTeamValues: propDrawerSalesTeamValues = [],
+    drawerHqColumn: propDrawerHqColumn = null,
+    drawerHqValues: propDrawerHqValues = [],
+    drawerVisible: propDrawerVisible = false,
+    onDrawerVisibleChange: propOnDrawerVisibleChange,
     className,
     style,
     ...otherProps // Collect all other individual props to use as variables
@@ -248,15 +253,48 @@ const TableDataProvider = (props) => {
   const dateColumn = propDateColumn !== null ? propDateColumn : dateColumnRawState;
   const breakdownType = propBreakdownType !== 'month' ? propBreakdownType : breakdownTypeRawState;
 
+  // 3. Normalize string inputs to arrays for Sales Team and HQ
+  const normalizedSalesTeamValues = useMemo(() => {
+    if (typeof salesTeamValues === 'string') return salesTeamValues ? [salesTeamValues] : [];
+    return Array.isArray(salesTeamValues) ? salesTeamValues : [];
+  }, [salesTeamValues]);
+
+  const normalizedHqValues = useMemo(() => {
+    if (typeof hqValues === 'string') return hqValues ? [hqValues] : [];
+    return Array.isArray(hqValues) ? hqValues : [];
+  }, [hqValues]);
+
+  // Normalize Drawer-specific string inputs
+  const normalizedDrawerSalesTeamValues = useMemo(() => {
+    if (typeof propDrawerSalesTeamValues === 'string') return propDrawerSalesTeamValues ? [propDrawerSalesTeamValues] : [];
+    return Array.isArray(propDrawerSalesTeamValues) ? propDrawerSalesTeamValues : [];
+  }, [propDrawerSalesTeamValues]);
+
+  const normalizedDrawerHqValues = useMemo(() => {
+    if (typeof propDrawerHqValues === 'string') return propDrawerHqValues ? [propDrawerHqValues] : [];
+    return Array.isArray(propDrawerHqValues) ? propDrawerHqValues : [];
+  }, [propDrawerHqValues]);
+
+  // Determine final drawer filter values (Prop > Inherited from main)
+  const drawerSalesTeamColumn = propDrawerSalesTeamColumn || salesTeamColumn;
+  const drawerSalesTeamValues = normalizedDrawerSalesTeamValues.length > 0 ? normalizedDrawerSalesTeamValues : normalizedSalesTeamValues;
+  const drawerHqColumn = propDrawerHqColumn || hqColumn;
+  const drawerHqValues = normalizedDrawerHqValues.length > 0 ? normalizedDrawerHqValues : normalizedHqValues;
+
   const [currentTableData, setCurrentTableData] = useState(null);
   const [currentRawData, setCurrentRawData] = useState(null);
   const [currentVariables, setCurrentVariables] = useState({});
   
   // Drawer state
-  const [drawerVisible, setDrawerVisible] = useState(false);
+  const [drawerVisible, setDrawerVisible] = useState(propDrawerVisible);
   const [drawerData, setDrawerData] = useState([]);
   const [activeDrawerTabIndex, setActiveDrawerTabIndex] = useState(0);
   const [clickedDrawerValues, setClickedDrawerValues] = useState({ outerValue: null, innerValue: null });
+
+  // Sync propDrawerVisible with state
+  useEffect(() => {
+    setDrawerVisible(propDrawerVisible);
+  }, [propDrawerVisible]);
 
   // New internal state to expose to Plasmic
   const [savedQueries, setSavedQueries] = useState([]);
@@ -579,7 +617,8 @@ const TableDataProvider = (props) => {
     setClickedDrawerValues({ outerValue, innerValue });
     setActiveDrawerTabIndex(0);
     setDrawerVisible(true);
-  }, []);
+    propOnDrawerVisibleChange?.(true);
+  }, [propOnDrawerVisibleChange]);
 
   const openDrawerForOuterGroup = useCallback((value) => {
     // We use currentTableData which is the filtered data from DataProvider
@@ -605,7 +644,8 @@ const TableDataProvider = (props) => {
 
   const closeDrawer = useCallback(() => {
     setDrawerVisible(false);
-  }, []);
+    propOnDrawerVisibleChange?.(false);
+  }, [propOnDrawerVisibleChange]);
 
   // Stabilize merged variables to prevent infinite fetch loops
   // We only pass variables as "overrides" if they actually differ from the base variables
@@ -675,9 +715,9 @@ const TableDataProvider = (props) => {
     dataSource,
     isAdminMode,
     salesTeamColumn,
-    salesTeamValues,
+    salesTeamValues: normalizedSalesTeamValues,
     hqColumn,
-    hqValues,
+    hqValues: normalizedHqValues,
     columnTypes,
     useOrchestrationLayer,
     enableSort,
@@ -710,8 +750,8 @@ const TableDataProvider = (props) => {
   }), [
     currentTableData, currentRawData, currentVariables, savedQueries,
     loadingQueries, executingQuery, availableQueryKeys, selectedQueryKey,
-    loadingData, lastUpdatedAt, dataSource, isAdminMode, salesTeamColumn, salesTeamValues,
-    hqColumn, hqValues, columnTypes, useOrchestrationLayer,
+    loadingData, lastUpdatedAt, dataSource, isAdminMode, salesTeamColumn, normalizedSalesTeamValues,
+    hqColumn, normalizedHqValues, columnTypes, useOrchestrationLayer,
     enableSort, enableFilter, enableSummation, enableGrouping,
     enableDivideBy1Lakh, textFilterColumns, visibleColumns, redFields, greenFields,
     outerGroupField, innerGroupField, percentageColumns, drawerTabs,
@@ -753,9 +793,9 @@ const TableDataProvider = (props) => {
       variableOverrides={stableOverrides}
       isAdminMode={isAdminMode}
       salesTeamColumn={salesTeamColumn}
-      salesTeamValues={salesTeamValues}
+      salesTeamValues={normalizedSalesTeamValues}
       hqColumn={hqColumn}
-      hqValues={hqValues}
+      hqValues={normalizedHqValues}
       columnTypes={columnTypes}
       columnTypesOverride={columnTypes}
       enableSort={enableSort}
@@ -951,41 +991,27 @@ const TableDataProvider = (props) => {
                   >
                     <div className="flex-1 overflow-auto">
                       {drawerData && drawerData.length > 0 ? (
-                        <TableOperationsContext.Provider value={{
-                          ...consolidatedData,
-                          paginatedData: drawerData,
-                          pagination: { first: 0, rows: drawerData.length },
-                          visibleColumns: [], // Show all in drawer
-                          enableFilter: enableFilter,
-                          enableSort: enableSort,
-                          enableSummation: enableSummation,
-                          outerGroupField: tab.outerGroup,
-                          innerGroupField: tab.innerGroup,
-                        }}>
-                          <DataTableComponent
-                            data={drawerData}
-                            useOrchestrationLayer={true}
-                            rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
-                            defaultRows={10}
-                            scrollable={true}
-                            scrollHeight="calc(100dvh - 180px)"
-                            enableSort={enableSort}
-                            enableFilter={enableFilter}
-                            enableSummation={enableSummation}
-                            textFilterColumns={textFilterColumns}
-                            visibleColumns={visibleColumns}
-                            onVisibleColumnsChange={stableOnVisibleColumnsChange}
-                            redFields={redFields}
-                            greenFields={greenFields}
-                            outerGroupField={tab.outerGroup}
-                            innerGroupField={tab.innerGroup}
-                            percentageColumns={percentageColumns}
-                            enableDivideBy1Lakh={enableDivideBy1Lakh}
-                            enableCellEdit={false}
-                            columnTypes={columnTypes}
-                            tableName="sidebar"
-                          />
-                        </TableOperationsContext.Provider>
+                        <DataTableOldComponent
+                          data={drawerData}
+                          rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
+                          defaultRows={10}
+                          scrollable={false}
+                          enableSort={enableSort}
+                          enableFilter={enableFilter}
+                          enableSummation={enableSummation}
+                          textFilterColumns={textFilterColumns}
+                          visibleColumns={visibleColumns}
+                          onVisibleColumnsChange={stableOnVisibleColumnsChange}
+                          redFields={redFields}
+                          greenFields={greenFields}
+                          outerGroupField={tab.outerGroup}
+                          innerGroupField={tab.innerGroup}
+                          percentageColumns={percentageColumns}
+                          enableDivideBy1Lakh={enableDivideBy1Lakh}
+                          enableCellEdit={false}
+                          columnTypes={columnTypes}
+                          tableName="sidebar"
+                        />
                       ) : (
                         <div className="flex flex-col items-center justify-center h-full text-center">
                           <i className="pi pi-inbox text-4xl text-gray-400 mb-4"></i>
