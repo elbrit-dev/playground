@@ -7,9 +7,10 @@ import { DataProvider as PlasmicDataProvider } from "@plasmicapp/loader-nextjs";
 import { Dropdown } from 'primereact/dropdown';
 import { Sidebar } from 'primereact/sidebar';
 import { TabView, TabPanel } from 'primereact/tabview';
-import DataTableOldComponent from '../share/datatable/components/DataTableOld';
+import DataTableComponent from '../share/datatable/components/DataTable';
 import { startCase, filter as lodashFilter, get, isNil } from 'lodash';
 import { TableProvider } from './TableContext';
+import { TableOperationsContext } from '../share/datatable/contexts/TableOperationsContext';
 import dayjs from 'dayjs';
 import { firestoreService } from '../share/graphql-playground/services/firestoreService';
 import { indexedDBService } from '../share/datatable/utils/indexedDBService';
@@ -254,91 +255,26 @@ const TableDataProvider = (props) => {
   const breakdownType = propBreakdownType !== 'month' ? propBreakdownType : breakdownTypeRawState;
 
   // 3. Normalize string inputs to arrays for Sales Team and HQ
-  // Using refs to ensure stable references if the content hasn't changed
-  const lastSalesTeamValuesRef = useRef([]);
   const normalizedSalesTeamValues = useMemo(() => {
-    let current;
-    if (typeof salesTeamValues === 'string') {
-      current = salesTeamValues ? [salesTeamValues] : [];
-    } else {
-      current = Array.isArray(salesTeamValues) ? salesTeamValues : [];
-    }
-    
-    if (JSON.stringify(lastSalesTeamValuesRef.current) === JSON.stringify(current)) {
-      return lastSalesTeamValuesRef.current;
-    }
-    lastSalesTeamValuesRef.current = current;
-    return current;
+    if (typeof salesTeamValues === 'string') return salesTeamValues ? [salesTeamValues] : [];
+    return Array.isArray(salesTeamValues) ? salesTeamValues : [];
   }, [salesTeamValues]);
 
-  const lastHqValuesRef = useRef([]);
   const normalizedHqValues = useMemo(() => {
-    let current;
-    if (typeof hqValues === 'string') {
-      current = hqValues ? [hqValues] : [];
-    } else {
-      current = Array.isArray(hqValues) ? hqValues : [];
-    }
-
-    if (JSON.stringify(lastHqValuesRef.current) === JSON.stringify(current)) {
-      return lastHqValuesRef.current;
-    }
-    lastHqValuesRef.current = current;
-    return current;
+    if (typeof hqValues === 'string') return hqValues ? [hqValues] : [];
+    return Array.isArray(hqValues) ? hqValues : [];
   }, [hqValues]);
 
   // Normalize Drawer-specific string inputs
-  const lastDrawerSalesTeamValuesRef = useRef([]);
   const normalizedDrawerSalesTeamValues = useMemo(() => {
-    let current;
-    if (typeof propDrawerSalesTeamValues === 'string') {
-      current = propDrawerSalesTeamValues ? [propDrawerSalesTeamValues] : [];
-    } else {
-      current = Array.isArray(propDrawerSalesTeamValues) ? propDrawerSalesTeamValues : [];
-    }
-
-    if (JSON.stringify(lastDrawerSalesTeamValuesRef.current) === JSON.stringify(current)) {
-      return lastDrawerSalesTeamValuesRef.current;
-    }
-    lastDrawerSalesTeamValuesRef.current = current;
-    return current;
+    if (typeof propDrawerSalesTeamValues === 'string') return propDrawerSalesTeamValues ? [propDrawerSalesTeamValues] : [];
+    return Array.isArray(propDrawerSalesTeamValues) ? propDrawerSalesTeamValues : [];
   }, [propDrawerSalesTeamValues]);
 
-  const lastDrawerHqValuesRef = useRef([]);
   const normalizedDrawerHqValues = useMemo(() => {
-    let current;
-    if (typeof propDrawerHqValues === 'string') {
-      current = propDrawerHqValues ? [propDrawerHqValues] : [];
-    } else {
-      current = Array.isArray(propDrawerHqValues) ? propDrawerHqValues : [];
-    }
-
-    if (JSON.stringify(lastDrawerHqValuesRef.current) === JSON.stringify(current)) {
-      return lastDrawerHqValuesRef.current;
-    }
-    lastDrawerHqValuesRef.current = current;
-    return current;
+    if (typeof propDrawerHqValues === 'string') return propDrawerHqValues ? [propDrawerHqValues] : [];
+    return Array.isArray(propDrawerHqValues) ? propDrawerHqValues : [];
   }, [propDrawerHqValues]);
-
-  const lastColumnTypesRef = useRef({});
-  const stableColumnTypes = useMemo(() => {
-    const current = columnTypes || {};
-    if (JSON.stringify(lastColumnTypesRef.current) === JSON.stringify(current)) {
-      return lastColumnTypesRef.current;
-    }
-    lastColumnTypesRef.current = current;
-    return current;
-  }, [columnTypes]);
-
-  const lastDrawerTabsRef = useRef([]);
-  const stableDrawerTabs = useMemo(() => {
-    const current = (propDrawerTabs && propDrawerTabs.length > 0) ? propDrawerTabs : drawerTabsRawState;
-    if (JSON.stringify(lastDrawerTabsRef.current) === JSON.stringify(current)) {
-      return lastDrawerTabsRef.current;
-    }
-    lastDrawerTabsRef.current = current;
-    return current;
-  }, [propDrawerTabs, drawerTabsRawState]);
 
   // Determine final drawer filter values (Prop > Inherited from main)
   const drawerSalesTeamColumn = propDrawerSalesTeamColumn || salesTeamColumn;
@@ -459,14 +395,34 @@ const TableDataProvider = (props) => {
           setMonthRange(initialMonthRange);
           
           // Immediate fetch with new metadata
-          fetchLastUpdatedFromDB(dataSource, queryDoc, initialMonthRange);
+          // Using the local queryDoc and initialMonthRange directly to avoid dependency on state/useCallback that might change
+          try {
+            const indexResult = await indexedDBService.getQueryIndexResult(dataSource);
+            if (indexResult && indexResult.result) {
+              const result = indexResult.result;
+              let rawTimestamp = null;
+              if (queryDoc.month === true && initialMonthRange && initialMonthRange[0]) {
+                const yearMonthKey = dayjs(initialMonthRange[0]).format('YYYY-MM');
+                if (result && typeof result === 'object' && !Array.isArray(result)) {
+                  rawTimestamp = result[yearMonthKey] || null;
+                }
+              } else {
+                rawTimestamp = typeof result === 'string' ? result : null;
+              }
+              if (rawTimestamp) {
+                setLastUpdatedAt(rawTimestamp);
+              }
+            }
+          } catch (e) {
+            console.error('Error fetching timestamp during metadata load:', e);
+          }
         }
       } catch (error) {
         console.error('Error loading metadata in wrapper:', error);
       }
     };
     loadMetadata();
-  }, [dataSource, fetchLastUpdatedFromDB]);
+  }, [dataSource]); // Only depend on dataSource to prevent infinite loops
 
   // Sync monthRange from variableOverrides if they change in Plasmic
   useEffect(() => {
@@ -678,10 +634,7 @@ const TableDataProvider = (props) => {
   }, []);
 
   const openDrawerWithData = useCallback((data, outerValue, innerValue) => {
-    setDrawerData(prev => {
-      if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
-      return data || [];
-    });
+    setDrawerData(data || []);
     setClickedDrawerValues({ outerValue, innerValue });
     setActiveDrawerTabIndex(0);
     setDrawerVisible(true);
@@ -719,6 +672,9 @@ const TableDataProvider = (props) => {
   // We only pass variables as "overrides" if they actually differ from the base variables
   // reported by the core DataProvider. This allows the core to use its cache-first
   // logic for the initial load if the props match the query defaults.
+  // We use an empty object reference for "no overrides" to avoid triggering DataProvider
+  const NO_OVERRIDES = useMemo(() => ({}), []);
+
   const stableOverrides = useMemo(() => {
     const combined = {
       ...otherProps,
@@ -728,7 +684,7 @@ const TableDataProvider = (props) => {
     // If variables haven't been loaded from the query doc yet, we don't pass any
     // overrides to allow the core DataProvider to check its cache first.
     if (!variablesLoaded) {
-      return {};
+      return NO_OVERRIDES;
     }
 
     // Filter out values that match currentVariables to avoid redundant triggers
@@ -742,7 +698,9 @@ const TableDataProvider = (props) => {
         'outerGroupField', 'innerGroupField', 'drawerTabs',
         'enableReport', 'dateColumn', 'breakdownType',
         'onEnableReportChange', 'onDateColumnChange', 'onBreakdownTypeChange',
-        'onOuterGroupFieldChange', 'onInnerGroupFieldChange'
+        'onOuterGroupFieldChange', 'onInnerGroupFieldChange',
+        'drawerSalesTeamColumn', 'drawerSalesTeamValues', 'drawerHqColumn', 'drawerHqValues',
+        'drawerVisible', 'onDrawerVisibleChange'
       ].includes(key)) return;
 
       const value = combined[key];
@@ -764,10 +722,11 @@ const TableDataProvider = (props) => {
     
     if (hasActualOverride) {
       console.log('TableDataProvider: Detected variable overrides:', delta);
+      return delta;
     }
     
-    return hasActualOverride ? delta : {};
-  }, [variablesLoaded, JSON.stringify(otherProps), JSON.stringify(variableOverrides), JSON.stringify(currentVariables)]);
+    return NO_OVERRIDES;
+  }, [variablesLoaded, JSON.stringify(otherProps), JSON.stringify(variableOverrides), JSON.stringify(currentVariables), NO_OVERRIDES]);
 
   const consolidatedData = useMemo(() => ({
     tableData: currentTableData,
@@ -786,7 +745,7 @@ const TableDataProvider = (props) => {
     salesTeamValues: normalizedSalesTeamValues,
     hqColumn,
     hqValues: normalizedHqValues,
-    columnTypes: stableColumnTypes,
+    columnTypes,
     useOrchestrationLayer,
     enableSort,
     enableFilter,
@@ -800,7 +759,7 @@ const TableDataProvider = (props) => {
     outerGroupField,
     innerGroupField,
     percentageColumns,
-    drawerTabs: stableDrawerTabs,
+    drawerTabs,
     enableReport,
     dateColumn,
     breakdownType,
@@ -864,8 +823,8 @@ const TableDataProvider = (props) => {
       salesTeamValues={normalizedSalesTeamValues}
       hqColumn={hqColumn}
       hqValues={normalizedHqValues}
-      columnTypes={stableColumnTypes}
-      columnTypesOverride={stableColumnTypes}
+      columnTypes={columnTypes}
+      columnTypesOverride={columnTypes}
       enableSort={enableSort}
       enableFilter={enableFilter}
       enableSummation={enableSummation}
@@ -878,7 +837,7 @@ const TableDataProvider = (props) => {
       outerGroupField={outerGroupField}
       innerGroupField={innerGroupField}
       percentageColumns={percentageColumns}
-      drawerTabs={stableDrawerTabs}
+      drawerTabs={drawerTabs}
       enableReport={enableReport}
       dateColumn={dateColumn}
       breakdownType={breakdownType}
@@ -961,18 +920,12 @@ const TableDataProvider = (props) => {
               display: none !important;
             }
             
-            /* Hide the internal sidebar from DataProviderNew to avoid double sidebars */
-            body > .p-sidebar-bottom.p-sidebar-sm {
-              display: none !important;
-            }
-            
             /* Fix for Drawer scrolling issues */
-            .p-sidebar-bottom.custom-drawer {
+            .p-sidebar-bottom.p-sidebar-sm {
               height: 100dvh !important;
-              display: flex !important;
             }
             
-            .custom-drawer .p-sidebar-content {
+            .p-sidebar-bottom .p-sidebar-content {
               height: 100%;
               display: flex;
               flex-direction: column;
@@ -980,18 +933,18 @@ const TableDataProvider = (props) => {
               padding: 0 !important;
             }
             
-            .custom-drawer .p-tabview {
+            .p-sidebar-bottom .p-tabview {
               display: flex;
               flex-direction: column;
               height: 100%;
               min-height: 0;
             }
             
-            .custom-drawer .p-tabview-nav-container {
+            .p-sidebar-bottom .p-tabview-nav-container {
               flex-shrink: 0;
             }
             
-            .custom-drawer .p-tabview-panels {
+            .p-sidebar-bottom .p-tabview-panels {
               flex: 1;
               min-height: 0;
               display: flex;
@@ -999,7 +952,7 @@ const TableDataProvider = (props) => {
               padding: 0 !important;
             }
             
-            .custom-drawer .p-tabview-panel {
+            .p-sidebar-bottom .p-tabview-panel {
               flex: 1;
               display: flex;
               flex-direction: column;
@@ -1007,7 +960,10 @@ const TableDataProvider = (props) => {
               height: 100%;
             }
             
-            .custom-drawer .overflow-auto {
+            /* Target both the manual overflow-auto div and PrimeReact's internal wrapper */
+            .p-sidebar-bottom .overflow-auto,
+            .p-sidebar-bottom .p-datatable-wrapper,
+            .p-sidebar-bottom .p-datatable-scrollable-body {
               flex: 1;
               min-height: 0;
               overflow-y: auto !important;
@@ -1026,106 +982,6 @@ const TableDataProvider = (props) => {
           </div>
         </TableProvider>
       </PlasmicDataProvider>
-
-      {/* Drawer Sidebar - memoized to prevent unnecessary re-renders */}
-      {useMemo(() => (
-        <Sidebar
-          position="bottom"
-          blockScroll
-          visible={drawerVisible}
-          onHide={closeDrawer}
-          style={{ height: '100dvh' }}
-          className="custom-drawer"
-          header={
-            <h2 className="text-lg font-semibold text-gray-800 m-0">
-              {clickedDrawerValues.innerValue
-                ? `${clickedDrawerValues.outerValue} : ${clickedDrawerValues.innerValue}`
-                : clickedDrawerValues.outerValue || 'Drawer'}
-            </h2>
-          }
-        >
-          <div className="flex flex-col h-full">
-            <div className="flex-1">
-              {drawerTabs && drawerTabs.length > 0 ? (
-                <TabView
-                  activeIndex={Math.min(activeDrawerTabIndex, Math.max(0, drawerTabs.length - 1))}
-                  onTabChange={(e) => setActiveDrawerTabIndex(e.index)}
-                  className="h-full flex flex-col"
-                >
-                  {drawerTabs.map((tab) => (
-                    <TabPanel
-                      key={tab.id}
-                      header={tab.name || `Tab ${drawerTabs.indexOf(tab) + 1}`}
-                      className="h-full flex flex-col"
-                    >
-                      <div className="flex-1 overflow-auto">
-                        {drawerData && drawerData.length > 0 ? (
-                          <DataTableOldComponent
-                            data={drawerData}
-                            rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
-                            defaultRows={10}
-                            scrollable={false}
-                            enableSort={enableSort}
-                            enableFilter={enableFilter}
-                            enableSummation={enableSummation}
-                            textFilterColumns={textFilterColumns}
-                            visibleColumns={visibleColumns}
-                            onVisibleColumnsChange={stableOnVisibleColumnsChange}
-                            redFields={redFields}
-                            greenFields={greenFields}
-                            outerGroupField={tab.outerGroup}
-                            innerGroupField={tab.innerGroup}
-                            percentageColumns={percentageColumns}
-                            enableDivideBy1Lakh={enableDivideBy1Lakh}
-                            enableCellEdit={false}
-                            columnTypes={columnTypes}
-                            tableName="sidebar"
-                          />
-                        ) : (
-                          <div className="flex flex-col items-center justify-center h-full text-center">
-                            <i className="pi pi-inbox text-4xl text-gray-400 mb-4"></i>
-                            <p className="text-gray-600 font-medium">No data available</p>
-                            <p className="text-sm text-gray-500 mt-1">No matching rows found</p>
-                          </div>
-                        )}
-                      </div>
-                    </TabPanel>
-                  ))}
-                </TabView>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center">
-                  <i className="pi pi-inbox text-4xl text-gray-400 mb-4"></i>
-                  <p className="text-gray-600 font-medium">No tabs configured</p>
-                  <p className="text-sm text-gray-500 mt-1">Please configure drawer tabs in settings</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </Sidebar>
-      ), [
-        drawerVisible, 
-        closeDrawer, 
-        clickedDrawerValues, 
-        stableDrawerTabs, 
-        activeDrawerTabIndex, 
-        drawerData, 
-        enableSort, 
-        enableFilter, 
-        enableSummation, 
-        textFilterColumns, 
-        visibleColumns, 
-        stableOnVisibleColumnsChange, 
-        redFields, 
-        greenFields, 
-        percentageColumns, 
-        enableDivideBy1Lakh, 
-        stableColumnTypes,
-        isAdminMode,
-        drawerSalesTeamColumn,
-        drawerSalesTeamValues,
-        drawerHqColumn,
-        drawerHqValues
-      ])}
     </DataProvider>
   );
 };
