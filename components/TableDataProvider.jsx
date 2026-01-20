@@ -564,6 +564,26 @@ const TableDataProvider = (props) => {
     onInnerGroupFieldChangeRef.current?.(field);
   }, []);
 
+  const stableAddDrawerTab = useCallback(() => {
+    const newTab = { id: `tab-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, name: '', outerGroup: null, innerGroup: null };
+    const updatedTabs = [...(drawerTabs || []), newTab];
+    setDrawerTabs(updatedTabs);
+    onDrawerTabsChangeRef.current?.(updatedTabs);
+  }, [drawerTabs]);
+
+  const stableRemoveDrawerTab = useCallback((tabId) => {
+    if (!drawerTabs || drawerTabs.length <= 1) return;
+    const updatedTabs = drawerTabs.filter(tab => tab.id !== tabId);
+    setDrawerTabs(updatedTabs);
+    onDrawerTabsChangeRef.current?.(updatedTabs);
+  }, [drawerTabs]);
+
+  const stableUpdateDrawerTab = useCallback((tabId, updates) => {
+    const updatedTabs = drawerTabs.map(tab => tab.id === tabId ? { ...tab, ...updates } : tab);
+    setDrawerTabs(updatedTabs);
+    onDrawerTabsChangeRef.current?.(updatedTabs);
+  }, [drawerTabs]);
+
   // Stabilize merged variables to prevent infinite fetch loops
   // We only pass variables as "overrides" if they actually differ from the base variables
   // reported by the core DataProvider. This allows the core to use its cache-first
@@ -658,6 +678,9 @@ const TableDataProvider = (props) => {
     onBreakdownTypeChange: stableOnBreakdownTypeChange,
     onOuterGroupFieldChange: stableOnOuterGroupFieldChange,
     onInnerGroupFieldChange: stableOnInnerGroupFieldChange,
+    onAddDrawerTab: stableAddDrawerTab,
+    onRemoveDrawerTab: stableRemoveDrawerTab,
+    onUpdateDrawerTab: stableUpdateDrawerTab,
   }), [
     currentTableData, currentRawData, currentVariables, savedQueries,
     loadingQueries, executingQuery, availableQueryKeys, selectedQueryKey,
@@ -668,7 +691,8 @@ const TableDataProvider = (props) => {
     outerGroupField, innerGroupField, percentageColumns, drawerTabs,
     enableReport, dateColumn, breakdownType,
     stableOnEnableReportChange, stableOnDateColumnChange, stableOnBreakdownTypeChange,
-    stableOnOuterGroupFieldChange, stableOnInnerGroupFieldChange
+    stableOnOuterGroupFieldChange, stableOnInnerGroupFieldChange,
+    stableAddDrawerTab, stableRemoveDrawerTab, stableUpdateDrawerTab
   ]);
 
   return (
@@ -721,83 +745,67 @@ const TableDataProvider = (props) => {
       breakdownType={breakdownType}
       hideDataSourceAndQueryKey={hideDataSourceAndQueryKey !== undefined ? hideDataSourceAndQueryKey : !showSelectors}
       renderHeaderControls={(selectorsJSX) => showSelectors ? (
-        <div className="px-4 py-3 border-b border-gray-200 bg-white">
-          <div className="flex flex-col gap-3">
-            <div className="flex justify-between items-start gap-3 flex-wrap">
-              {/* Left: Data Source and Query Key Selectors (if not hidden) */}
-              {!hideDataSourceAndQueryKey && (
-                <div className="flex items-end gap-3 flex-wrap">
-                  {/* Data Source Selector */}
-                  <div className="w-full sm:w-48">
+        <div className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 border-b border-gray-200 shrink-0 bg-white min-w-0 overflow-x-hidden">
+          <div className="flex justify-between items-start gap-3 flex-wrap min-w-0">
+            {/* Left: selectorsJSX from DataProvider (Month, Sales Team, HQ, Sync, Last Updated) */}
+            <div className="flex-1 min-w-0 wrapper-selectors-container">
+              {selectorsJSX}
+            </div>
+
+            {/* Right: Data Source and Query Key Selectors (if not hidden) */}
+            {!hideDataSourceAndQueryKey && (
+              <div className="flex items-end gap-3 flex-wrap min-w-0">
+                {/* Data Source Selector */}
+                <div className="w-full sm:w-48 min-w-0 flex-shrink-0">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Data Source
+                  </label>
+                  <Dropdown
+                    value={dataSource}
+                    onChange={(e) => stableOnDataSourceChange(e.value)}
+                    options={[
+                      { label: 'Offline', value: 'offline' },
+                      ...savedQueries.map(q => ({ label: q.name, value: q.id }))
+                    ]}
+                    optionLabel="label"
+                    optionValue="value"
+                    placeholder="Select a data source"
+                    className="w-full"
+                    loading={loadingQueries}
+                    disabled={executingQuery}
+                    style={{
+                      height: '3rem',
+                    }}
+                  />
+                </div>
+
+                {/* Query Key Selector */}
+                {dataSource && dataSource !== 'offline' && availableQueryKeys.length > 0 && (
+                  <div className="w-full sm:w-48 min-w-0 flex-shrink-0">
                     <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Data Source
+                      Query Key
                     </label>
                     <Dropdown
-                      value={dataSource}
-                      onChange={(e) => stableOnDataSourceChange(e.value)}
-                      options={[
-                        { label: 'Offline', value: 'offline' },
-                        ...savedQueries.map(q => ({ label: q.name, value: q.id }))
-                      ]}
+                      value={selectedQueryKey}
+                      onChange={(e) => stableOnSelectedQueryKeyChange(e.value)}
+                      options={availableQueryKeys.map(key => ({ 
+                        label: startCase(key.split('__').join(' ').split('_').join(' ')), 
+                        value: key 
+                      }))}
                       optionLabel="label"
                       optionValue="value"
-                      placeholder="Select a data source"
+                      placeholder="Select Query Key"
                       className="w-full"
-                      loading={loadingQueries}
                       disabled={executingQuery}
                       style={{
                         height: '3rem',
                       }}
                     />
                   </div>
-
-                  {/* Query Key Selector */}
-                  {dataSource && dataSource !== 'offline' && availableQueryKeys.length > 0 && (
-                    <div className="w-full sm:w-48">
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Query Key
-                      </label>
-                      <Dropdown
-                        value={selectedQueryKey}
-                        onChange={(e) => stableOnSelectedQueryKeyChange(e.value)}
-                        options={availableQueryKeys.map(key => ({ 
-                          label: startCase(key.split('__').join(' ').split('_').join(' ')), 
-                          value: key 
-                        }))}
-                        optionLabel="label"
-                        optionValue="value"
-                        placeholder="Select Query Key"
-                        className="w-full"
-                        disabled={executingQuery}
-                        style={{
-                          height: '3rem',
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Bottom: selectorsJSX from DataProvider (Month, Sales Team, HQ, Sync, Last Updated) */}
-            <div className="w-full wrapper-selectors-container">
-              {selectorsJSX}
-              
-              {/* Corrected Last Updated Display - Following DataProvider.jsx wording/style */}
-              {dataSource && dataSource !== 'offline' && (
-                <div className="mt-2 text-xs text-gray-700">
-                  {/* Last updated: {lastUpdatedAt ? formatLastUpdatedDate(lastUpdatedAt) : <span className="text-gray-400">N/A</span>} */}
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
-          
-          {/* CSS to hide the internal/broken Last Updated text but keep the Sync button */}
-          <style dangerouslySetInnerHTML={{ __html: `
-            .wrapper-selectors-container .whitespace-nowrap:not(.p-button-label) {
-              display: none !important;
-            }
-          `}} />
         </div>
       ) : null}
     >

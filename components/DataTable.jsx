@@ -3,8 +3,6 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { Toast } from 'primereact/toast';
 import { Splitter, SplitterPanel } from 'primereact/splitter';
-import { Sidebar } from 'primereact/sidebar';
-import { TabView, TabPanel } from 'primereact/tabview';
 import DataTableComponent from '../share/datatable/components/DataTable';
 import DataTableControls from '../share/datatable/components/DataTableControls';
 import data from '../resource/data';
