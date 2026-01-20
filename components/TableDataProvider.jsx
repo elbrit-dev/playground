@@ -359,10 +359,18 @@ const TableDataProvider = (props) => {
   useEffect(() => {
     if (variableOverrides?.startDate && variableOverrides?.endDate) {
       try {
-        setMonthRange([new Date(variableOverrides.startDate), new Date(variableOverrides.endDate)]);
+        const newStart = new Date(variableOverrides.startDate);
+        const newEnd = new Date(variableOverrides.endDate);
+        
+        setMonthRange(prev => {
+          if (prev && prev[0]?.getTime() === newStart.getTime() && prev[1]?.getTime() === newEnd.getTime()) {
+            return prev;
+          }
+          return [newStart, newEnd];
+        });
       } catch (e) {}
     }
-  }, [variableOverrides]);
+  }, [variableOverrides?.startDate, variableOverrides?.endDate]);
 
   // Periodic refresh of the timestamp
   useEffect(() => {
@@ -420,7 +428,10 @@ const TableDataProvider = (props) => {
   useEffect(() => { onInnerGroupFieldChangeRef.current = propOnInnerGroupFieldChange; }, [propOnInnerGroupFieldChange]);
 
   const stableOnTableDataChange = useCallback((data) => {
+    // Only update if data actually changed to prevent render loops
     setCurrentTableData(prev => {
+      if (prev === data) return prev;
+      // Deep compare is expensive, but we only do it when reference changes
       if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
       return data;
     });
@@ -428,7 +439,9 @@ const TableDataProvider = (props) => {
   }, []);
 
   const stableOnRawDataChange = useCallback((data) => {
+    // Only update if data actually changed
     setCurrentRawData(prev => {
+      if (prev === data) return prev;
       if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
       return data;
     });
@@ -745,67 +758,53 @@ const TableDataProvider = (props) => {
       breakdownType={breakdownType}
       hideDataSourceAndQueryKey={hideDataSourceAndQueryKey !== undefined ? hideDataSourceAndQueryKey : !showSelectors}
       renderHeaderControls={(selectorsJSX) => showSelectors ? (
-        <div className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 border-b border-gray-200 shrink-0 bg-white min-w-0 overflow-x-hidden">
-          <div className="flex justify-between items-start gap-3 flex-wrap min-w-0">
-            {/* Left: selectorsJSX from DataProvider (Month, Sales Team, HQ, Sync, Last Updated) */}
-            <div className="flex-1 min-w-0 wrapper-selectors-container">
-              {selectorsJSX}
-            </div>
+        <div className="p-4 border-b border-gray-200 bg-white flex justify-between items-end gap-4">
+          {/* selectorsJSX from share folder */}
+          <div className="flex-1 min-w-0">
+            {selectorsJSX}
+          </div>
 
-            {/* Right: Data Source and Query Key Selectors (if not hidden) */}
-            {!hideDataSourceAndQueryKey && (
-              <div className="flex items-end gap-3 flex-wrap min-w-0">
-                {/* Data Source Selector */}
-                <div className="w-full sm:w-48 min-w-0 flex-shrink-0">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Data Source
-                  </label>
+          {/* Wrapper selectors */}
+          {!hideDataSourceAndQueryKey && (
+            <div className="flex items-end gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-700">Data Source</label>
+                <Dropdown
+                  value={dataSource}
+                  onChange={(e) => stableOnDataSourceChange(e.value)}
+                  options={[
+                    { label: 'Offline', value: 'offline' },
+                    ...savedQueries.map(q => ({ label: q.name, value: q.id }))
+                  ]}
+                  optionLabel="label"
+                  optionValue="value"
+                  placeholder="Select source"
+                  loading={loadingQueries}
+                  disabled={executingQuery}
+                  style={{ height: '3rem', width: '12rem' }}
+                />
+              </div>
+
+              {dataSource && dataSource !== 'offline' && availableQueryKeys.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-gray-700">Query Key</label>
                   <Dropdown
-                    value={dataSource}
-                    onChange={(e) => stableOnDataSourceChange(e.value)}
-                    options={[
-                      { label: 'Offline', value: 'offline' },
-                      ...savedQueries.map(q => ({ label: q.name, value: q.id }))
-                    ]}
+                    value={selectedQueryKey}
+                    onChange={(e) => stableOnSelectedQueryKeyChange(e.value)}
+                    options={availableQueryKeys.map(key => ({ 
+                      label: startCase(key.split('__').join(' ').split('_').join(' ')), 
+                      value: key 
+                    }))}
                     optionLabel="label"
                     optionValue="value"
-                    placeholder="Select a data source"
-                    className="w-full"
-                    loading={loadingQueries}
+                    placeholder="Select key"
                     disabled={executingQuery}
-                    style={{
-                      height: '3rem',
-                    }}
+                    style={{ height: '3rem', width: '12rem' }}
                   />
                 </div>
-
-                {/* Query Key Selector */}
-                {dataSource && dataSource !== 'offline' && availableQueryKeys.length > 0 && (
-                  <div className="w-full sm:w-48 min-w-0 flex-shrink-0">
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Query Key
-                    </label>
-                    <Dropdown
-                      value={selectedQueryKey}
-                      onChange={(e) => stableOnSelectedQueryKeyChange(e.value)}
-                      options={availableQueryKeys.map(key => ({ 
-                        label: startCase(key.split('__').join(' ').split('_').join(' ')), 
-                        value: key 
-                      }))}
-                      optionLabel="label"
-                      optionValue="value"
-                      placeholder="Select Query Key"
-                      className="w-full"
-                      disabled={executingQuery}
-                      style={{
-                        height: '3rem',
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       ) : null}
     >
