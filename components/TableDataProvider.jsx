@@ -929,7 +929,7 @@ const TableDataProvider = (props) => {
               height: 100%;
               display: flex;
               flex-direction: column;
-              overflow: hidden !important;
+              overflow-y: auto !important; /* Changed from hidden to auto */
               padding: 0 !important;
             }
             
@@ -937,27 +937,22 @@ const TableDataProvider = (props) => {
               display: flex;
               flex-direction: column;
               height: 100%;
-              min-height: 0;
-            }
-            
-            .p-sidebar-bottom .p-tabview-nav-container {
-              flex-shrink: 0;
             }
             
             .p-sidebar-bottom .p-tabview-panels {
               flex: 1;
-              min-height: 0;
               display: flex;
               flex-direction: column;
               padding: 0 !important;
+              min-height: 0;
             }
             
             .p-sidebar-bottom .p-tabview-panel {
               flex: 1;
               display: flex;
               flex-direction: column;
-              min-height: 0;
               height: 100%;
+              min-height: 0;
             }
             
             /* Target both the manual overflow-auto div and PrimeReact's internal wrapper */
@@ -965,10 +960,8 @@ const TableDataProvider = (props) => {
             .p-sidebar-bottom .p-datatable-wrapper,
             .p-sidebar-bottom .p-datatable-scrollable-body {
               flex: 1;
-              min-height: 0;
               overflow-y: auto !important;
               -webkit-overflow-scrolling: touch;
-              overscroll-behavior: contain;
             }
           `}} />
         </div>
@@ -982,6 +975,99 @@ const TableDataProvider = (props) => {
           </div>
         </TableProvider>
       </PlasmicDataProvider>
+
+      {/* Drawer Sidebar - copied exactly from DataProviderNew.jsx structure */}
+      <Sidebar
+        position="bottom"
+        blockScroll
+        visible={drawerVisible}
+        onHide={closeDrawer}
+        style={{ height: '100vh' }}
+        className="p-sidebar-sm"
+        header={
+          <h2 className="text-lg font-semibold text-gray-800 m-0">
+            {clickedDrawerValues.innerValue
+              ? `${clickedDrawerValues.outerValue} : ${clickedDrawerValues.innerValue}`
+              : clickedDrawerValues.outerValue || 'Drawer'}
+          </h2>
+        }
+      >
+        <div className="flex flex-col h-full">
+          <div className="flex-1">
+            {drawerTabs && drawerTabs.length > 0 ? (
+              <TabView
+                activeIndex={Math.min(activeDrawerTabIndex, Math.max(0, drawerTabs.length - 1))}
+                onTabChange={(e) => setActiveDrawerTabIndex(e.index)}
+                className="h-full flex flex-col"
+              >
+                {drawerTabs.map((tab) => (
+                  <TabPanel
+                    key={tab.id}
+                    header={tab.name || `Tab ${drawerTabs.indexOf(tab) + 1}`}
+                    className="h-full flex flex-col"
+                  >
+                    <div className="flex-1 overflow-auto">
+                      {drawerData && drawerData.length > 0 ? (
+                        <TableOperationsContext.Provider value={{
+                          ...consolidatedData,
+                          paginatedData: drawerData,
+                          pagination: { first: 0, rows: drawerData.length },
+                          visibleColumns: [], // Show all in drawer
+                          enableFilter: enableFilter,
+                          enableSort: enableSort,
+                          enableSummation: enableSummation,
+                          outerGroupField: tab.outerGroup,
+                          innerGroupField: tab.innerGroup,
+                        }}>
+                          <DataTableComponent
+                            data={drawerData}
+                            useOrchestrationLayer={true}
+                            rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
+                            defaultRows={10}
+                            scrollable={false}
+                            enableSort={enableSort}
+                            enableFilter={enableFilter}
+                            enableSummation={enableSummation}
+                            textFilterColumns={textFilterColumns}
+                            visibleColumns={visibleColumns}
+                            onVisibleColumnsChange={stableOnVisibleColumnsChange}
+                            redFields={redFields}
+                            greenFields={greenFields}
+                            outerGroupField={tab.outerGroup}
+                            innerGroupField={tab.innerGroup}
+                            percentageColumns={percentageColumns}
+                            enableDivideBy1Lakh={enableDivideBy1Lakh}
+                            enableCellEdit={false}
+                            columnTypes={columnTypes}
+                            tableName="sidebar"
+                            isAdminMode={isAdminMode}
+                            salesTeamColumn={drawerSalesTeamColumn}
+                            salesTeamValues={drawerSalesTeamValues}
+                            hqColumn={drawerHqColumn}
+                            hqValues={drawerHqValues}
+                          />
+                        </TableOperationsContext.Provider>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center h-full text-center">
+                          <i className="pi pi-inbox text-4xl text-gray-400 mb-4"></i>
+                          <p className="text-gray-600 font-medium">No data available</p>
+                          <p className="text-sm text-gray-500 mt-1">No matching rows found</p>
+                        </div>
+                      )}
+                    </div>
+                  </TabPanel>
+                ))}
+              </TabView>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                <i className="pi pi-inbox text-4xl text-gray-400 mb-4"></i>
+                <p className="text-gray-600 font-medium">No tabs configured</p>
+                <p className="text-sm text-gray-500 mt-1">Please configure drawer tabs in settings</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </Sidebar>
     </DataProvider>
   );
 };
