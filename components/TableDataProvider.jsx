@@ -729,32 +729,51 @@ const TableDataProvider = (props) => {
 
   const openDrawerWithData = useCallback((data, outerValue, innerValue) => {
     let filteredData = data || [];
+    
+    console.log('🔍 Drawer Debug - Initial data count:', filteredData.length);
+    console.log('🔍 Drawer Debug - drawerSalesTeamColumn:', drawerSalesTeamColumn);
+    console.log('🔍 Drawer Debug - drawerSalesTeamValues:', drawerSalesTeamValues);
+    console.log('🔍 Drawer Debug - drawerHqColumn:', drawerHqColumn);
+    console.log('🔍 Drawer Debug - drawerHqValues:', drawerHqValues);
 
     // Apply drawer-specific group filters for sales team and HQ (works like clicking a row)
     // These are data filters, not auth filters, so we apply them regardless of admin mode
     if (drawerSalesTeamColumn && drawerSalesTeamValues && drawerSalesTeamValues.length > 0) {
       // Flatten values in case Plasmic passed nested arrays like [["Team A"]]
       const filterTeams = lodashFilter(flatMap([drawerSalesTeamValues], v => v), v => !isNil(v)).map(v => String(v).trim().toLowerCase());
+      console.log('🔍 Drawer Debug - Filtering by sales teams:', filterTeams);
       
+      const beforeCount = filteredData.length;
       filteredData = lodashFilter(filteredData, (row) => {
         const rowValue = get(row, drawerSalesTeamColumn);
         if (Array.isArray(rowValue)) {
           return rowValue.some(rv => filterTeams.includes(String(rv).trim().toLowerCase()));
         }
-        return !isNil(rowValue) && filterTeams.includes(String(rowValue).trim().toLowerCase());
+        const match = !isNil(rowValue) && filterTeams.includes(String(rowValue).trim().toLowerCase());
+        return match;
       });
+      console.log('🔍 Drawer Debug - After sales team filter:', beforeCount, '->', filteredData.length);
     }
     if (drawerHqColumn && drawerHqValues && drawerHqValues.length > 0) {
       // Flatten values
       const filterHqs = lodashFilter(flatMap([drawerHqValues], v => v), v => !isNil(v)).map(v => String(v).trim().toLowerCase());
+      console.log('🔍 Drawer Debug - Filtering by HQ:', filterHqs);
 
+      const beforeCount = filteredData.length;
       filteredData = lodashFilter(filteredData, (row) => {
         const rowValue = get(row, drawerHqColumn);
         if (Array.isArray(rowValue)) {
           return rowValue.some(rv => filterHqs.includes(String(rv).trim().toLowerCase()));
         }
-        return !isNil(rowValue) && filterHqs.includes(String(rowValue).trim().toLowerCase());
+        const match = !isNil(rowValue) && filterHqs.includes(String(rowValue).trim().toLowerCase());
+        return match;
       });
+      console.log('🔍 Drawer Debug - After HQ filter:', beforeCount, '->', filteredData.length);
+    }
+    
+    console.log('🔍 Drawer Debug - Final filtered data count:', filteredData.length);
+    if (filteredData.length > 0) {
+      console.log('🔍 Drawer Debug - Sample row:', filteredData[0]);
     }
 
     setDrawerData(filteredData);
@@ -794,14 +813,21 @@ const TableDataProvider = (props) => {
 
   // Sync propDrawerVisible with state
   useEffect(() => {
+    console.log('🔍 Drawer Visibility Changed:', propDrawerVisible);
+    console.log('🔍 currentRawData length:', currentRawData?.length);
+    console.log('🔍 currentTableData length:', currentTableData?.length);
+    
     setDrawerVisible(propDrawerVisible);
     
     // If opened manually (e.g., via Plasmic prop), use raw data so drawer filters work correctly
     if (propDrawerVisible) {
       // Use raw data (not filtered table data) so that drawer-specific filters can be applied
       const initialData = currentRawData || currentTableData || [];
+      console.log('🔍 Opening drawer with data length:', initialData.length);
       if (initialData.length > 0) {
         openDrawerWithData(initialData, null, null);
+      } else {
+        console.warn('⚠️ No data available to open drawer with!');
       }
     }
   }, [propDrawerVisible, currentRawData, currentTableData, openDrawerWithData]);
