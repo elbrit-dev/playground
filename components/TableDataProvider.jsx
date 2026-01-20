@@ -5,8 +5,12 @@ import DataProvider from '../share/datatable/components/DataProvider';
 import data from '../resource/data';
 import { DataProvider as PlasmicDataProvider } from "@plasmicapp/loader-nextjs";
 import { Dropdown } from 'primereact/dropdown';
-import { startCase } from 'lodash';
+import { Sidebar } from 'primereact/sidebar';
+import { TabView, TabPanel } from 'primereact/tabview';
+import DataTableComponent from '../share/datatable/components/DataTable';
+import { startCase, filter as lodashFilter, get, isNil } from 'lodash';
 import { TableProvider } from './TableContext';
+import { TableOperationsContext } from '../share/datatable/contexts/TableOperationsContext';
 import dayjs from 'dayjs';
 import { firestoreService } from '../share/graphql-playground/services/firestoreService';
 import { indexedDBService } from '../share/datatable/utils/indexedDBService';
@@ -248,6 +252,12 @@ const TableDataProvider = (props) => {
   const [currentRawData, setCurrentRawData] = useState(null);
   const [currentVariables, setCurrentVariables] = useState({});
   
+  // Drawer state
+  const [drawerVisible, setDrawerVisible] = useState(false);
+  const [drawerData, setDrawerData] = useState([]);
+  const [activeDrawerTabIndex, setActiveDrawerTabIndex] = useState(0);
+  const [clickedDrawerValues, setClickedDrawerValues] = useState({ outerValue: null, innerValue: null });
+
   // New internal state to expose to Plasmic
   const [savedQueries, setSavedQueries] = useState([]);
   const [loadingQueries, setLoadingQueries] = useState(false);
@@ -564,6 +574,39 @@ const TableDataProvider = (props) => {
     onInnerGroupFieldChangeRef.current?.(field);
   }, []);
 
+  const openDrawerWithData = useCallback((data, outerValue, innerValue) => {
+    setDrawerData(data || []);
+    setClickedDrawerValues({ outerValue, innerValue });
+    setActiveDrawerTabIndex(0);
+    setDrawerVisible(true);
+  }, []);
+
+  const openDrawerForOuterGroup = useCallback((value) => {
+    // We use currentTableData which is the filtered data from DataProvider
+    const dataToFilter = currentTableData || [];
+    const filtered = lodashFilter(dataToFilter, (row) => {
+      const rowValue = get(row, outerGroupField);
+      return isNil(value) ? isNil(rowValue) : String(rowValue) === String(value);
+    });
+    openDrawerWithData(filtered, value, null);
+  }, [currentTableData, outerGroupField, openDrawerWithData]);
+
+  const openDrawerForInnerGroup = useCallback((outerValue, value) => {
+    const dataToFilter = currentTableData || [];
+    const filtered = lodashFilter(dataToFilter, (row) => {
+      const rowOuterValue = get(row, outerGroupField);
+      const rowInnerValue = get(row, innerGroupField);
+      let outerMatch = isNil(outerValue) ? isNil(rowOuterValue) : String(rowOuterValue) === String(outerValue);
+      if (!outerMatch) return false;
+      return isNil(value) ? isNil(rowInnerValue) : String(rowInnerValue) === String(value);
+    });
+    openDrawerWithData(filtered, outerValue, value);
+  }, [currentTableData, outerGroupField, innerGroupField, openDrawerWithData]);
+
+  const closeDrawer = useCallback(() => {
+    setDrawerVisible(false);
+  }, []);
+
   // Stabilize merged variables to prevent infinite fetch loops
   // We only pass variables as "overrides" if they actually differ from the base variables
   // reported by the core DataProvider. This allows the core to use its cache-first
@@ -658,6 +701,12 @@ const TableDataProvider = (props) => {
     onBreakdownTypeChange: stableOnBreakdownTypeChange,
     onOuterGroupFieldChange: stableOnOuterGroupFieldChange,
     onInnerGroupFieldChange: stableOnInnerGroupFieldChange,
+    // Drawer functions for DataTableComponent to use
+    openDrawerWithData,
+    openDrawerForOuterGroup,
+    openDrawerForInnerGroup,
+    closeDrawer,
+    setActiveDrawerTabIndex,
   }), [
     currentTableData, currentRawData, currentVariables, savedQueries,
     loadingQueries, executingQuery, availableQueryKeys, selectedQueryKey,
@@ -668,7 +717,9 @@ const TableDataProvider = (props) => {
     outerGroupField, innerGroupField, percentageColumns, drawerTabs,
     enableReport, dateColumn, breakdownType,
     stableOnEnableReportChange, stableOnDateColumnChange, stableOnBreakdownTypeChange,
-    stableOnOuterGroupFieldChange, stableOnInnerGroupFieldChange
+    stableOnOuterGroupFieldChange, stableOnInnerGroupFieldChange,
+    openDrawerWithData, openDrawerForOuterGroup, openDrawerForInnerGroup, closeDrawer,
+    setActiveDrawerTabIndex
   ]);
 
   return (
@@ -694,7 +745,11 @@ const TableDataProvider = (props) => {
       onDrawerTabsChange={stableOnDrawerTabsChange}
       onColumnTypesOverrideChange={stableOnColumnTypesChange}
       onAdminModeChange={stableOnAdminModeChange}
+      onEnableReportChange={stableOnEnableReportChange}
+      onDateColumnChange={stableOnDateColumnChange}
       onBreakdownTypeChange={stableOnBreakdownTypeChange}
+      onOuterGroupFieldChange={stableOnOuterGroupFieldChange}
+      onInnerGroupFieldChange={stableOnInnerGroupFieldChange}
       variableOverrides={stableOverrides}
       isAdminMode={isAdminMode}
       salesTeamColumn={salesTeamColumn}
@@ -798,12 +853,18 @@ const TableDataProvider = (props) => {
               display: none !important;
             }
             
-            /* Fix for Drawer scrolling issues */
-            .p-sidebar-bottom.p-sidebar-sm {
-              height: 100dvh !important;
+            /* Hide the internal sidebar from DataProviderNew to avoid double sidebars */
+            body > .p-sidebar-bottom.p-sidebar-sm {
+              display: none !important;
             }
             
-            .p-sidebar-bottom .p-sidebar-content {
+            /* Fix for Drawer scrolling issues */
+            .p-sidebar-bottom.custom-drawer {
+              height: 100dvh !important;
+              display: flex !important;
+            }
+            
+            .custom-drawer .p-sidebar-content {
               height: 100%;
               display: flex;
               flex-direction: column;
@@ -811,18 +872,18 @@ const TableDataProvider = (props) => {
               padding: 0 !important;
             }
             
-            .p-sidebar-bottom .p-tabview {
+            .custom-drawer .p-tabview {
               display: flex;
               flex-direction: column;
               height: 100%;
               min-height: 0;
             }
             
-            .p-sidebar-bottom .p-tabview-nav-container {
+            .custom-drawer .p-tabview-nav-container {
               flex-shrink: 0;
             }
             
-            .p-sidebar-bottom .p-tabview-panels {
+            .custom-drawer .p-tabview-panels {
               flex: 1;
               min-height: 0;
               display: flex;
@@ -830,7 +891,7 @@ const TableDataProvider = (props) => {
               padding: 0 !important;
             }
             
-            .p-sidebar-bottom .p-tabview-panel {
+            .custom-drawer .p-tabview-panel {
               flex: 1;
               display: flex;
               flex-direction: column;
@@ -838,10 +899,7 @@ const TableDataProvider = (props) => {
               height: 100%;
             }
             
-            /* Target both the manual overflow-auto div and PrimeReact's internal wrapper */
-            .p-sidebar-bottom .overflow-auto,
-            .p-sidebar-bottom .p-datatable-wrapper,
-            .p-sidebar-bottom .p-datatable-scrollable-body {
+            .custom-drawer .overflow-auto {
               flex: 1;
               min-height: 0;
               overflow-y: auto !important;
@@ -860,6 +918,95 @@ const TableDataProvider = (props) => {
           </div>
         </TableProvider>
       </PlasmicDataProvider>
+
+      {/* Drawer Sidebar - copied exactly from DataProviderNew.jsx structure */}
+      <Sidebar
+        position="bottom"
+        blockScroll
+        visible={drawerVisible}
+        onHide={closeDrawer}
+        style={{ height: '100dvh' }}
+        className="custom-drawer"
+        header={
+          <h2 className="text-lg font-semibold text-gray-800 m-0">
+            {clickedDrawerValues.innerValue
+              ? `${clickedDrawerValues.outerValue} : ${clickedDrawerValues.innerValue}`
+              : clickedDrawerValues.outerValue || 'Drawer'}
+          </h2>
+        }
+      >
+        <div className="flex flex-col h-full">
+          <div className="flex-1">
+            {drawerTabs && drawerTabs.length > 0 ? (
+              <TabView
+                activeIndex={Math.min(activeDrawerTabIndex, Math.max(0, drawerTabs.length - 1))}
+                onTabChange={(e) => setActiveDrawerTabIndex(e.index)}
+                className="h-full flex flex-col"
+              >
+                {drawerTabs.map((tab) => (
+                  <TabPanel
+                    key={tab.id}
+                    header={tab.name || `Tab ${drawerTabs.indexOf(tab) + 1}`}
+                    className="h-full flex flex-col"
+                  >
+                    <div className="flex-1 overflow-auto">
+                      {drawerData && drawerData.length > 0 ? (
+                        <TableOperationsContext.Provider value={{
+                          ...consolidatedData,
+                          paginatedData: drawerData,
+                          pagination: { first: 0, rows: drawerData.length },
+                          visibleColumns: [], // Show all in drawer
+                          enableFilter: enableFilter,
+                          enableSort: enableSort,
+                          enableSummation: enableSummation,
+                          outerGroupField: tab.outerGroup,
+                          innerGroupField: tab.innerGroup,
+                        }}>
+                          <DataTableComponent
+                            data={drawerData}
+                            useOrchestrationLayer={true}
+                            rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
+                            defaultRows={10}
+                            scrollable={true}
+                            scrollHeight="calc(100dvh - 180px)"
+                            enableSort={enableSort}
+                            enableFilter={enableFilter}
+                            enableSummation={enableSummation}
+                            textFilterColumns={textFilterColumns}
+                            visibleColumns={visibleColumns}
+                            onVisibleColumnsChange={stableOnVisibleColumnsChange}
+                            redFields={redFields}
+                            greenFields={greenFields}
+                            outerGroupField={tab.outerGroup}
+                            innerGroupField={tab.innerGroup}
+                            percentageColumns={percentageColumns}
+                            enableDivideBy1Lakh={enableDivideBy1Lakh}
+                            enableCellEdit={false}
+                            columnTypes={columnTypes}
+                            tableName="sidebar"
+                          />
+                        </TableOperationsContext.Provider>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center h-full text-center">
+                          <i className="pi pi-inbox text-4xl text-gray-400 mb-4"></i>
+                          <p className="text-gray-600 font-medium">No data available</p>
+                          <p className="text-sm text-gray-500 mt-1">No matching rows found</p>
+                        </div>
+                      )}
+                    </div>
+                  </TabPanel>
+                ))}
+              </TabView>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                <i className="pi pi-inbox text-4xl text-gray-400 mb-4"></i>
+                <p className="text-gray-600 font-medium">No tabs configured</p>
+                <p className="text-sm text-gray-500 mt-1">Please configure drawer tabs in settings</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </Sidebar>
     </DataProvider>
   );
 };
