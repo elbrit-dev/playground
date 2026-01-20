@@ -254,26 +254,91 @@ const TableDataProvider = (props) => {
   const breakdownType = propBreakdownType !== 'month' ? propBreakdownType : breakdownTypeRawState;
 
   // 3. Normalize string inputs to arrays for Sales Team and HQ
+  // Using refs to ensure stable references if the content hasn't changed
+  const lastSalesTeamValuesRef = useRef([]);
   const normalizedSalesTeamValues = useMemo(() => {
-    if (typeof salesTeamValues === 'string') return salesTeamValues ? [salesTeamValues] : [];
-    return Array.isArray(salesTeamValues) ? salesTeamValues : [];
+    let current;
+    if (typeof salesTeamValues === 'string') {
+      current = salesTeamValues ? [salesTeamValues] : [];
+    } else {
+      current = Array.isArray(salesTeamValues) ? salesTeamValues : [];
+    }
+    
+    if (JSON.stringify(lastSalesTeamValuesRef.current) === JSON.stringify(current)) {
+      return lastSalesTeamValuesRef.current;
+    }
+    lastSalesTeamValuesRef.current = current;
+    return current;
   }, [salesTeamValues]);
 
+  const lastHqValuesRef = useRef([]);
   const normalizedHqValues = useMemo(() => {
-    if (typeof hqValues === 'string') return hqValues ? [hqValues] : [];
-    return Array.isArray(hqValues) ? hqValues : [];
+    let current;
+    if (typeof hqValues === 'string') {
+      current = hqValues ? [hqValues] : [];
+    } else {
+      current = Array.isArray(hqValues) ? hqValues : [];
+    }
+
+    if (JSON.stringify(lastHqValuesRef.current) === JSON.stringify(current)) {
+      return lastHqValuesRef.current;
+    }
+    lastHqValuesRef.current = current;
+    return current;
   }, [hqValues]);
 
   // Normalize Drawer-specific string inputs
+  const lastDrawerSalesTeamValuesRef = useRef([]);
   const normalizedDrawerSalesTeamValues = useMemo(() => {
-    if (typeof propDrawerSalesTeamValues === 'string') return propDrawerSalesTeamValues ? [propDrawerSalesTeamValues] : [];
-    return Array.isArray(propDrawerSalesTeamValues) ? propDrawerSalesTeamValues : [];
+    let current;
+    if (typeof propDrawerSalesTeamValues === 'string') {
+      current = propDrawerSalesTeamValues ? [propDrawerSalesTeamValues] : [];
+    } else {
+      current = Array.isArray(propDrawerSalesTeamValues) ? propDrawerSalesTeamValues : [];
+    }
+
+    if (JSON.stringify(lastDrawerSalesTeamValuesRef.current) === JSON.stringify(current)) {
+      return lastDrawerSalesTeamValuesRef.current;
+    }
+    lastDrawerSalesTeamValuesRef.current = current;
+    return current;
   }, [propDrawerSalesTeamValues]);
 
+  const lastDrawerHqValuesRef = useRef([]);
   const normalizedDrawerHqValues = useMemo(() => {
-    if (typeof propDrawerHqValues === 'string') return propDrawerHqValues ? [propDrawerHqValues] : [];
-    return Array.isArray(propDrawerHqValues) ? propDrawerHqValues : [];
+    let current;
+    if (typeof propDrawerHqValues === 'string') {
+      current = propDrawerHqValues ? [propDrawerHqValues] : [];
+    } else {
+      current = Array.isArray(propDrawerHqValues) ? propDrawerHqValues : [];
+    }
+
+    if (JSON.stringify(lastDrawerHqValuesRef.current) === JSON.stringify(current)) {
+      return lastDrawerHqValuesRef.current;
+    }
+    lastDrawerHqValuesRef.current = current;
+    return current;
   }, [propDrawerHqValues]);
+
+  const lastColumnTypesRef = useRef({});
+  const stableColumnTypes = useMemo(() => {
+    const current = columnTypes || {};
+    if (JSON.stringify(lastColumnTypesRef.current) === JSON.stringify(current)) {
+      return lastColumnTypesRef.current;
+    }
+    lastColumnTypesRef.current = current;
+    return current;
+  }, [columnTypes]);
+
+  const lastDrawerTabsRef = useRef([]);
+  const stableDrawerTabs = useMemo(() => {
+    const current = (propDrawerTabs && propDrawerTabs.length > 0) ? propDrawerTabs : drawerTabsRawState;
+    if (JSON.stringify(lastDrawerTabsRef.current) === JSON.stringify(current)) {
+      return lastDrawerTabsRef.current;
+    }
+    lastDrawerTabsRef.current = current;
+    return current;
+  }, [propDrawerTabs, drawerTabsRawState]);
 
   // Determine final drawer filter values (Prop > Inherited from main)
   const drawerSalesTeamColumn = propDrawerSalesTeamColumn || salesTeamColumn;
@@ -613,7 +678,10 @@ const TableDataProvider = (props) => {
   }, []);
 
   const openDrawerWithData = useCallback((data, outerValue, innerValue) => {
-    setDrawerData(data || []);
+    setDrawerData(prev => {
+      if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
+      return data || [];
+    });
     setClickedDrawerValues({ outerValue, innerValue });
     setActiveDrawerTabIndex(0);
     setDrawerVisible(true);
@@ -718,7 +786,7 @@ const TableDataProvider = (props) => {
     salesTeamValues: normalizedSalesTeamValues,
     hqColumn,
     hqValues: normalizedHqValues,
-    columnTypes,
+    columnTypes: stableColumnTypes,
     useOrchestrationLayer,
     enableSort,
     enableFilter,
@@ -732,7 +800,7 @@ const TableDataProvider = (props) => {
     outerGroupField,
     innerGroupField,
     percentageColumns,
-    drawerTabs,
+    drawerTabs: stableDrawerTabs,
     enableReport,
     dateColumn,
     breakdownType,
@@ -796,8 +864,8 @@ const TableDataProvider = (props) => {
       salesTeamValues={normalizedSalesTeamValues}
       hqColumn={hqColumn}
       hqValues={normalizedHqValues}
-      columnTypes={columnTypes}
-      columnTypesOverride={columnTypes}
+      columnTypes={stableColumnTypes}
+      columnTypesOverride={stableColumnTypes}
       enableSort={enableSort}
       enableFilter={enableFilter}
       enableSummation={enableSummation}
@@ -810,7 +878,7 @@ const TableDataProvider = (props) => {
       outerGroupField={outerGroupField}
       innerGroupField={innerGroupField}
       percentageColumns={percentageColumns}
-      drawerTabs={drawerTabs}
+      drawerTabs={stableDrawerTabs}
       enableReport={enableReport}
       dateColumn={dateColumn}
       breakdownType={breakdownType}
@@ -959,80 +1027,105 @@ const TableDataProvider = (props) => {
         </TableProvider>
       </PlasmicDataProvider>
 
-      {/* Drawer Sidebar - copied exactly from DataProviderNew.jsx structure */}
-      <Sidebar
-        position="bottom"
-        blockScroll
-        visible={drawerVisible}
-        onHide={closeDrawer}
-        style={{ height: '100dvh' }}
-        className="custom-drawer"
-        header={
-          <h2 className="text-lg font-semibold text-gray-800 m-0">
-            {clickedDrawerValues.innerValue
-              ? `${clickedDrawerValues.outerValue} : ${clickedDrawerValues.innerValue}`
-              : clickedDrawerValues.outerValue || 'Drawer'}
-          </h2>
-        }
-      >
-        <div className="flex flex-col h-full">
-          <div className="flex-1">
-            {drawerTabs && drawerTabs.length > 0 ? (
-              <TabView
-                activeIndex={Math.min(activeDrawerTabIndex, Math.max(0, drawerTabs.length - 1))}
-                onTabChange={(e) => setActiveDrawerTabIndex(e.index)}
-                className="h-full flex flex-col"
-              >
-                {drawerTabs.map((tab) => (
-                  <TabPanel
-                    key={tab.id}
-                    header={tab.name || `Tab ${drawerTabs.indexOf(tab) + 1}`}
-                    className="h-full flex flex-col"
-                  >
-                    <div className="flex-1 overflow-auto">
-                      {drawerData && drawerData.length > 0 ? (
-                        <DataTableOldComponent
-                          data={drawerData}
-                          rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
-                          defaultRows={10}
-                          scrollable={false}
-                          enableSort={enableSort}
-                          enableFilter={enableFilter}
-                          enableSummation={enableSummation}
-                          textFilterColumns={textFilterColumns}
-                          visibleColumns={visibleColumns}
-                          onVisibleColumnsChange={stableOnVisibleColumnsChange}
-                          redFields={redFields}
-                          greenFields={greenFields}
-                          outerGroupField={tab.outerGroup}
-                          innerGroupField={tab.innerGroup}
-                          percentageColumns={percentageColumns}
-                          enableDivideBy1Lakh={enableDivideBy1Lakh}
-                          enableCellEdit={false}
-                          columnTypes={columnTypes}
-                          tableName="sidebar"
-                        />
-                      ) : (
-                        <div className="flex flex-col items-center justify-center h-full text-center">
-                          <i className="pi pi-inbox text-4xl text-gray-400 mb-4"></i>
-                          <p className="text-gray-600 font-medium">No data available</p>
-                          <p className="text-sm text-gray-500 mt-1">No matching rows found</p>
-                        </div>
-                      )}
-                    </div>
-                  </TabPanel>
-                ))}
-              </TabView>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center">
-                <i className="pi pi-inbox text-4xl text-gray-400 mb-4"></i>
-                <p className="text-gray-600 font-medium">No tabs configured</p>
-                <p className="text-sm text-gray-500 mt-1">Please configure drawer tabs in settings</p>
-              </div>
-            )}
+      {/* Drawer Sidebar - memoized to prevent unnecessary re-renders */}
+      {useMemo(() => (
+        <Sidebar
+          position="bottom"
+          blockScroll
+          visible={drawerVisible}
+          onHide={closeDrawer}
+          style={{ height: '100dvh' }}
+          className="custom-drawer"
+          header={
+            <h2 className="text-lg font-semibold text-gray-800 m-0">
+              {clickedDrawerValues.innerValue
+                ? `${clickedDrawerValues.outerValue} : ${clickedDrawerValues.innerValue}`
+                : clickedDrawerValues.outerValue || 'Drawer'}
+            </h2>
+          }
+        >
+          <div className="flex flex-col h-full">
+            <div className="flex-1">
+              {drawerTabs && drawerTabs.length > 0 ? (
+                <TabView
+                  activeIndex={Math.min(activeDrawerTabIndex, Math.max(0, drawerTabs.length - 1))}
+                  onTabChange={(e) => setActiveDrawerTabIndex(e.index)}
+                  className="h-full flex flex-col"
+                >
+                  {drawerTabs.map((tab) => (
+                    <TabPanel
+                      key={tab.id}
+                      header={tab.name || `Tab ${drawerTabs.indexOf(tab) + 1}`}
+                      className="h-full flex flex-col"
+                    >
+                      <div className="flex-1 overflow-auto">
+                        {drawerData && drawerData.length > 0 ? (
+                          <DataTableOldComponent
+                            data={drawerData}
+                            rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
+                            defaultRows={10}
+                            scrollable={false}
+                            enableSort={enableSort}
+                            enableFilter={enableFilter}
+                            enableSummation={enableSummation}
+                            textFilterColumns={textFilterColumns}
+                            visibleColumns={visibleColumns}
+                            onVisibleColumnsChange={stableOnVisibleColumnsChange}
+                            redFields={redFields}
+                            greenFields={greenFields}
+                            outerGroupField={tab.outerGroup}
+                            innerGroupField={tab.innerGroup}
+                            percentageColumns={percentageColumns}
+                            enableDivideBy1Lakh={enableDivideBy1Lakh}
+                            enableCellEdit={false}
+                            columnTypes={columnTypes}
+                            tableName="sidebar"
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center h-full text-center">
+                            <i className="pi pi-inbox text-4xl text-gray-400 mb-4"></i>
+                            <p className="text-gray-600 font-medium">No data available</p>
+                            <p className="text-sm text-gray-500 mt-1">No matching rows found</p>
+                          </div>
+                        )}
+                      </div>
+                    </TabPanel>
+                  ))}
+                </TabView>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <i className="pi pi-inbox text-4xl text-gray-400 mb-4"></i>
+                  <p className="text-gray-600 font-medium">No tabs configured</p>
+                  <p className="text-sm text-gray-500 mt-1">Please configure drawer tabs in settings</p>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      </Sidebar>
+        </Sidebar>
+      ), [
+        drawerVisible, 
+        closeDrawer, 
+        clickedDrawerValues, 
+        stableDrawerTabs, 
+        activeDrawerTabIndex, 
+        drawerData, 
+        enableSort, 
+        enableFilter, 
+        enableSummation, 
+        textFilterColumns, 
+        visibleColumns, 
+        stableOnVisibleColumnsChange, 
+        redFields, 
+        greenFields, 
+        percentageColumns, 
+        enableDivideBy1Lakh, 
+        stableColumnTypes,
+        isAdminMode,
+        drawerSalesTeamColumn,
+        drawerSalesTeamValues,
+        drawerHqColumn,
+        drawerHqValues
+      ])}
     </DataProvider>
   );
 };
