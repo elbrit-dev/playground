@@ -1198,30 +1198,37 @@ const TableDataProvider = (props) => {
                       <div className="flex-1 overflow-auto">
                         {drawerData && drawerData.length > 0 ? (
                         <TableOperationsContext.Provider value={{
-                          ...consolidatedData,
-                          // Override with drawer-specific values
+                          // Create a minimal, safe context for drawer
+                          tableData: drawerData,
+                          rawTableData: drawerData,
                           paginatedData: drawerData,
                           pagination: { first: 0, rows: drawerData.length },
-                          visibleColumns: [], // Show all in drawer
-                          enableFilter: enableFilter,
-                          enableSort: enableSort,
-                          enableSummation: enableSummation,
-                          outerGroupField: safeTab.outerGroup,
-                          innerGroupField: safeTab.innerGroup,
-                          textFilterColumns: Array.isArray(textFilterColumns) ? textFilterColumns : [],
-                          redFields: Array.isArray(redFields) ? redFields : [],
-                          greenFields: Array.isArray(greenFields) ? greenFields : [],
-                          percentageColumns: Array.isArray(percentageColumns) ? percentageColumns : [],
-                          columnTypes: columnTypes && typeof columnTypes === 'object' ? columnTypes : {},
-                          // Remove drawer-specific context to avoid conflicts
-                          drawerTabs: [],
-                          drawerVisible: false,
-                          drawerData: [],
-                          // Don't apply auth filters here - data is already filtered by openDrawerWithData
+                          visibleColumns: [],
+                          enableFilter: enableFilter || false,
+                          enableSort: enableSort || false,
+                          enableSummation: enableSummation || false,
+                          enableGrouping: false,
+                          enableDivideBy1Lakh: enableDivideBy1Lakh || false,
+                          outerGroupField: safeTab.outerGroup || null,
+                          innerGroupField: safeTab.innerGroup || null,
+                          textFilterColumns: [],
+                          redFields: [],
+                          greenFields: [],
+                          percentageColumns: [],
+                          columnTypes: {},
+                          isAdminMode: true,
                           salesTeamColumn: null,
                           salesTeamValues: [],
                           hqColumn: null,
                           hqValues: [],
+                          // Provide empty functions for operations
+                          updateFilter: () => {},
+                          clearFilter: () => {},
+                          clearAllFilters: () => {},
+                          updateSort: () => {},
+                          updatePagination: () => {},
+                          updateExpandedRows: () => {},
+                          updateVisibleColumns: () => {},
                         }}>
                             <DataTableComponent
                               data={drawerData}
