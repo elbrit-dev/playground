@@ -1180,17 +1180,17 @@ const TableDataProvider = (props) => {
                             enableSort={enableSort}
                             enableFilter={enableFilter}
                             enableSummation={enableSummation}
-                            textFilterColumns={textFilterColumns}
-                            visibleColumns={visibleColumns}
+                            textFilterColumns={textFilterColumns || []}
+                            visibleColumns={[]}
                             onVisibleColumnsChange={stableOnVisibleColumnsChange}
-                            redFields={redFields}
-                            greenFields={greenFields}
+                            redFields={redFields || []}
+                            greenFields={greenFields || []}
                             outerGroupField={tab.outerGroup}
                             innerGroupField={tab.innerGroup}
-                            percentageColumns={percentageColumns}
+                            percentageColumns={percentageColumns || []}
                             enableDivideBy1Lakh={enableDivideBy1Lakh}
                             enableCellEdit={false}
-                            columnTypes={columnTypes}
+                            columnTypes={columnTypes || {}}
                             tableName="sidebar"
                             isAdminMode={true}
                             // Don't apply auth filters here - data is already filtered by openDrawerWithData
