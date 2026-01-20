@@ -1155,58 +1155,36 @@ const TableDataProvider = (props) => {
                   >
                     <div className="flex-1 overflow-auto">
                       {drawerData && drawerData.length > 0 ? (
-                        <TableOperationsContext.Provider value={{
-                          ...consolidatedData,
-                          // Override with drawer-specific values (after spread to ensure they take precedence)
-                          paginatedData: drawerData,
-                          pagination: { first: 0, rows: drawerData.length },
-                          visibleColumns: [], // Show all in drawer
-                          enableFilter: enableFilter ?? true,
-                          enableSort: enableSort ?? true,
-                          enableSummation: enableSummation ?? true,
-                          outerGroupField: tab.outerGroup,
-                          innerGroupField: tab.innerGroup,
-                          columnTypes: columnTypes || {},
-                          textFilterColumns: textFilterColumns || [],
-                          redFields: redFields || [],
-                          greenFields: greenFields || [],
-                          percentageColumns: percentageColumns || [],
-                          // Don't apply auth filters here - data is already filtered by openDrawerWithData
-                          salesTeamColumn: null,
-                          salesTeamValues: [],
-                          hqColumn: null,
-                          hqValues: [],
-                          isAdminMode: true,
-                        }}>
+                        <DataProvider
+                          offlineData={drawerData}
+                          dataSource="offline"
+                          useOrchestrationLayer={true}
+                          isAdminMode={true}
+                          columnTypes={columnTypes || {}}
+                          columnTypesOverride={columnTypes || {}}
+                          enableSort={enableSort}
+                          enableFilter={enableFilter}
+                          enableSummation={enableSummation}
+                          enableGrouping={enableGrouping}
+                          enableDivideBy1Lakh={enableDivideBy1Lakh}
+                          textFilterColumns={textFilterColumns || []}
+                          visibleColumns={[]}
+                          redFields={redFields || []}
+                          greenFields={greenFields || []}
+                          outerGroupField={tab.outerGroup}
+                          innerGroupField={tab.innerGroup}
+                          percentageColumns={percentageColumns || []}
+                          hideDataSourceAndQueryKey={true}
+                        >
                           <DataTableComponent
-                            data={drawerData}
                             useOrchestrationLayer={true}
                             rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
                             defaultRows={10}
                             scrollable={false}
-                            enableSort={enableSort}
-                            enableFilter={enableFilter}
-                            enableSummation={enableSummation}
-                            textFilterColumns={textFilterColumns || []}
-                            visibleColumns={[]}
-                            onVisibleColumnsChange={stableOnVisibleColumnsChange}
-                            redFields={redFields || []}
-                            greenFields={greenFields || []}
-                            outerGroupField={tab.outerGroup}
-                            innerGroupField={tab.innerGroup}
-                            percentageColumns={percentageColumns || []}
-                            enableDivideBy1Lakh={enableDivideBy1Lakh}
                             enableCellEdit={false}
-                            columnTypes={columnTypes || {}}
                             tableName="sidebar"
-                            isAdminMode={true}
-                            // Don't apply auth filters here - data is already filtered by openDrawerWithData
-                            salesTeamColumn={null}
-                            salesTeamValues={[]}
-                            hqColumn={null}
-                            hqValues={[]}
                           />
-                        </TableOperationsContext.Provider>
+                        </DataProvider>
                       ) : (
                         <div className="flex flex-col items-center justify-center h-full text-center">
                           <i className="pi pi-inbox text-4xl text-gray-400 mb-4"></i>
