@@ -797,65 +797,6 @@ const TableDataProvider = (props) => {
             .wrapper-selectors-container .whitespace-nowrap:not(.p-button-label) {
               display: none !important;
             }
-            
-            /* Fix for Drawer scrolling issues */
-            .p-sidebar-bottom.p-sidebar-sm {
-              height: 100% !important;
-              max-height: 100% !important;
-            }
-            
-            .p-sidebar-bottom .p-sidebar-content {
-              height: 100%;
-              display: flex;
-              flex-direction: column;
-              overflow: hidden !important;
-              padding: 0 !important;
-              position: relative;
-            }
-            
-            .p-sidebar-bottom .p-tabview {
-              display: flex;
-              flex-direction: column;
-              height: 100%;
-              flex: 1;
-              min-height: 0;
-            }
-            
-            .p-sidebar-bottom .p-tabview-panels {
-              flex: 1;
-              min-height: 0;
-              display: flex;
-              flex-direction: column;
-              padding: 0 !important;
-              height: 100%;
-            }
-            
-            .p-sidebar-bottom .p-tabview-panel {
-              flex: 1;
-              display: flex;
-              flex-direction: column;
-              min-height: 0;
-              height: 100%;
-            }
-            
-            .p-sidebar-bottom .overflow-auto {
-              flex: 1;
-              min-height: 0;
-              overflow-y: auto !important;
-              overflow-x: auto !important;
-              -webkit-overflow-scrolling: touch;
-              overscroll-behavior: contain;
-              overflow-anchor: none;
-              touch-action: pan-y pinch-zoom;
-            }
-
-            .p-sidebar-bottom .p-datatable-wrapper {
-              overflow: visible !important;
-            }
-
-            .p-sidebar-bottom .p-datatable {
-              height: auto !important;
-            }
           `}} />
         </div>
       ) : null}
