@@ -3,6 +3,8 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { Toast } from 'primereact/toast';
 import { Splitter, SplitterPanel } from 'primereact/splitter';
+import { Sidebar } from 'primereact/sidebar';
+import { TabView, TabPanel } from 'primereact/tabview';
 import DataTableComponent from '../share/datatable/components/DataTable';
 import DataTableControls from '../share/datatable/components/DataTableControls';
 import data from '../resource/data';
@@ -434,6 +436,37 @@ const DataTableWrapper = (props) => {
 
   const toast = useRef(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [tableData, setTableData] = useState(propData || data);
+
+  // Sync tableData with propData using stringified check to prevent loops
+  const stringifiedData = JSON.stringify(propData);
+  useEffect(() => {
+    if (propData !== undefined) {
+      setTableData(propData);
+      if (propData && Array.isArray(propData)) {
+        originalTableDataRef.current = propData;
+      }
+    }
+  }, [stringifiedData]);
+
+  const [currentDataSource, setCurrentDataSource] = useState(propDataSource || null);
+
+  // Sync currentDataSource with propDataSource
+  useEffect(() => {
+    if (propDataSource !== undefined) {
+      setCurrentDataSource(propDataSource);
+    }
+  }, [propDataSource]);
+
+  const [queryVariables, setQueryVariables] = useState(propQueryVariables || {});
+
+  // Sync queryVariables with propQueryVariables using stringified check
+  const stringifiedVariables = JSON.stringify(propQueryVariables);
+  useEffect(() => {
+    if (propQueryVariables !== undefined) {
+      setQueryVariables(propQueryVariables);
+    }
+  }, [stringifiedVariables]);
 
   const [variableOverrides, setVariableOverrides] = useState({});
 
@@ -480,12 +513,14 @@ const DataTableWrapper = (props) => {
   }, []);
 
   const handleTableDataChange = (newTableData) => {
+    setTableData(newTableData);
     if (newTableData && Array.isArray(newTableData)) {
       originalTableDataRef.current = newTableData;
     }
   };
 
   const handleDataSourceChange = useCallback((dataSource) => {
+    setCurrentDataSource(dataSource);
     if (!dataSource) return;
 
     const savedSettings = loadSettingsForDataSource(dataSource);
@@ -500,6 +535,8 @@ const DataTableWrapper = (props) => {
       if (savedSettings.visibleColumns) setVisibleColumnsRaw(savedSettings.visibleColumns);
       if (savedSettings.redFields) setRedFieldsRaw(savedSettings.redFields);
       if (savedSettings.greenFields) setGreenFieldsRaw(savedSettings.greenFields);
+      if (savedSettings.outerGroupField !== undefined) setOuterGroupFieldRaw(savedSettings.outerGroupField);
+      if (savedSettings.innerGroupField !== undefined) setInnerGroupFieldRaw(savedSettings.innerGroupField);
       if (savedSettings.nonEditableColumns) setNonEditableColumnsRaw(savedSettings.nonEditableColumns);
       if (savedSettings.enableDivideBy1Lakh !== undefined) setEnableDivideBy1Lakh(savedSettings.enableDivideBy1Lakh);
       if (savedSettings.percentageColumns !== undefined) setPercentageColumnsRaw(savedSettings.percentageColumns);
@@ -508,12 +545,13 @@ const DataTableWrapper = (props) => {
       if (savedSettings.salesTeamValues !== undefined) setSalesTeamValuesRaw(savedSettings.salesTeamValues);
       if (savedSettings.hqColumn !== undefined) setHqColumnRaw(savedSettings.hqColumn);
       if (savedSettings.hqValues !== undefined) setHqValuesRaw(savedSettings.hqValues);
+      if (savedSettings.drawerTabs !== undefined) setDrawerTabs(savedSettings.drawerTabs);
       if (savedSettings.columnTypes !== undefined) setColumnTypesRaw(savedSettings.columnTypes);
     }
   }, []);
 
   const handleSaveSettings = () => {
-    if (!propDataSource) {
+    if (!currentDataSource) {
       toast.current?.show({ severity: 'warn', summary: 'Warning', detail: 'Select a data source first', life: 3000 });
       return;
     }
@@ -524,12 +562,11 @@ const DataTableWrapper = (props) => {
       redFields, greenFields, outerGroupField, innerGroupField,
       nonEditableColumns, drawerTabs,
       enableDivideBy1Lakh, enableFullscreenDialog, percentageColumns, isAdminMode, salesTeamColumn,
-      salesTeamValues, hqColumn, hqValues, columnTypes, useOrchestrationLayer,
-      enableReport, dateColumn, breakdownType
+      salesTeamValues, hqColumn, hqValues, columnTypes, useOrchestrationLayer
     };
 
     try {
-      saveSettingsForDataSource(propDataSource, settings);
+      saveSettingsForDataSource(currentDataSource, settings);
       toast.current?.show({ severity: 'success', summary: 'Success', detail: 'Settings saved', life: 3000 });
       if (onSave) onSave();
     } catch (error) {
@@ -538,10 +575,9 @@ const DataTableWrapper = (props) => {
   };
 
   const columns = useMemo(() => {
-    const tableData = propData || data;
     if (!Array.isArray(tableData) || isEmpty(tableData)) return [];
     return uniq(flatMap(tableData, (item) => item && typeof item === 'object' ? keys(item) : []));
-  }, [propData]);
+  }, [tableData]);
 
   const handleCellEditComplete = (e) => {
     const { newValue, field, oldValue } = e;
@@ -555,24 +591,59 @@ const DataTableWrapper = (props) => {
   };
 
   const handleOuterGroupClick = (rowData, column, value) => {
-    if (useOrchestrationLayer) return; // Handled by context internally in DataTableNew
+    const originalData = originalTableDataRef.current || tableData;
+    if (!Array.isArray(originalData)) return;
+
+    setClickedDrawerValues({ outerValue: value, innerValue: null });
+    setActiveDrawerTabIndex(0);
+
+    const filteredData = lodashFilter(originalData, (row) => {
+      const rowValue = get(row, outerGroupField);
+      return isNil(value) ? isNil(rowValue) : String(rowValue) === String(value);
+    });
+
+    setDrawerData(filteredData);
+    setDrawerVisible(true);
   };
 
   const handleInnerGroupClick = (rowData, column, value) => {
-    if (useOrchestrationLayer) return; // Handled by context internally in DataTableNew
+    const originalData = originalTableDataRef.current || tableData;
+    if (!Array.isArray(originalData)) return;
+
+    const outerValue = get(rowData, outerGroupField);
+    setClickedDrawerValues({ outerValue, innerValue: value });
+    setActiveDrawerTabIndex(0);
+
+    const filteredData = lodashFilter(originalData, (row) => {
+      const rowOuterValue = get(row, outerGroupField);
+      const rowInnerValue = get(row, innerGroupField);
+
+      let outerMatch = isNil(outerValue) ? isNil(rowOuterValue) : String(rowOuterValue) === String(outerValue);
+      if (!outerMatch) return false;
+
+      return isNil(value) ? isNil(rowInnerValue) : String(rowInnerValue) === String(value);
+    });
+
+    setDrawerData(filteredData);
+    setDrawerVisible(true);
   };
 
   const handleAddDrawerTab = useCallback(() => {
-    if (context?.onAddDrawerTab) context.onAddDrawerTab();
-  }, [context]);
+    const newTab = { id: `tab-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, name: '', outerGroup: null, innerGroup: null };
+    setDrawerTabs(prev => [...prev, newTab]);
+    setActiveDrawerTabIndex(drawerTabs.length);
+  }, [drawerTabs]);
 
   const handleRemoveDrawerTab = useCallback((tabId) => {
-    if (context?.onRemoveDrawerTab) context.onRemoveDrawerTab(tabId);
-  }, [context]);
+    if (drawerTabs.length <= 1) return;
+    const newTabs = drawerTabs.filter(tab => tab.id !== tabId);
+    setDrawerTabs(newTabs);
+    if (activeDrawerTabIndex >= newTabs.length) setActiveDrawerTabIndex(newTabs.length - 1);
+  }, [drawerTabs, activeDrawerTabIndex]);
 
   const handleUpdateDrawerTab = useCallback((tabId, updates) => {
-    if (context?.onUpdateDrawerTab) context.onUpdateDrawerTab(tabId, updates);
-  }, [context]);
+    setDrawerTabs(prev => prev.map(tab => tab.id === tabId ? { ...tab, ...updates } : tab));
+  }, []);
 
   if (isLoading) {
     return (

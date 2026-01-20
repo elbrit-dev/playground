@@ -359,18 +359,10 @@ const TableDataProvider = (props) => {
   useEffect(() => {
     if (variableOverrides?.startDate && variableOverrides?.endDate) {
       try {
-        const newStart = new Date(variableOverrides.startDate);
-        const newEnd = new Date(variableOverrides.endDate);
-        
-        setMonthRange(prev => {
-          if (prev && prev[0]?.getTime() === newStart.getTime() && prev[1]?.getTime() === newEnd.getTime()) {
-            return prev;
-          }
-          return [newStart, newEnd];
-        });
+        setMonthRange([new Date(variableOverrides.startDate), new Date(variableOverrides.endDate)]);
       } catch (e) {}
     }
-  }, [variableOverrides?.startDate, variableOverrides?.endDate]);
+  }, [variableOverrides]);
 
   // Periodic refresh of the timestamp
   useEffect(() => {
@@ -428,10 +420,7 @@ const TableDataProvider = (props) => {
   useEffect(() => { onInnerGroupFieldChangeRef.current = propOnInnerGroupFieldChange; }, [propOnInnerGroupFieldChange]);
 
   const stableOnTableDataChange = useCallback((data) => {
-    // Only update if data actually changed to prevent render loops
     setCurrentTableData(prev => {
-      if (prev === data) return prev;
-      // Deep compare is expensive, but we only do it when reference changes
       if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
       return data;
     });
@@ -439,9 +428,7 @@ const TableDataProvider = (props) => {
   }, []);
 
   const stableOnRawDataChange = useCallback((data) => {
-    // Only update if data actually changed
     setCurrentRawData(prev => {
-      if (prev === data) return prev;
       if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
       return data;
     });
@@ -577,26 +564,6 @@ const TableDataProvider = (props) => {
     onInnerGroupFieldChangeRef.current?.(field);
   }, []);
 
-  const stableAddDrawerTab = useCallback(() => {
-    const newTab = { id: `tab-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, name: '', outerGroup: null, innerGroup: null };
-    const updatedTabs = [...(drawerTabs || []), newTab];
-    setDrawerTabs(updatedTabs);
-    onDrawerTabsChangeRef.current?.(updatedTabs);
-  }, [drawerTabs]);
-
-  const stableRemoveDrawerTab = useCallback((tabId) => {
-    if (!drawerTabs || drawerTabs.length <= 1) return;
-    const updatedTabs = drawerTabs.filter(tab => tab.id !== tabId);
-    setDrawerTabs(updatedTabs);
-    onDrawerTabsChangeRef.current?.(updatedTabs);
-  }, [drawerTabs]);
-
-  const stableUpdateDrawerTab = useCallback((tabId, updates) => {
-    const updatedTabs = drawerTabs.map(tab => tab.id === tabId ? { ...tab, ...updates } : tab);
-    setDrawerTabs(updatedTabs);
-    onDrawerTabsChangeRef.current?.(updatedTabs);
-  }, [drawerTabs]);
-
   // Stabilize merged variables to prevent infinite fetch loops
   // We only pass variables as "overrides" if they actually differ from the base variables
   // reported by the core DataProvider. This allows the core to use its cache-first
@@ -691,9 +658,6 @@ const TableDataProvider = (props) => {
     onBreakdownTypeChange: stableOnBreakdownTypeChange,
     onOuterGroupFieldChange: stableOnOuterGroupFieldChange,
     onInnerGroupFieldChange: stableOnInnerGroupFieldChange,
-    onAddDrawerTab: stableAddDrawerTab,
-    onRemoveDrawerTab: stableRemoveDrawerTab,
-    onUpdateDrawerTab: stableUpdateDrawerTab,
   }), [
     currentTableData, currentRawData, currentVariables, savedQueries,
     loadingQueries, executingQuery, availableQueryKeys, selectedQueryKey,
@@ -704,8 +668,7 @@ const TableDataProvider = (props) => {
     outerGroupField, innerGroupField, percentageColumns, drawerTabs,
     enableReport, dateColumn, breakdownType,
     stableOnEnableReportChange, stableOnDateColumnChange, stableOnBreakdownTypeChange,
-    stableOnOuterGroupFieldChange, stableOnInnerGroupFieldChange,
-    stableAddDrawerTab, stableRemoveDrawerTab, stableUpdateDrawerTab
+    stableOnOuterGroupFieldChange, stableOnInnerGroupFieldChange
   ]);
 
   return (
@@ -758,53 +721,142 @@ const TableDataProvider = (props) => {
       breakdownType={breakdownType}
       hideDataSourceAndQueryKey={hideDataSourceAndQueryKey !== undefined ? hideDataSourceAndQueryKey : !showSelectors}
       renderHeaderControls={(selectorsJSX) => showSelectors ? (
-        <div className="p-4 border-b border-gray-200 bg-white flex justify-between items-end gap-4">
-          {/* selectorsJSX from share folder */}
-          <div className="flex-1 min-w-0">
-            {selectorsJSX}
-          </div>
+        <div className="px-4 py-3 border-b border-gray-200 bg-white">
+          <div className="flex flex-col gap-3">
+            <div className="flex justify-between items-start gap-3 flex-wrap">
+              {/* Left: Data Source and Query Key Selectors (if not hidden) */}
+              {!hideDataSourceAndQueryKey && (
+                <div className="flex items-end gap-3 flex-wrap">
+                  {/* Data Source Selector */}
+                  <div className="w-full sm:w-48">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Data Source
+                    </label>
+                    <Dropdown
+                      value={dataSource}
+                      onChange={(e) => stableOnDataSourceChange(e.value)}
+                      options={[
+                        { label: 'Offline', value: 'offline' },
+                        ...savedQueries.map(q => ({ label: q.name, value: q.id }))
+                      ]}
+                      optionLabel="label"
+                      optionValue="value"
+                      placeholder="Select a data source"
+                      className="w-full"
+                      loading={loadingQueries}
+                      disabled={executingQuery}
+                      style={{
+                        height: '3rem',
+                      }}
+                    />
+                  </div>
 
-          {/* Wrapper selectors */}
-          {!hideDataSourceAndQueryKey && (
-            <div className="flex items-end gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-gray-700">Data Source</label>
-                <Dropdown
-                  value={dataSource}
-                  onChange={(e) => stableOnDataSourceChange(e.value)}
-                  options={[
-                    { label: 'Offline', value: 'offline' },
-                    ...savedQueries.map(q => ({ label: q.name, value: q.id }))
-                  ]}
-                  optionLabel="label"
-                  optionValue="value"
-                  placeholder="Select source"
-                  loading={loadingQueries}
-                  disabled={executingQuery}
-                  style={{ height: '3rem', width: '12rem' }}
-                />
-              </div>
-
-              {dataSource && dataSource !== 'offline' && availableQueryKeys.length > 0 && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-gray-700">Query Key</label>
-                  <Dropdown
-                    value={selectedQueryKey}
-                    onChange={(e) => stableOnSelectedQueryKeyChange(e.value)}
-                    options={availableQueryKeys.map(key => ({ 
-                      label: startCase(key.split('__').join(' ').split('_').join(' ')), 
-                      value: key 
-                    }))}
-                    optionLabel="label"
-                    optionValue="value"
-                    placeholder="Select key"
-                    disabled={executingQuery}
-                    style={{ height: '3rem', width: '12rem' }}
-                  />
+                  {/* Query Key Selector */}
+                  {dataSource && dataSource !== 'offline' && availableQueryKeys.length > 0 && (
+                    <div className="w-full sm:w-48">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Query Key
+                      </label>
+                      <Dropdown
+                        value={selectedQueryKey}
+                        onChange={(e) => stableOnSelectedQueryKeyChange(e.value)}
+                        options={availableQueryKeys.map(key => ({ 
+                          label: startCase(key.split('__').join(' ').split('_').join(' ')), 
+                          value: key 
+                        }))}
+                        optionLabel="label"
+                        optionValue="value"
+                        placeholder="Select Query Key"
+                        className="w-full"
+                        disabled={executingQuery}
+                        style={{
+                          height: '3rem',
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
+
+            {/* Bottom: selectorsJSX from DataProvider (Month, Sales Team, HQ, Sync, Last Updated) */}
+            <div className="w-full wrapper-selectors-container">
+              {selectorsJSX}
+              
+              {/* Corrected Last Updated Display - Following DataProvider.jsx wording/style */}
+              {dataSource && dataSource !== 'offline' && (
+                <div className="mt-2 text-xs text-gray-700">
+                  {/* Last updated: {lastUpdatedAt ? formatLastUpdatedDate(lastUpdatedAt) : <span className="text-gray-400">N/A</span>} */}
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* CSS to hide the internal/broken Last Updated text but keep the Sync button */}
+          <style dangerouslySetInnerHTML={{ __html: `
+            .wrapper-selectors-container .whitespace-nowrap:not(.p-button-label) {
+              display: none !important;
+            }
+            
+            /* Fix for Drawer scrolling issues */
+            .p-sidebar-bottom.p-sidebar-sm {
+              height: 100% !important;
+              max-height: 100% !important;
+            }
+            
+            .p-sidebar-bottom .p-sidebar-content {
+              height: 100%;
+              display: flex;
+              flex-direction: column;
+              overflow: hidden !important;
+              padding: 0 !important;
+              position: relative;
+            }
+            
+            .p-sidebar-bottom .p-tabview {
+              display: flex;
+              flex-direction: column;
+              height: 100%;
+              flex: 1;
+              min-height: 0;
+            }
+            
+            .p-sidebar-bottom .p-tabview-panels {
+              flex: 1;
+              min-height: 0;
+              display: flex;
+              flex-direction: column;
+              padding: 0 !important;
+              height: 100%;
+            }
+            
+            .p-sidebar-bottom .p-tabview-panel {
+              flex: 1;
+              display: flex;
+              flex-direction: column;
+              min-height: 0;
+              height: 100%;
+            }
+            
+            .p-sidebar-bottom .overflow-auto {
+              flex: 1;
+              min-height: 0;
+              overflow-y: auto !important;
+              overflow-x: auto !important;
+              -webkit-overflow-scrolling: touch;
+              overscroll-behavior: contain;
+              overflow-anchor: none;
+              touch-action: pan-y pinch-zoom;
+            }
+
+            .p-sidebar-bottom .p-datatable-wrapper {
+              overflow: visible !important;
+            }
+
+            .p-sidebar-bottom .p-datatable {
+              height: auto !important;
+            }
+          `}} />
         </div>
       ) : null}
     >
