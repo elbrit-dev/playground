@@ -1157,19 +1157,26 @@ const TableDataProvider = (props) => {
                       {drawerData && drawerData.length > 0 ? (
                         <TableOperationsContext.Provider value={{
                           ...consolidatedData,
+                          // Override with drawer-specific values (after spread to ensure they take precedence)
                           paginatedData: drawerData,
                           pagination: { first: 0, rows: drawerData.length },
                           visibleColumns: [], // Show all in drawer
-                          enableFilter: enableFilter,
-                          enableSort: enableSort,
-                          enableSummation: enableSummation,
+                          enableFilter: enableFilter ?? true,
+                          enableSort: enableSort ?? true,
+                          enableSummation: enableSummation ?? true,
                           outerGroupField: tab.outerGroup,
                           innerGroupField: tab.innerGroup,
+                          columnTypes: columnTypes || {},
+                          textFilterColumns: textFilterColumns || [],
+                          redFields: redFields || [],
+                          greenFields: greenFields || [],
+                          percentageColumns: percentageColumns || [],
                           // Don't apply auth filters here - data is already filtered by openDrawerWithData
                           salesTeamColumn: null,
                           salesTeamValues: [],
                           hqColumn: null,
                           hqValues: [],
+                          isAdminMode: true,
                         }}>
                           <DataTableComponent
                             data={drawerData}
