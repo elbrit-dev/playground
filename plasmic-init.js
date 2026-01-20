@@ -193,6 +193,17 @@ PLASMIC.registerComponent(TableDataProvider, {
       type: "object",
       defaultValue: [],
     },
+    enableReport: {
+      type: "boolean",
+      defaultValue: false,
+    },
+    dateColumn: {
+      type: "string",
+    },
+    breakdownType: {
+      type: "string",
+      defaultValue: "month",
+    },
     onDataChange: {
       type: "eventHandler",
       argTypes: [{ name: "notification", type: "object" }],
@@ -260,6 +271,26 @@ PLASMIC.registerComponent(TableDataProvider, {
     onAdminModeChange: {
       type: "eventHandler",
       argTypes: [{ name: "isAdminMode", type: "boolean" }],
+    },
+    onEnableReportChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "enabled", type: "boolean" }],
+    },
+    onDateColumnChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "column", type: "string" }],
+    },
+    onBreakdownTypeChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "type", type: "string" }],
+    },
+    onOuterGroupFieldChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "field", type: "string" }],
+    },
+    onInnerGroupFieldChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "field", type: "string" }],
     },
     dataSlot: {
       type: "slot",
@@ -419,9 +450,40 @@ PLASMIC.registerComponent(DataTable, {
       description: "Array of tab configurations for the detail drawer (name, outerGroup, innerGroup)",
       defaultValue: [],
     },
+    enableReport: {
+      type: "boolean",
+      defaultValue: false,
+    },
+    dateColumn: {
+      type: "string",
+    },
+    breakdownType: {
+      type: "string",
+      defaultValue: "month",
+    },
     onDrawerTabsChange: {
       type: "eventHandler",
       argTypes: [{ name: "tabs", type: "object" }],
+    },
+    onEnableReportChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "enabled", type: "boolean" }],
+    },
+    onDateColumnChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "column", type: "string" }],
+    },
+    onBreakdownTypeChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "type", type: "string" }],
+    },
+    onOuterGroupFieldChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "field", type: "string" }],
+    },
+    onInnerGroupFieldChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "field", type: "string" }],
     },
     controlsPanelSize: {
       type: "number",
