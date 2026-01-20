@@ -354,20 +354,6 @@ const TableDataProvider = (props) => {
   const [activeDrawerTabIndex, setActiveDrawerTabIndex] = useState(0);
   const [clickedDrawerValues, setClickedDrawerValues] = useState({ outerValue: null, innerValue: null });
 
-  // Sync propDrawerVisible with state
-  useEffect(() => {
-    setDrawerVisible(propDrawerVisible);
-    
-    // If opened manually (e.g., via Plasmic prop) and we have no data yet, 
-    // attempt to populate it with all available table data for previewing.
-    if (propDrawerVisible && (!drawerData || drawerData.length === 0)) {
-      const initialData = currentTableData || [];
-      if (initialData.length > 0) {
-        openDrawerWithData(initialData, null, null);
-      }
-    }
-  }, [propDrawerVisible, currentTableData, openDrawerWithData]);
-
   // New internal state to expose to Plasmic
   const [savedQueries, setSavedQueries] = useState([]);
   const [loadingQueries, setLoadingQueries] = useState(false);
@@ -805,6 +791,20 @@ const TableDataProvider = (props) => {
     setDrawerVisible(false);
     propOnDrawerVisibleChange?.(false);
   }, [propOnDrawerVisibleChange]);
+
+  // Sync propDrawerVisible with state
+  useEffect(() => {
+    setDrawerVisible(propDrawerVisible);
+    
+    // If opened manually (e.g., via Plasmic prop) and we have no data yet, 
+    // attempt to populate it with all available table data for previewing.
+    if (propDrawerVisible && (!drawerData || drawerData.length === 0)) {
+      const initialData = currentTableData || [];
+      if (initialData.length > 0) {
+        openDrawerWithData(initialData, null, null);
+      }
+    }
+  }, [propDrawerVisible, currentTableData, openDrawerWithData]);
 
   // Stabilize merged variables to prevent infinite fetch loops
   // We only pass variables as "overrides" if they actually differ from the base variables
