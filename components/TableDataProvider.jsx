@@ -8,7 +8,7 @@ import { Dropdown } from 'primereact/dropdown';
 import { Sidebar } from 'primereact/sidebar';
 import { TabView, TabPanel } from 'primereact/tabview';
 import DataTableComponent from '../share/datatable/components/DataTable';
-import { startCase, filter as lodashFilter, get, isNil } from 'lodash';
+import { startCase, filter as lodashFilter, get, isNil, flatMap } from 'lodash';
 import { TableProvider } from './TableContext';
 import { TableOperationsContext } from '../share/datatable/contexts/TableOperationsContext';
 import dayjs from 'dayjs';
