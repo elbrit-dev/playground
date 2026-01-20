@@ -730,32 +730,31 @@ const TableDataProvider = (props) => {
   const openDrawerWithData = useCallback((data, outerValue, innerValue) => {
     let filteredData = data || [];
 
-    // Apply drawer-specific auth filters if not admin
-    if (!isAdminMode) {
-      if (drawerSalesTeamColumn && drawerSalesTeamValues && drawerSalesTeamValues.length > 0) {
-        // Flatten values in case Plasmic passed nested arrays like [["Team A"]]
-        const allowedTeams = lodashFilter(flatMap([drawerSalesTeamValues], v => v), v => !isNil(v)).map(v => String(v).trim().toLowerCase());
-        
-        filteredData = lodashFilter(filteredData, (row) => {
-          const rowValue = get(row, drawerSalesTeamColumn);
-          if (Array.isArray(rowValue)) {
-            return rowValue.some(rv => allowedTeams.includes(String(rv).trim().toLowerCase()));
-          }
-          return !isNil(rowValue) && allowedTeams.includes(String(rowValue).trim().toLowerCase());
-        });
-      }
-      if (drawerHqColumn && drawerHqValues && drawerHqValues.length > 0) {
-        // Flatten values
-        const allowedHqs = lodashFilter(flatMap([drawerHqValues], v => v), v => !isNil(v)).map(v => String(v).trim().toLowerCase());
+    // Apply drawer-specific group filters for sales team and HQ (works like clicking a row)
+    // These are data filters, not auth filters, so we apply them regardless of admin mode
+    if (drawerSalesTeamColumn && drawerSalesTeamValues && drawerSalesTeamValues.length > 0) {
+      // Flatten values in case Plasmic passed nested arrays like [["Team A"]]
+      const filterTeams = lodashFilter(flatMap([drawerSalesTeamValues], v => v), v => !isNil(v)).map(v => String(v).trim().toLowerCase());
+      
+      filteredData = lodashFilter(filteredData, (row) => {
+        const rowValue = get(row, drawerSalesTeamColumn);
+        if (Array.isArray(rowValue)) {
+          return rowValue.some(rv => filterTeams.includes(String(rv).trim().toLowerCase()));
+        }
+        return !isNil(rowValue) && filterTeams.includes(String(rowValue).trim().toLowerCase());
+      });
+    }
+    if (drawerHqColumn && drawerHqValues && drawerHqValues.length > 0) {
+      // Flatten values
+      const filterHqs = lodashFilter(flatMap([drawerHqValues], v => v), v => !isNil(v)).map(v => String(v).trim().toLowerCase());
 
-        filteredData = lodashFilter(filteredData, (row) => {
-          const rowValue = get(row, drawerHqColumn);
-          if (Array.isArray(rowValue)) {
-            return rowValue.some(rv => allowedHqs.includes(String(rv).trim().toLowerCase()));
-          }
-          return !isNil(rowValue) && allowedHqs.includes(String(rowValue).trim().toLowerCase());
-        });
-      }
+      filteredData = lodashFilter(filteredData, (row) => {
+        const rowValue = get(row, drawerHqColumn);
+        if (Array.isArray(rowValue)) {
+          return rowValue.some(rv => filterHqs.includes(String(rv).trim().toLowerCase()));
+        }
+        return !isNil(rowValue) && filterHqs.includes(String(rowValue).trim().toLowerCase());
+      });
     }
 
     setDrawerData(filteredData);
@@ -763,20 +762,21 @@ const TableDataProvider = (props) => {
     setActiveDrawerTabIndex(0);
     setDrawerVisible(true);
     propOnDrawerVisibleChange?.(true);
-  }, [propOnDrawerVisibleChange, isAdminMode, drawerSalesTeamColumn, JSON.stringify(drawerSalesTeamValues), drawerHqColumn, JSON.stringify(drawerHqValues)]);
+  }, [propOnDrawerVisibleChange, drawerSalesTeamColumn, JSON.stringify(drawerSalesTeamValues), drawerHqColumn, JSON.stringify(drawerHqValues)]);
 
   const openDrawerForOuterGroup = useCallback((value) => {
-    // We use currentTableData which is the filtered data from DataProvider
-    const dataToFilter = currentTableData || [];
+    // Use raw data so drawer can apply its own filters (sales team, HQ, etc.)
+    const dataToFilter = currentRawData || currentTableData || [];
     const filtered = lodashFilter(dataToFilter, (row) => {
       const rowValue = get(row, outerGroupField);
       return isNil(value) ? isNil(rowValue) : String(rowValue) === String(value);
     });
     openDrawerWithData(filtered, value, null);
-  }, [currentTableData, outerGroupField, openDrawerWithData]);
+  }, [currentRawData, currentTableData, outerGroupField, openDrawerWithData]);
 
   const openDrawerForInnerGroup = useCallback((outerValue, value) => {
-    const dataToFilter = currentTableData || [];
+    // Use raw data so drawer can apply its own filters (sales team, HQ, etc.)
+    const dataToFilter = currentRawData || currentTableData || [];
     const filtered = lodashFilter(dataToFilter, (row) => {
       const rowOuterValue = get(row, outerGroupField);
       const rowInnerValue = get(row, innerGroupField);
@@ -785,7 +785,7 @@ const TableDataProvider = (props) => {
       return isNil(value) ? isNil(rowInnerValue) : String(rowInnerValue) === String(value);
     });
     openDrawerWithData(filtered, outerValue, value);
-  }, [currentTableData, outerGroupField, innerGroupField, openDrawerWithData]);
+  }, [currentRawData, currentTableData, outerGroupField, innerGroupField, openDrawerWithData]);
 
   const closeDrawer = useCallback(() => {
     setDrawerVisible(false);
@@ -796,15 +796,15 @@ const TableDataProvider = (props) => {
   useEffect(() => {
     setDrawerVisible(propDrawerVisible);
     
-    // If opened manually (e.g., via Plasmic prop) and we have no data yet, 
-    // attempt to populate it with all available table data for previewing.
-    if (propDrawerVisible && (!drawerData || drawerData.length === 0)) {
-      const initialData = currentTableData || [];
+    // If opened manually (e.g., via Plasmic prop), use raw data so drawer filters work correctly
+    if (propDrawerVisible) {
+      // Use raw data (not filtered table data) so that drawer-specific filters can be applied
+      const initialData = currentRawData || currentTableData || [];
       if (initialData.length > 0) {
         openDrawerWithData(initialData, null, null);
       }
     }
-  }, [propDrawerVisible, currentTableData, openDrawerWithData]);
+  }, [propDrawerVisible, currentRawData, currentTableData, openDrawerWithData]);
 
   // Stabilize merged variables to prevent infinite fetch loops
   // We only pass variables as "overrides" if they actually differ from the base variables
@@ -1165,10 +1165,11 @@ const TableDataProvider = (props) => {
                           enableSummation: enableSummation,
                           outerGroupField: tab.outerGroup,
                           innerGroupField: tab.innerGroup,
-                          salesTeamColumn: drawerSalesTeamColumn,
-                          salesTeamValues: drawerSalesTeamValues,
-                          hqColumn: drawerHqColumn,
-                          hqValues: drawerHqValues,
+                          // Don't apply auth filters here - data is already filtered by openDrawerWithData
+                          salesTeamColumn: null,
+                          salesTeamValues: [],
+                          hqColumn: null,
+                          hqValues: [],
                         }}>
                           <DataTableComponent
                             data={drawerData}
@@ -1191,11 +1192,12 @@ const TableDataProvider = (props) => {
                             enableCellEdit={false}
                             columnTypes={columnTypes}
                             tableName="sidebar"
-                            isAdminMode={isAdminMode}
-                            salesTeamColumn={drawerSalesTeamColumn}
-                            salesTeamValues={drawerSalesTeamValues}
-                            hqColumn={drawerHqColumn}
-                            hqValues={drawerHqValues}
+                            isAdminMode={true}
+                            // Don't apply auth filters here - data is already filtered by openDrawerWithData
+                            salesTeamColumn={null}
+                            salesTeamValues={[]}
+                            hqColumn={null}
+                            hqValues={[]}
                           />
                         </TableOperationsContext.Provider>
                       ) : (
