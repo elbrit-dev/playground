@@ -1175,75 +1175,89 @@ const TableDataProvider = (props) => {
       >
         <div className="flex flex-col h-full">
           <div className="flex-1">
-            {drawerTabs && drawerTabs.length > 0 ? (
+            {drawerTabs && Array.isArray(drawerTabs) && drawerTabs.length > 0 ? (
               <TabView
                 activeIndex={Math.min(activeDrawerTabIndex, Math.max(0, drawerTabs.length - 1))}
                 onTabChange={(e) => setActiveDrawerTabIndex(e.index)}
                 className="h-full flex flex-col"
               >
-                {drawerTabs.map((tab) => (
-                  <TabPanel
-                    key={tab.id}
-                    header={tab.name || `Tab ${drawerTabs.indexOf(tab) + 1}`}
-                    className="h-full flex flex-col"
-                  >
-                    <div className="flex-1 overflow-auto">
-                      {drawerData && drawerData.length > 0 ? (
-                        <TableOperationsContext.Provider value={{
-                          ...consolidatedData,
-                          paginatedData: drawerData,
-                          pagination: { first: 0, rows: drawerData.length },
-                          visibleColumns: [], // Show all in drawer
-                          enableFilter: enableFilter,
-                          enableSort: enableSort,
-                          enableSummation: enableSummation,
-                          outerGroupField: tab.outerGroup,
-                          innerGroupField: tab.innerGroup,
-                          // Don't apply auth filters here - data is already filtered by openDrawerWithData
-                          salesTeamColumn: null,
-                          salesTeamValues: [],
-                          hqColumn: null,
-                          hqValues: [],
-                        }}>
-                          <DataTableComponent
-                            data={drawerData}
-                            useOrchestrationLayer={true}
-                            rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
-                            defaultRows={10}
-                            scrollable={false}
-                            enableSort={enableSort}
-                            enableFilter={enableFilter}
-                            enableSummation={enableSummation}
-                            textFilterColumns={textFilterColumns || []}
-                            visibleColumns={[]}
-                            onVisibleColumnsChange={stableOnVisibleColumnsChange}
-                            redFields={redFields || []}
-                            greenFields={greenFields || []}
-                            outerGroupField={tab.outerGroup}
-                            innerGroupField={tab.innerGroup}
-                            percentageColumns={percentageColumns || []}
-                            enableDivideBy1Lakh={enableDivideBy1Lakh}
-                            enableCellEdit={false}
-                            columnTypes={columnTypes || {}}
-                            tableName="sidebar"
-                            isAdminMode={true}
+                {drawerTabs.map((tab) => {
+                  // Ensure tab has valid structure
+                  const safeTab = {
+                    id: tab?.id || `tab-${Math.random()}`,
+                    name: tab?.name || 'Tab',
+                    outerGroup: tab?.outerGroup || null,
+                    innerGroup: tab?.innerGroup || null,
+                  };
+                  return (
+                    <TabPanel
+                      key={safeTab.id}
+                      header={safeTab.name || `Tab ${drawerTabs.indexOf(tab) + 1}`}
+                      className="h-full flex flex-col"
+                    >
+                      <div className="flex-1 overflow-auto">
+                        {drawerData && drawerData.length > 0 ? (
+                          <TableOperationsContext.Provider value={{
+                            ...consolidatedData,
+                            paginatedData: drawerData,
+                            pagination: { first: 0, rows: drawerData.length },
+                            visibleColumns: [], // Show all in drawer
+                            enableFilter: enableFilter,
+                            enableSort: enableSort,
+                            enableSummation: enableSummation,
+                            outerGroupField: safeTab.outerGroup,
+                            innerGroupField: safeTab.innerGroup,
+                            textFilterColumns: textFilterColumns || [],
+                            redFields: redFields || [],
+                            greenFields: greenFields || [],
+                            percentageColumns: percentageColumns || [],
+                            columnTypes: columnTypes || {},
                             // Don't apply auth filters here - data is already filtered by openDrawerWithData
-                            salesTeamColumn={null}
-                            salesTeamValues={[]}
-                            hqColumn={null}
-                            hqValues={[]}
-                          />
-                        </TableOperationsContext.Provider>
-                      ) : (
-                        <div className="flex flex-col items-center justify-center h-full text-center">
-                          <i className="pi pi-inbox text-4xl text-gray-400 mb-4"></i>
-                          <p className="text-gray-600 font-medium">No data available</p>
-                          <p className="text-sm text-gray-500 mt-1">No matching rows found</p>
-                        </div>
-                      )}
-                    </div>
-                  </TabPanel>
-                ))}
+                            salesTeamColumn: null,
+                            salesTeamValues: [],
+                            hqColumn: null,
+                            hqValues: [],
+                          }}>
+                            <DataTableComponent
+                              data={drawerData}
+                              useOrchestrationLayer={true}
+                              rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
+                              defaultRows={10}
+                              scrollable={false}
+                              enableSort={enableSort}
+                              enableFilter={enableFilter}
+                              enableSummation={enableSummation}
+                              textFilterColumns={textFilterColumns || []}
+                              visibleColumns={[]}
+                              onVisibleColumnsChange={stableOnVisibleColumnsChange}
+                              redFields={redFields || []}
+                              greenFields={greenFields || []}
+                              outerGroupField={safeTab.outerGroup}
+                              innerGroupField={safeTab.innerGroup}
+                              percentageColumns={percentageColumns || []}
+                              enableDivideBy1Lakh={enableDivideBy1Lakh}
+                              enableCellEdit={false}
+                              columnTypes={columnTypes || {}}
+                              tableName="sidebar"
+                              isAdminMode={true}
+                              // Don't apply auth filters here - data is already filtered by openDrawerWithData
+                              salesTeamColumn={null}
+                              salesTeamValues={[]}
+                              hqColumn={null}
+                              hqValues={[]}
+                            />
+                          </TableOperationsContext.Provider>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center h-full text-center">
+                            <i className="pi pi-inbox text-4xl text-gray-400 mb-4"></i>
+                            <p className="text-gray-600 font-medium">No data available</p>
+                            <p className="text-sm text-gray-500 mt-1">No matching rows found</p>
+                          </div>
+                        )}
+                      </div>
+                    </TabPanel>
+                  );
+                })}
               </TabView>
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-center">
