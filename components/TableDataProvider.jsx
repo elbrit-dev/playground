@@ -1159,6 +1159,9 @@ const TableDataProvider = (props) => {
                           hqColumn={null}
                           hqValues={[]}
                           columnTypes={columnTypes || {}}
+                          enableGrouping={true}
+                          outerGroupField={tab.outerGroup || null}
+                          innerGroupField={tab.innerGroup || null}
                           hideDataSourceAndQueryKey={true}
                         >
                           <DataTableComponent
@@ -1168,6 +1171,7 @@ const TableDataProvider = (props) => {
                             enableSort={enableSort ?? true}
                             enableFilter={enableFilter ?? true}
                             enableSummation={enableSummation ?? true}
+                            enableGrouping={true}
                             enableDivideBy1Lakh={enableDivideBy1Lakh ?? false}
                             textFilterColumns={textFilterColumns || []}
                             visibleColumns={visibleColumns}
