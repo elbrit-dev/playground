@@ -1124,10 +1124,10 @@ const TableDataProvider = (props) => {
                       {drawerData && drawerData.length > 0 ? (
                         <TableProvider value={{
                           ...consolidatedData,
-                          // Override drawer functions to prevent nested drawers
-                          openDrawerWithData: null,
-                          openDrawerForOuterGroup: null,
-                          openDrawerForInnerGroup: null,
+                          // Override drawer functions to prevent nested drawers - use empty functions instead of null
+                          openDrawerWithData: () => {},
+                          openDrawerForOuterGroup: () => {},
+                          openDrawerForInnerGroup: () => {},
                         }}>
                           <DataProvider
                             offlineData={drawerData}
