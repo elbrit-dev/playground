@@ -1136,14 +1136,14 @@ const TableDataProvider = (props) => {
                           enableSort={enableSort ?? true}
                           enableFilter={enableFilter ?? true}
                           enableSummation={enableSummation ?? true}
-                          enableGrouping={enableGrouping ?? false}
+                          enableGrouping={false}
                           enableDivideBy1Lakh={enableDivideBy1Lakh ?? false}
                           textFilterColumns={textFilterColumns || []}
                           visibleColumns={[]}
                           redFields={redFields || []}
                           greenFields={greenFields || []}
-                          outerGroupField={tab.outerGroup || null}
-                          innerGroupField={tab.innerGroup || null}
+                          outerGroupField={null}
+                          innerGroupField={null}
                           percentageColumns={percentageColumns || []}
                           hideDataSourceAndQueryKey={true}
                         >
@@ -1154,7 +1154,6 @@ const TableDataProvider = (props) => {
                             scrollable={false}
                             enableCellEdit={false}
                             tableName="sidebar"
-                            disableRowClick={true}
                           />
                         </DataProvider>
                       ) : (
