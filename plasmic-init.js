@@ -2,6 +2,7 @@ import React from 'react';
 import { initPlasmicLoader, DataProvider as PlasmicDataProvider } from "@plasmicapp/loader-nextjs";
 import DataTable from "./components/DataTable";
 import TableDataProvider from "./components/TableDataProvider";
+import DataProvider from "./components/DataProvider";
 import PlasmicNavigation from "./components/PlasmicNavigation";
 import jmespath_plus from '@metrichor/jmespath-plus';
 import * as jmespath from 'jmespath';
@@ -325,6 +326,202 @@ PLASMIC.registerComponent(TableDataProvider, {
   },
   providesData: true,
   importPath: "./components/TableDataProvider",
+});
+
+PLASMIC.registerComponent(DataProvider, {
+  name: "DataProvider",
+  props: {
+    dataSource: {
+      type: "string",
+      description: "The data source ID or 'offline' for local data",
+      defaultValue: "offline",
+    },
+    selectedQueryKey: {
+      type: "string",
+      description: "The specific key within the data source results to display",
+    },
+    variableOverrides: {
+      type: "object",
+      description: "Overrides for query variables (as an object)",
+      defaultValue: {},
+    },
+    isAdminMode: {
+      type: "boolean",
+      description: "Enable admin mode to bypass data filtering",
+      defaultValue: false,
+    },
+    salesTeamColumn: {
+      type: "string",
+      description: "Column name for Sales Team filtering",
+    },
+    salesTeamValues: {
+      type: "object",
+      description: "Array of allowed Sales Team values",
+      defaultValue: [],
+    },
+    hqColumn: {
+      type: "string",
+      description: "Column name for HQ filtering",
+    },
+    hqValues: {
+      type: "object",
+      description: "Array of allowed HQ values",
+      defaultValue: [],
+    },
+    useOrchestrationLayer: {
+      type: "boolean",
+      description: "Enable the new orchestration layer for data processing",
+      defaultValue: false,
+    },
+    enableSort: {
+      type: "boolean",
+      defaultValue: true,
+      description: "Enable sorting functionality",
+    },
+    enableFilter: {
+      type: "boolean",
+      defaultValue: true,
+      description: "Enable filtering functionality",
+    },
+    enableSummation: {
+      type: "boolean",
+      defaultValue: true,
+      description: "Enable summation/aggregation functionality",
+    },
+    enableGrouping: {
+      type: "boolean",
+      defaultValue: true,
+      description: "Enable grouping functionality",
+    },
+    textFilterColumns: {
+      type: "object",
+      defaultValue: [],
+      description: "Columns to use text search",
+    },
+    visibleColumns: {
+      type: "object",
+      defaultValue: [],
+      description: "Visible columns array",
+    },
+    percentageColumns: {
+      type: "object",
+      defaultValue: [],
+      description: "Columns to format as percentages",
+    },
+    outerGroupField: {
+      type: "string",
+      description: "Field to group by",
+    },
+    innerGroupField: {
+      type: "string",
+      description: "Field to sub-group/aggregate by",
+    },
+    redFields: {
+      type: "object",
+      defaultValue: [],
+      description: "Fields to highlight in red",
+    },
+    greenFields: {
+      type: "object",
+      defaultValue: [],
+      description: "Fields to highlight in green",
+    },
+    enableDivideBy1Lakh: {
+      type: "boolean",
+      defaultValue: false,
+      description: "Toggle dividing numerical values by 1,00,000",
+    },
+    columnTypesOverride: {
+      type: "object",
+      description: "Override column types (e.g., { fieldName: 'number' })",
+      defaultValue: {},
+    },
+    drawerTabs: {
+      type: "object",
+      defaultValue: [],
+      description: "Drawer tab configurations",
+    },
+    enableReport: {
+      type: "boolean",
+      defaultValue: false,
+      description: "Enable report generation",
+    },
+    dateColumn: {
+      type: "string",
+      description: "Column to use for date-based operations",
+    },
+    breakdownType: {
+      type: "string",
+      defaultValue: "month",
+      description: "Type of date breakdown (month/quarter/year)",
+    },
+    onDataChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "data", type: "object" }],
+    },
+    onError: {
+      type: "eventHandler",
+      argTypes: [{ name: "error", type: "object" }],
+    },
+    onTableDataChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "data", type: "object" }],
+    },
+    onRawDataChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "data", type: "object" }],
+    },
+    onDataSourceChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "dataSource", type: "string" }],
+    },
+    onVariablesChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "variables", type: "object" }],
+    },
+    onSavedQueriesChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "queries", type: "object" }],
+    },
+    onLoadingQueriesChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "loading", type: "boolean" }],
+    },
+    onExecutingQueryChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "executing", type: "boolean" }],
+    },
+    onAvailableQueryKeysChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "keys", type: "object" }],
+    },
+    onSelectedQueryKeyChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "key", type: "string" }],
+    },
+    onLoadingDataChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "loading", type: "boolean" }],
+    },
+    onVisibleColumnsChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "columns", type: "object" }],
+    },
+    onDrawerTabsChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "tabs", type: "object" }],
+    },
+    onBreakdownTypeChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "type", type: "string" }],
+    },
+    dataSlot: {
+      type: "slot",
+      description: "Slot to add custom UI components that can access the table data",
+    },
+  },
+  providesData: true,
+  importPath: "./components/DataProvider",
 });
 
 PLASMIC.registerComponent(DataTable, {
