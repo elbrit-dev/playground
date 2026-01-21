@@ -7,7 +7,15 @@ import { DataProvider as PlasmicDataProvider } from "@plasmicapp/loader-nextjs";
 
 function Inner({ children, dataSlot, rawTableData, tableData }) {
   const contextData = useContext(TableOperationsContext);
-  return <PlasmicDataProvider name="data" data={{ ...contextData, rawTableData, tableData }}>{children}{dataSlot}</PlasmicDataProvider>;
+  const data = { rawTableData, tableData };
+  if (contextData) {
+    Object.keys(contextData).forEach(key => {
+      if (typeof contextData[key] !== 'function') {
+        data[key] = contextData[key];
+      }
+    });
+  }
+  return <PlasmicDataProvider name="data" data={data}>{children}{dataSlot}</PlasmicDataProvider>;
 }
 
 export default function DataProviderWrapper(props) {
