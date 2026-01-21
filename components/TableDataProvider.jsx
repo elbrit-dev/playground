@@ -1132,11 +1132,25 @@ const TableDataProvider = (props) => {
         style={{ height: '100vh' }}
         className="p-sidebar-sm"
         header={
-          <h2 className="text-lg font-semibold text-gray-800 m-0">
-            {clickedDrawerValues.innerValue
-              ? `${clickedDrawerValues.outerValue} : ${clickedDrawerValues.innerValue}`
-              : clickedDrawerValues.outerValue || 'Drawer'}
-          </h2>
+          <div className="flex justify-between items-center w-full">
+            <h2 className="text-lg font-semibold text-gray-800 m-0">
+              {clickedDrawerValues.innerValue
+                ? `${clickedDrawerValues.outerValue} : ${clickedDrawerValues.innerValue}`
+                : clickedDrawerValues.outerValue || 'Drawer'}
+            </h2>
+            <div className="flex items-center gap-3">
+              {drawerSalesTeamValues && drawerSalesTeamValues.length > 0 && (
+                <span className="text-sm text-gray-600">
+                  <span className="font-medium">Sales Team:</span> {drawerSalesTeamValues.join(', ')}
+                </span>
+              )}
+              {drawerHqValues && drawerHqValues.length > 0 && (
+                <span className="text-sm text-gray-600">
+                  <span className="font-medium">HQ:</span> {drawerHqValues.join(', ')}
+                </span>
+              )}
+            </div>
+          </div>
         }
       >
         <div className="flex flex-col h-full">
