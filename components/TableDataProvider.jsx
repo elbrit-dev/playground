@@ -1149,26 +1149,38 @@ const TableDataProvider = (props) => {
                   >
                     <div className="flex-1 overflow-auto">
                       {drawerData && drawerData.length > 0 ? (
-                        <DataTableComponent
-                          data={drawerData}
-                          rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
-                          defaultRows={10}
-                          scrollable={false}
-                          enableSort={enableSort ?? true}
-                          enableFilter={enableFilter ?? true}
-                          enableSummation={enableSummation ?? true}
-                          enableDivideBy1Lakh={enableDivideBy1Lakh ?? false}
-                          textFilterColumns={textFilterColumns || []}
-                          visibleColumns={visibleColumns}
-                          redFields={redFields || []}
-                          greenFields={greenFields || []}
-                          outerGroupField={tab.outerGroup || null}
-                          innerGroupField={tab.innerGroup || null}
-                          enableCellEdit={false}
-                          nonEditableColumns={[]}
-                          percentageColumns={percentageColumns || []}
-                          tableName="sidebar"
-                        />
+                        <DataProvider
+                          offlineData={drawerData}
+                          dataSource="offline"
+                          useOrchestrationLayer={false}
+                          isAdminMode={true}
+                          salesTeamColumn={null}
+                          salesTeamValues={[]}
+                          hqColumn={null}
+                          hqValues={[]}
+                          columnTypes={columnTypes || {}}
+                          hideDataSourceAndQueryKey={true}
+                        >
+                          <DataTableComponent
+                            rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
+                            defaultRows={10}
+                            scrollable={false}
+                            enableSort={enableSort ?? true}
+                            enableFilter={enableFilter ?? true}
+                            enableSummation={enableSummation ?? true}
+                            enableDivideBy1Lakh={enableDivideBy1Lakh ?? false}
+                            textFilterColumns={textFilterColumns || []}
+                            visibleColumns={visibleColumns}
+                            redFields={redFields || []}
+                            greenFields={greenFields || []}
+                            outerGroupField={tab.outerGroup || null}
+                            innerGroupField={tab.innerGroup || null}
+                            enableCellEdit={false}
+                            nonEditableColumns={[]}
+                            percentageColumns={percentageColumns || []}
+                            tableName="sidebar"
+                          />
+                        </DataProvider>
                       ) : (
                         <div className="flex flex-col items-center justify-center h-full text-center">
                           <i className="pi pi-inbox text-4xl text-gray-400 mb-4"></i>
