@@ -1138,15 +1138,15 @@ const TableDataProvider = (props) => {
                 ? `${clickedDrawerValues.outerValue} : ${clickedDrawerValues.innerValue}`
                 : clickedDrawerValues.outerValue || 'Drawer'}
             </h2>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 text-sm">
               {drawerSalesTeamValues && drawerSalesTeamValues.length > 0 && (
-                <span className="text-sm text-gray-600">
-                  <span className="font-medium">Sales Team:</span> {drawerSalesTeamValues.join(', ')}
+                <span className="font-semibold text-gray-800">
+                  {drawerSalesTeamValues.join(', ')}
                 </span>
               )}
               {drawerHqValues && drawerHqValues.length > 0 && (
-                <span className="text-sm text-gray-600">
-                  <span className="font-medium">HQ:</span> {drawerHqValues.join(', ')}
+                <span className="font-semibold text-gray-800">
+                  {drawerHqValues.join(', ')}
                 </span>
               )}
             </div>
