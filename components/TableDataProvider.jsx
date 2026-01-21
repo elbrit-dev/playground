@@ -1132,25 +1132,29 @@ const TableDataProvider = (props) => {
         style={{ height: '100vh' }}
         className="p-sidebar-sm"
         header={
-          <div className="flex justify-between items-center w-full">
-            <h2 className="text-lg font-semibold text-gray-800 m-0">
-              {clickedDrawerValues.innerValue
-                ? `${clickedDrawerValues.outerValue} : ${clickedDrawerValues.innerValue}`
-                : clickedDrawerValues.outerValue || 'Drawer'}
-            </h2>
-            <div className="flex items-center gap-3 text-sm">
-              {drawerSalesTeamValues && drawerSalesTeamValues.length > 0 && (
-                <span className="font-semibold text-gray-800">
-                  {drawerSalesTeamValues.join(', ')}
-                </span>
-              )}
-              {drawerHqValues && drawerHqValues.length > 0 && (
-                <span className="font-semibold text-gray-800">
-                  {drawerHqValues.join(', ')}
-                </span>
-              )}
-            </div>
-          </div>
+          <h2 className="text-lg font-semibold text-gray-800 m-0">
+            {(() => {
+              const salesTeam = drawerSalesTeamValues && drawerSalesTeamValues.length > 0 
+                ? drawerSalesTeamValues.join(', ') 
+                : null;
+              const hq = drawerHqValues && drawerHqValues.length > 0 
+                ? drawerHqValues.join(', ') 
+                : null;
+              
+              if (salesTeam && hq) {
+                return `${salesTeam} : ${hq}`;
+              } else if (salesTeam) {
+                return salesTeam;
+              } else if (hq) {
+                return hq;
+              } else if (clickedDrawerValues.innerValue) {
+                return `${clickedDrawerValues.outerValue} : ${clickedDrawerValues.innerValue}`;
+              } else if (clickedDrawerValues.outerValue) {
+                return clickedDrawerValues.outerValue;
+              }
+              return 'Drawer';
+            })()}
+          </h2>
         }
       >
         <div className="flex flex-col h-full">
