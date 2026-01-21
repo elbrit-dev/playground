@@ -1163,6 +1163,16 @@ const TableDataProvider = (props) => {
                           outerGroupField={tab.outerGroup || null}
                           innerGroupField={tab.innerGroup || null}
                           hideDataSourceAndQueryKey={true}
+                          onOuterGroupClick={(e) => { 
+                            if (e && e.stopPropagation) e.stopPropagation(); 
+                            if (e && e.preventDefault) e.preventDefault(); 
+                            return false; 
+                          }}
+                          onInnerGroupClick={(e) => { 
+                            if (e && e.stopPropagation) e.stopPropagation(); 
+                            if (e && e.preventDefault) e.preventDefault(); 
+                            return false; 
+                          }}
                         >
                           <DataTableComponent
                             rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
@@ -1179,18 +1189,20 @@ const TableDataProvider = (props) => {
                             greenFields={greenFields || []}
                             outerGroupField={tab.outerGroup || null}
                             innerGroupField={tab.innerGroup || null}
-                            onOuterGroupClick={(rowData, col, value) => {
-                              console.log('🚫 Drawer: Outer group clicked (disabled)', { rowData, col, value });
-                              // Do nothing - clicks disabled in drawer
-                            }}
-                            onInnerGroupClick={(rowData, col, value) => {
-                              console.log('🚫 Drawer: Inner group clicked (disabled)', { rowData, col, value });
-                              // Do nothing - clicks disabled in drawer
-                            }}
                             enableCellEdit={false}
                             nonEditableColumns={[]}
                             percentageColumns={percentageColumns || []}
                             tableName="sidebar"
+                            onOuterGroupClick={(e) => { 
+                              if (e && e.stopPropagation) e.stopPropagation(); 
+                              if (e && e.preventDefault) e.preventDefault(); 
+                              return false; 
+                            }}
+                            onInnerGroupClick={(e) => { 
+                              if (e && e.stopPropagation) e.stopPropagation(); 
+                              if (e && e.preventDefault) e.preventDefault(); 
+                              return false; 
+                            }}
                           />
                         </DataProvider>
                       ) : (
