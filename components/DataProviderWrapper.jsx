@@ -1,17 +1,25 @@
 'use client';
 
-import React, { useContext } from 'react';
+import React, { useContext, useState, useCallback, useMemo } from 'react';
 import DataProviderNew from '../share/datatable/components/DataProviderNew';
 import { TableOperationsContext } from '../share/datatable/contexts/TableOperationsContext';
 import { DataProvider as PlasmicDataProvider } from "@plasmicapp/loader-nextjs";
 
 // Wrapper component that exposes TableOperationsContext data to Plasmic
-function DataProviderWrapperInner({ children, dataSlot }) {
+function DataProviderWrapperInner({ children, dataSlot, rawTableData, tableData }) {
   const contextData = useContext(TableOperationsContext);
 
-  // Use context data directly - no need to reassign
+  // Merge context data with rawTableData and tableData from callbacks
+  const consolidatedData = useMemo(() => {
+    return {
+      ...contextData,
+      rawTableData: rawTableData || contextData?.rawData || null,
+      tableData: tableData || contextData?.sortedData || null,
+    };
+  }, [contextData, rawTableData, tableData]);
+
   return (
-    <PlasmicDataProvider name="data" data={contextData || {}}>
+    <PlasmicDataProvider name="data" data={consolidatedData || {}}>
       {children}
       {dataSlot}
     </PlasmicDataProvider>
@@ -20,9 +28,34 @@ function DataProviderWrapperInner({ children, dataSlot }) {
 
 // Main wrapper component
 export default function DataProviderWrapper(props) {
+  const [rawTableData, setRawTableData] = useState(null);
+  const [tableData, setTableData] = useState(null);
+
+  const handleRawDataChange = useCallback((data) => {
+    setRawTableData(data);
+    if (props.onRawDataChange) {
+      props.onRawDataChange(data);
+    }
+  }, [props.onRawDataChange]);
+
+  const handleTableDataChange = useCallback((data) => {
+    setTableData(data);
+    if (props.onTableDataChange) {
+      props.onTableDataChange(data);
+    }
+  }, [props.onTableDataChange]);
+
   return (
-    <DataProviderNew {...props}>
-      <DataProviderWrapperInner dataSlot={props.dataSlot}>
+    <DataProviderNew 
+      {...props}
+      onRawDataChange={handleRawDataChange}
+      onTableDataChange={handleTableDataChange}
+    >
+      <DataProviderWrapperInner 
+        dataSlot={props.dataSlot}
+        rawTableData={rawTableData}
+        tableData={tableData}
+      >
         {props.children}
       </DataProviderWrapperInner>
     </DataProviderNew>
