@@ -1179,6 +1179,14 @@ const TableDataProvider = (props) => {
                             greenFields={greenFields || []}
                             outerGroupField={tab.outerGroup || null}
                             innerGroupField={tab.innerGroup || null}
+                            onOuterGroupClick={(rowData, col, value) => {
+                              console.log('🚫 Drawer: Outer group clicked (disabled)', { rowData, col, value });
+                              // Do nothing - clicks disabled in drawer
+                            }}
+                            onInnerGroupClick={(rowData, col, value) => {
+                              console.log('🚫 Drawer: Inner group clicked (disabled)', { rowData, col, value });
+                              // Do nothing - clicks disabled in drawer
+                            }}
                             enableCellEdit={false}
                             nonEditableColumns={[]}
                             percentageColumns={percentageColumns || []}
