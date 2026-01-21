@@ -331,6 +331,10 @@ PLASMIC.registerComponent(TableDataProvider, {
 PLASMIC.registerComponent(DataProvider, {
   name: "DataProvider",
   props: {
+    offlineData: {
+      type: "object",
+      description: "Offline/local data to display when dataSource is 'offline'",
+    },
     dataSource: {
       type: "string",
       description: "The data source ID or 'offline' for local data",
@@ -344,6 +348,10 @@ PLASMIC.registerComponent(DataProvider, {
       type: "object",
       description: "Overrides for query variables (as an object)",
       defaultValue: {},
+    },
+    renderHeaderControls: {
+      type: "slot",
+      description: "Custom slot for rendering header controls",
     },
     isAdminMode: {
       type: "boolean",

@@ -9,6 +9,7 @@ export default function DataProvider({
   useOrchestrationLayer = false,
   children,
   dataSlot,
+  renderHeaderControls,
   onTableDataChange,
   setControlContextData,
   ...props
@@ -34,6 +35,7 @@ export default function DataProvider({
     <DataProviderNew 
       {...props} 
       useOrchestrationLayer={useOrchestrationLayer}
+      renderHeaderControls={renderHeaderControls}
       onTableDataChange={handleTableDataChange}
     >
       <PlasmicDataProvider name="data" data={consolidatedData}>
