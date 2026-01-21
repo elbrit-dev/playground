@@ -730,12 +730,27 @@ const TableDataProvider = (props) => {
   const openDrawerWithData = useCallback((data, outerValue, innerValue) => {
     let filteredData = data || [];
 
+    console.log('🔍 Drawer Filtering Debug:', {
+      originalDataLength: data?.length,
+      drawerSalesTeamColumn,
+      drawerSalesTeamValues,
+      drawerHqColumn,
+      drawerHqValues,
+      sampleRow: data?.[0]
+    });
+
     // Apply drawer-specific group filters for sales team and HQ (works like clicking a row)
     // These are data filters, not auth filters, so we apply them regardless of admin mode
     if (drawerSalesTeamColumn && drawerSalesTeamValues && drawerSalesTeamValues.length > 0) {
       // Flatten values in case Plasmic passed nested arrays like [["Team A"]]
       const filterTeams = lodashFilter(flatMap([drawerSalesTeamValues], v => v), v => !isNil(v)).map(v => String(v).trim().toLowerCase());
       
+      console.log('🔍 Filtering by Sales Team:', {
+        column: drawerSalesTeamColumn,
+        filterValues: filterTeams,
+        beforeFilterCount: filteredData.length
+      });
+
       filteredData = lodashFilter(filteredData, (row) => {
         const rowValue = get(row, drawerSalesTeamColumn);
         if (Array.isArray(rowValue)) {
@@ -743,10 +758,18 @@ const TableDataProvider = (props) => {
         }
         return !isNil(rowValue) && filterTeams.includes(String(rowValue).trim().toLowerCase());
       });
+
+      console.log('🔍 After Sales Team filter:', filteredData.length);
     }
     if (drawerHqColumn && drawerHqValues && drawerHqValues.length > 0) {
       // Flatten values
       const filterHqs = lodashFilter(flatMap([drawerHqValues], v => v), v => !isNil(v)).map(v => String(v).trim().toLowerCase());
+
+      console.log('🔍 Filtering by HQ:', {
+        column: drawerHqColumn,
+        filterValues: filterHqs,
+        beforeFilterCount: filteredData.length
+      });
 
       filteredData = lodashFilter(filteredData, (row) => {
         const rowValue = get(row, drawerHqColumn);
@@ -755,7 +778,11 @@ const TableDataProvider = (props) => {
         }
         return !isNil(rowValue) && filterHqs.includes(String(rowValue).trim().toLowerCase());
       });
+
+      console.log('🔍 After HQ filter:', filteredData.length);
     }
+
+    console.log('🔍 Final filtered data:', filteredData.length);
 
     setDrawerData(filteredData);
     setClickedDrawerValues({ outerValue, innerValue });
