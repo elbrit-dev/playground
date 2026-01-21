@@ -9,17 +9,20 @@ import { DataProvider as PlasmicDataProvider } from "@plasmicapp/loader-nextjs";
 function DataProviderWrapperInner({ children, dataSlot, rawTableData, tableData }) {
   const contextData = useContext(TableOperationsContext);
 
-  // Merge context data with rawTableData and tableData from callbacks
+  // Use context data directly, just add rawTableData and tableData if not already present
   const consolidatedData = useMemo(() => {
+    if (!contextData) return { rawTableData, tableData };
+    
     return {
       ...contextData,
-      rawTableData: rawTableData || contextData?.rawData || null,
-      tableData: tableData || contextData?.sortedData || null,
+      // Add rawTableData and tableData if they're not in context
+      ...(rawTableData && !contextData.rawTableData && { rawTableData }),
+      ...(tableData && !contextData.tableData && { tableData }),
     };
   }, [contextData, rawTableData, tableData]);
 
   return (
-    <PlasmicDataProvider name="data" data={consolidatedData || {}}>
+    <PlasmicDataProvider name="data" data={consolidatedData}>
       {children}
       {dataSlot}
     </PlasmicDataProvider>
