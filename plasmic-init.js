@@ -2,7 +2,7 @@ import React from 'react';
 import { initPlasmicLoader, DataProvider as PlasmicDataProvider } from "@plasmicapp/loader-nextjs";
 import DataTable from "./components/DataTable";
 import TableDataProvider from "./components/TableDataProvider";
-import DataProviderWrapper from "./components/DataProviderWrapper";
+import DataProvider from "./share/datatable/components/DataProvider";
 import PlasmicNavigation from "./components/PlasmicNavigation";
 import jmespath_plus from '@metrichor/jmespath-plus';
 import * as jmespath from 'jmespath';
@@ -328,7 +328,7 @@ PLASMIC.registerComponent(TableDataProvider, {
   importPath: "./components/TableDataProvider",
 });
 
-PLASMIC.registerComponent(DataProviderWrapper, {
+PLASMIC.registerComponent(DataProvider, {
   name: "DataProvider",
   props: {
     dataSource: {
@@ -592,7 +592,7 @@ PLASMIC.registerComponent(DataProviderWrapper, {
     },
   },
   providesData: true,
-  importPath: "./components/DataProviderWrapper",
+  importPath: "./share/datatable/components/DataProvider",
 });
 
 PLASMIC.registerComponent(DataTable, {
