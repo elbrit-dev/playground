@@ -633,8 +633,7 @@ export default function DataProviderNew({
   useOrchestrationLayer = false,
   showSelectors = true,
   hideDataSourceAndQueryKey = false,
-  children,
-  dataSlot
+  children
 }) {
   const [dataSource, setDataSource] = useState(dataSourceProp);
   const [selectedQueryKey, setSelectedQueryKey] = useState(selectedQueryKeyProp);
