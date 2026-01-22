@@ -2,7 +2,8 @@ import React from 'react';
 import { initPlasmicLoader, DataProvider as PlasmicDataProvider } from "@plasmicapp/loader-nextjs";
 import DataTable from "./components/DataTable";
 import TableDataProvider from "./components/TableDataProvider";
-import DataProvider from "./share/datatable/components/DataProvider";
+import DataProvider from "./share/datatable/components/DataProviderNew";
+import DataTableNew from "./share/datatable/components/DataTableNew";
 import PlasmicNavigation from "./components/PlasmicNavigation";
 import jmespath_plus from '@metrichor/jmespath-plus';
 import * as jmespath from 'jmespath';
@@ -336,7 +337,7 @@ PLASMIC.registerComponent(DataProvider, {
       description: "The data source ID or 'offline' for local data",
       defaultValue: "offline",
     },
-    queryKey: {
+    selectedQueryKey: {
       type: "string",
       description: "The specific key within the data source results to display",
     },
@@ -362,11 +363,11 @@ PLASMIC.registerComponent(DataProvider, {
       type: "object",
       description: "Default values for 'Customer' variable (Array of strings)",
     },
-    showSelectors: {
-      type: "boolean",
-      description: "Show/hide data source and query selectors",
-      defaultValue: true,
-    },
+    // renderHeaderControls: {
+    //   type: "boolean",
+    //   description: "Show/hide data source and query selectors",
+    //   defaultValue: true,
+    // },
     hideDataSourceAndQueryKey: {
       type: "boolean",
       description: "Explicitly hide the data source and query key dropdowns even if selectors are shown",
@@ -586,13 +587,13 @@ PLASMIC.registerComponent(DataProvider, {
       type: "eventHandler",
       argTypes: [{ name: "field", type: "string" }],
     },
-    dataSlot: {
+    children: {
       type: "slot",
       description: "Slot to add custom UI components that can access the table data",
     },
   },
   providesData: true,
-  importPath: "./share/datatable/components/DataProvider",
+  importPath: "./share/datatable/components/DataProviderNew",
 });
 
 PLASMIC.registerComponent(DataTable, {
@@ -808,6 +809,79 @@ PLASMIC.registerComponent(DataTable, {
     },
   },
   importPath: "./components/DataTable",
+});
+
+PLASMIC.registerComponent(DataTableNew, {
+  name: "DataTableNew",
+  props: {
+    rowsPerPageOptions: {
+      type: "object",
+      defaultValue: [10, 25, 50, 100],
+      description: "Array of rows per page options",
+    },
+    defaultRows: {
+      type: "number",
+      defaultValue: 10,
+      description: "Default number of rows per page",
+    },
+    scrollable: {
+      type: "boolean",
+      defaultValue: true,
+      description: "Enable/disable table scrolling",
+    },
+    scrollHeight: {
+      type: "string",
+      description: "Height of the scrollable area (e.g., '600px')",
+    },
+    enableCellEdit: {
+      type: "boolean",
+      defaultValue: false,
+      description: "Enable cell editing",
+    },
+    onCellEditComplete: {
+      type: "eventHandler",
+      argTypes: [
+        { name: "rowData", type: "object" },
+        { name: "field", type: "string" },
+        { name: "newValue", type: "any" }
+      ],
+    },
+    isCellEditable: {
+      type: "function",
+      description: "Function to determine if a cell is editable",
+    },
+    nonEditableColumns: {
+      type: "object",
+      defaultValue: [],
+      description: "Array of column names that cannot be edited",
+    },
+    enableFullscreenDialog: {
+      type: "boolean",
+      defaultValue: true,
+      description: "Enable/disable fullscreen dialog feature",
+    },
+    tableName: {
+      type: "string",
+      defaultValue: "table",
+      description: "Name identifier for the table",
+    },
+    useOrchestrationLayer: {
+      type: "boolean",
+      defaultValue: false,
+      description: "Use orchestration layer (must be child of DataProvider with useOrchestrationLayer=true)",
+    },
+    onOuterGroupClick: {
+      type: "eventHandler",
+      argTypes: [{ name: "event", type: "object" }],
+      description: "Handler for outer group row clicks",
+    },
+    onInnerGroupClick: {
+      type: "eventHandler",
+      argTypes: [{ name: "event", type: "object" }],
+      description: "Handler for inner group row clicks",
+    },
+  },
+  importPath: "./share/datatable/components/DataTableNew",
 });
 
 PLASMIC.registerComponent(PlasmicNavigation, {
