@@ -4,7 +4,7 @@ import DataTable from "./components/DataTable";
 import TableDataProvider from "./components/TableDataProvider";
 import DataProvider from "./share/datatable/components/DataProviderNew";
 import DataTableNew from "./share/datatable/components/DataTableNew";
-import PlasmicNavigation from "./components/PlasmicNavigation";
+import Navigation from "./share/navigation/components/Navigation";
 import jmespath_plus from '@metrichor/jmespath-plus';
 import * as jmespath from 'jmespath';
 import jsonata from 'jsonata';
@@ -574,11 +574,6 @@ PLASMIC.registerComponent(DataProvider, {
       type: "boolean",
       description: "Explicitly hide the data source and query key dropdowns even if selectors are shown",
     },
-    renderHeaderControls: {
-      type: "boolean",
-      description: "Show/hide header controls (deprecated, use showSelectors)",
-      defaultValue: true,
-    },
     isAdminMode: {
       type: "boolean",
       description: "Enable admin mode to bypass data filtering",
@@ -856,100 +851,82 @@ PLASMIC.registerComponent(DataTableNew, {
   importPath: "./share/datatable/components/DataTableNew",
 });
 
-PLASMIC.registerComponent(PlasmicNavigation, {
+PLASMIC.registerComponent(Navigation, {
   name: "Navigation",
   props: {
     items: {
       type: "object",
-      description: "JSON array of items. Use icon names (e.g., 'ChatIconActive') or image paths (e.g., '/logo.jpeg'). Each item can have 'isDisabled: true' to disable it specifically.",
+      description: "JSON array of navigation items. Each item should have: label (string, optional), path (string), iconActive (string - icon name like 'PlannerIconActive' or image path starting with '/' or 'http'), iconInactive (string - icon name like 'PlannerIconInactive' or image path), mobileFullscreen (boolean, optional), mobileOnly (boolean, optional), isDefault (boolean, optional), isDisabled (boolean, optional). Available icon names: PlannerIconActive, PlannerIconInactive, DoctorIconActive, DoctorIconInactive, ProductIconActive, ProductIconInactive, ChatIconActive, ChatIconInactive, HomeIcon.",
       defaultValue: [
         {
           label: 'Planner',
           path: '/planner',
           mobileFullscreen: true,
+          mobileOnly: false,
           iconActive: 'PlannerIconActive',
           iconInactive: 'PlannerIconInactive',
-          isDisabled: true,
         },
         {
           label: 'Doctor',
           path: '/doctor',
+          mobileOnly: false,
           iconActive: 'DoctorIconActive',
           iconInactive: 'DoctorIconInactive',
-          isDisabled: true,
         },
         {
-          path: '/',
+          path: '/home',
           mobileOnly: true,
           isDefault: true,
           iconActive: 'HomeIcon',
           iconInactive: 'HomeIcon',
         },
         {
-          label: 'Product',
-          path: '/product',
+          label: 'Products',
+          path: '/products',
+          mobileOnly: false,
           iconActive: 'ProductIconActive',
           iconInactive: 'ProductIconInactive',
         },
         {
-          label: 'Desk',
-          path: '/desk',
+          label: 'Chat',
+          path: '/chat',
           mobileFullscreen: true,
+          mobileOnly: false,
           iconActive: 'ChatIconActive',
           iconInactive: 'ChatIconInactive',
-        },
-        {
-          label: 'Test',
-          path: '/test',
-          iconActive: 'PlannerIconActive',
-          iconInactive: 'PlannerIconInactive',
         },
       ],
     },
     defaultIndex: {
       type: "number",
       defaultValue: 0,
-      description: "Fallback index if no URL path matches",
-    },
-    enableSwipe: {
-      type: "boolean",
-      defaultValue: true,
-      description: "Enable swipe gestures on mobile to switch between pages",
-    },
-    hideNavigation: {
-      type: "boolean",
-      defaultValue: false,
-      description: "Completely hide the navigation bars (sidebar and bottom bar)",
-    },
-    isDisabled: {
-      type: "boolean",
-      defaultValue: false,
-      description: "Disable all navigation items (grey out and non-interactive)",
+      description: "Fallback index if no URL path matches and no item has isDefault: true",
     },
     desktopWidth: {
       type: "string",
       defaultValue: "16rem",
+      description: "Width of the desktop sidebar navigation",
     },
     desktopHeight: {
       type: "string",
-      defaultValue: "auto",
+      defaultValue: "93dvh",
+      description: "Height of the desktop sidebar navigation",
     },
     mobileWidth: {
       type: "string",
       defaultValue: "100%",
+      description: "Width of the mobile bottom navigation",
     },
     mobileHeight: {
       type: "string",
       defaultValue: "4rem",
+      description: "Height of the mobile bottom navigation",
     },
-    className: "string",
-    children: {
-      type: "slot",
-      defaultValue: {
-        type: "text",
-        value: "Drop page content here",
-      },
+    showCollapse: {
+      type: "boolean",
+      defaultValue: true,
+      description: "Show/hide the collapse button in desktop sidebar",
     },
   },
-  importPath: "./components/PlasmicNavigation",
+  importPath: "./share/navigation/components/Navigation",
 });
