@@ -856,46 +856,8 @@ PLASMIC.registerComponent(Navigation, {
   props: {
     items: {
       type: "object",
-      description: "JSON array of navigation items. Each item should have: label (string, optional), path (string), iconActive (string - icon name like 'PlannerIconActive' or image path starting with '/' or 'http'), iconInactive (string - icon name like 'PlannerIconInactive' or image path), mobileFullscreen (boolean, optional), mobileOnly (boolean, optional), isDefault (boolean, optional), isDisabled (boolean, optional). Available icon names: PlannerIconActive, PlannerIconInactive, DoctorIconActive, DoctorIconInactive, ProductIconActive, ProductIconInactive, ChatIconActive, ChatIconInactive, HomeIcon.",
-      defaultValue: [
-        {
-          label: 'Planner',
-          path: '/planner',
-          mobileFullscreen: true,
-          mobileOnly: false,
-          iconActive: 'PlannerIconActive',
-          iconInactive: 'PlannerIconInactive',
-        },
-        {
-          label: 'Doctor',
-          path: '/doctor',
-          mobileOnly: false,
-          iconActive: 'DoctorIconActive',
-          iconInactive: 'DoctorIconInactive',
-        },
-        {
-          path: '/home',
-          mobileOnly: true,
-          isDefault: true,
-          iconActive: 'HomeIcon',
-          iconInactive: 'HomeIcon',
-        },
-        {
-          label: 'Products',
-          path: '/products',
-          mobileOnly: false,
-          iconActive: 'ProductIconActive',
-          iconInactive: 'ProductIconInactive',
-        },
-        {
-          label: 'Chat',
-          path: '/chat',
-          mobileFullscreen: true,
-          mobileOnly: false,
-          iconActive: 'ChatIconActive',
-          iconInactive: 'ChatIconInactive',
-        },
-      ],
+      description: "JSON array of navigation items. Each item should have: label (string), path (string), iconActive (JSX element), iconInactive (JSX element), mobileFullscreen (boolean), mobileOnly (boolean), isDefault (boolean), isDisabled (boolean). Icons must be JSX elements, not strings.",
+      defaultValue: [],
     },
     defaultIndex: {
       type: "number",
