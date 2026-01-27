@@ -759,6 +759,26 @@ PLASMIC.registerComponent(DataProvider, {
       argTypes: [{ name: "type", type: "string" }],
       description: "Callback when breakdown type changes",
     },
+    enableBreakdown: {
+      type: "boolean",
+      defaultValue: false,
+      description: "Enable breakdown mode for report visualization",
+    },
+    onEnableBreakdownChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "enabled", type: "boolean" }],
+      description: "Callback when breakdown mode is toggled",
+    },
+    chartColumns: {
+      type: "object",
+      defaultValue: [],
+      description: "Array of column names to display in the chart",
+    },
+    chartHeight: {
+      type: "number",
+      defaultValue: 400,
+      description: "Height of the chart in pixels",
+    },
     children: {
       type: "slot",
       description: "Slot to add custom UI components that can access the table data",
