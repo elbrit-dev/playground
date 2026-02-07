@@ -5,6 +5,8 @@ import { initPlasmicLoader, DataProvider as PlasmicDataProvider } from "@plasmic
 import DataProvider from "./share/datatable/components/DataProviderNew";
 import DataTableNew from "./share/datatable/components/DataTableNew";
 import Navigation from "./share/navigation/components/Navigation";
+import CalendarPage from "@calendar/components/CalendarPage";
+import NovuInbox from "./components/NovuInbox";
 import jmespath_plus from '@metrichor/jmespath-plus';
 import * as jmespath from 'jmespath';
 import jsonata from 'jsonata';
@@ -62,6 +64,28 @@ PLASMIC.registerFunction(jsonata, {
   description: "Create a JSONata expression"
 });
 
+PLASMIC.registerComponent(CalendarPage, {
+  name: "CalendarPage",
+  props: {
+    erpUrl: {
+      type: "string",
+      helpText: "ERP GraphQL endpoint",
+    },
+    authToken: {
+      type: "string",
+      helpText: "User auth token",
+    },
+    homeUrl: {
+      type: "string",
+      defaultValue: "/",
+      helpText: "Redirect if not logged in",
+    },
+    me: {
+      type: "object",
+      helpText: "Result of GraphQL `me` query",
+    },
+  },
+});
 
 PLASMIC.registerComponent(DataProvider, {
   name: "DataProvider",
@@ -430,4 +454,27 @@ PLASMIC.registerComponent(Navigation, {
     },
   },
   importPath: "./share/navigation/components/Navigation",
+});
+
+PLASMIC.registerComponent(NovuInbox, {
+  name: "NovuInbox",
+  props: {
+    subscriberId: {
+      type: "string",
+      description: "Novu subscriber ID (user identifier). If not provided, will use 'employeeid' from localStorage, then fall back to NEXT_PUBLIC_NOVU_SUBSCRIBER_ID from environment variables.",
+    },
+    applicationIdentifier: {
+      type: "string",
+      description: "Novu application identifier. If not provided, will use NEXT_PUBLIC_NOVU_APPLICATION_IDENTIFIER from environment variables.",
+    },
+    subscriberHash: {
+      type: "string",
+      description: "Optional subscriber hash for HMAC authentication (only needed if using HMAC). If not provided, will use NEXT_PUBLIC_NOVU_SUBSCRIBER_HASH from environment variables. Can be left empty if not using HMAC.",
+    },
+    className: {
+      type: "string",
+      description: "CSS class name for the container",
+    },
+  },
+  importPath: "./components/NovuInbox",
 });
