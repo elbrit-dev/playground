@@ -22,9 +22,9 @@ const NovuInbox = ({
     }
   }, []);
 
-  // Get config: props > localStorage employeeid > environment variables > default
+  // Get config: props > localStorage employeeid (subscriberId is user-specific, not from env)
   const config = {
-    subscriberId: subscriberId || employeeId || process.env.NEXT_PUBLIC_NOVU_SUBSCRIBER_ID,
+    subscriberId: subscriberId || employeeId, // User-specific, from props or localStorage only
     applicationIdentifier: applicationIdentifier || process.env.NEXT_PUBLIC_NOVU_APPLICATION_IDENTIFIER || 'sCfOsfXhHZNc',
     subscriberHash: subscriberHash || process.env.NEXT_PUBLIC_NOVU_SUBSCRIBER_HASH || undefined,
   };
