@@ -6,7 +6,7 @@ import { Button } from 'primereact/button';
 import { InputText } from 'primereact/inputtext';
 import { Checkbox } from 'primereact/checkbox';
 import { startCase, uniq, filter as lodashFilter, toLower, isNil } from 'lodash';
-import { getNestedValue, getDataValue } from '../../utils/dataAccessUtils';
+import { getNestedValue, getDataValue } from '../utils/dataAccessUtils';
 
 // Hook to detect mobile viewport
 function useIsMobile() {

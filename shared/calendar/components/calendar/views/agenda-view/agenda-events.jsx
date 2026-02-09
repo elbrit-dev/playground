@@ -236,12 +236,9 @@ export const AgendaEvents = ({ scope = "all" }) => {
                         )}
                         <div className="w-full">
                           <p className="font-medium text-sm">{event.title}</p>
-                          {/* <TodoDescriptionOneLine html={event.description} /> */}
-                          {event.tags!="Todo List" ? 
-                          <p className="text-xs text-muted-foreground line-clamp-1">
+                          {/* <p className="text-xs text-muted-foreground line-clamp-1">
                             {event.description}
-                          </p>:null
-                          }
+                          </p> */}
                           <p className="text-xs text-muted-foreground line-clamp-1">
                             {event.owner?.name}
                           </p>

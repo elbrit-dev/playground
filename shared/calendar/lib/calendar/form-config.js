@@ -36,7 +36,7 @@ export const TAG_FORM_CONFIG = {
         { key: "leaveType", label: "Leave Type", type: "text" },
         { key: "status", label: "Status", type: "text" },
         { key: "approvedBy", label: "Approved By", type: "text" },
-        { key: "description", label: "Description", type: "text" },
+        // { key: "description", label: "Description", type: "text" },
 
       ],
     },
@@ -114,7 +114,7 @@ export const TAG_FORM_CONFIG = {
         { key: "startDate", label: "Start Date", type: "date" },
         { key: "endDate", label: "End Date", type: "date" },
         { key: "employee", label: "Employee", type: "employee" },
-        { key: "description", label: "Description", type: "text" },
+        // { key: "description", label: "Description", type: "text" },
       ],
     },
     employee: {
@@ -304,7 +304,7 @@ export const TAG_FORM_CONFIG = {
         { key: "owner", label: "Created By", type: "owner" },
         { key: "startDate", label: "Start Date", type: "date" },
         { key: "endDate", label: "End Date", type: "date" },
-        { key: "description", label: "Description", type: "text" },
+        // { key: "description", label: "Description", type: "text" },
         { key: "doctor", label: "Doctor", type: "doctor" },
         { key: "employee", label: "Participants", type: "employee" },
       ],

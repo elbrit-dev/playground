@@ -30,6 +30,7 @@ import { Button } from "@calendar/components/ui/button";
 import { resolveDisplayValueFromEvent } from "@calendar/lib/calendar/resolveDisplay";
 import { useAuth } from "@calendar/components/auth/auth-context";
 import { Textarea } from "@calendar/components/ui/textarea";
+import Tiptap from "@calendar/components/ui/TodoWysiwyg";
 
 export function AddEditEventDialog({ children, event, defaultTag, forceValues }) {
 	const { isOpen, onClose, onToggle } = useDisclosure();
@@ -359,15 +360,15 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues })
 	--------------------------------------------- */
 	useEffect(() => {
 		if (!tagConfig?.forceAllDay) return;
-	  
+
 		if (form.getValues("allDay") !== true) {
-		  form.setValue("allDay", true, {
-			shouldDirty: false,
-			shouldValidate: false,
-		  });
+			form.setValue("allDay", true, {
+				shouldDirty: false,
+				shouldValidate: false,
+			});
 		}
-	  }, [selectedTag]);
-	  
+	}, [selectedTag]);
+
 	/* --------------------------------------------------
 	   RESET FORM
 	-------------------------------------------------- */
@@ -446,17 +447,17 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues })
 	/* ---------------------------------------------
    MEETING TIME LOGIC (MERGED)
 --------------------------------------------- */
-useEffect(() => {
-	if (selectedTag !== TAG_IDS.MEETING) return;
-  
-	normalizeMeetingTimes(
-	  form,
-	  startDate,
-	  allDay,
-	  endDateTouchedRef.current
-	);
-  }, [startDate, allDay]);
-  
+	useEffect(() => {
+		if (selectedTag !== TAG_IDS.MEETING) return;
+
+		normalizeMeetingTimes(
+			form,
+			startDate,
+			allDay,
+			endDateTouchedRef.current
+		);
+	}, [startDate, allDay]);
+
 	const buildDoctorVisitTitle = (doctorId, values) => {
 		const doc = doctorOptions.find(d => d.value === doctorId);
 		const empId = Array.isArray(values.employees)
@@ -554,7 +555,7 @@ useEffect(() => {
 		const calendarTodo = mapErpTodoToCalendar(
 			{
 				...todoDoc,
-				name: savedTodo.name 
+				name: savedTodo.name
 			}
 		);
 		upsertCalendarEvent(calendarTodo);
@@ -1198,7 +1199,10 @@ useEffect(() => {
 								name="description"
 								render={({ field }) => (
 									<RHFFieldWrapper label="Description">
-										<Textarea {...field} />
+										<Tiptap
+											content={field.value}
+											onChange={field.onChange}
+										/>
 									</RHFFieldWrapper>
 								)}
 							/>
