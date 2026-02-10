@@ -195,13 +195,10 @@ PLASMIC.registerComponent(DataProvider, {
       defaultValue: [],
       description: "Array of column names to display in green",
     },
-    outerGroupField: {
-      type: "string",
-      description: "Field name for outer grouping",
-    },
-    innerGroupField: {
-      type: "string",
-      description: "Field name for inner grouping",
+    groupFields: {
+      type: "object",
+      description: "Array of field names for grouping (supports infinite nesting). Main/outer group: 'sales_team', inner group: 'hq'. Example: ['sales_team', 'hq']",
+      defaultValue: ['sales_team', 'hq'],
     },
     percentageColumns: {
       type: "object",
@@ -322,6 +319,38 @@ PLASMIC.registerComponent(DataProvider, {
       defaultValue: 400,
       description: "Height of the chart in pixels",
     },
+    allowedColumns: {
+      type: "object",
+      description: "Developer-controlled: restricts which columns are available for selection",
+      defaultValue: [],
+    },
+    onAllowedColumnsChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "columns", type: "object" }],
+      description: "Callback when allowed columns change",
+    },
+    derivedColumns: {
+      type: "object",
+      description: "Array of derived column configurations",
+      defaultValue: [],
+    },
+    reportDataOverride: {
+      type: "object",
+      description: "Override report data (for custom report data)",
+    },
+    forceBreakdown: {
+      type: "boolean",
+      description: "Force breakdown mode (overrides enableBreakdown state)",
+    },
+    showProviderHeader: {
+      type: "boolean",
+      defaultValue: true,
+      description: "Show/hide the provider header controls",
+    },
+    forceEnableWrite: {
+      type: "boolean",
+      description: "Force enableWrite for nested drawer tables. If provided, overrides the query's enableWrite setting. Use true to enable editing in nested tables.",
+    },
     children: {
       type: "slot",
       description: "Slot to add custom UI components that can access the table data",
@@ -372,10 +401,15 @@ PLASMIC.registerComponent(DataTableNew, {
       type: "function",
       description: "Function to determine if a cell is editable: (rowData, field) => boolean",
     },
+    editableColumns: {
+      type: "object",
+      defaultValue: { main: [], nested: {} },
+      description: "Object defining editable columns. Format: { main: ['col1', 'col2'], nested: { parentCol: { nestedField: ['col1'] } } }. Empty main array means all columns editable. For nested tables, specify parent column and nested field name.",
+    },
     nonEditableColumns: {
       type: "object",
       defaultValue: [],
-      description: "Array of column names that cannot be edited",
+      description: "DEPRECATED: Use editableColumns instead. Array of column names that cannot be edited",
     },
     enableFullscreenDialog: {
       type: "boolean",
@@ -391,6 +425,14 @@ PLASMIC.registerComponent(DataTableNew, {
       type: "boolean",
       defaultValue: false,
       description: "Use orchestration layer (must be child of DataProvider with useOrchestrationLayer=true)",
+    },
+    parentColumnName: {
+      type: "string",
+      description: "Parent column name for nested tables (used with nestedTableFieldName)",
+    },
+    nestedTableFieldName: {
+      type: "string",
+      description: "Nested table field name (used with parentColumnName for nested drawer tables)",
     },
     onOuterGroupClick: {
       type: "eventHandler",

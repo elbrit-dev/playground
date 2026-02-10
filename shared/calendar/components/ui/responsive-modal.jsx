@@ -29,7 +29,7 @@ const ModalVariants = cva(cn(
     "lg:left-[50%] lg:top-[50%] lg:w-full lg:max-w-lg lg:translate-x-[-50%] lg:translate-y-[-50%]",
     "lg:border lg:duration-200 lg:data-[state=open]:animate-in lg:data-[state=closed]:animate-out",
     "lg:data-[state=closed]:fade-out-0 lg:data-[state=open]:fade-in-0",
-    "lg:data-[state=closed]:zoom-out-95 lg:data-[state=open]:zoom-in-95 lg:rounded-xl"
+    "lg:data-[state=closed]:zoom-out-95 lg:data-[state=open]:zoom-in-95 lg:rounded-xl bg-white"
 ), {
     variants: {
         side: {

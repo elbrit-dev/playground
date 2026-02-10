@@ -12,6 +12,8 @@ import 'graphiql/graphiql.css';
 import 'graphiql/style.css';
 import "../share/graphql-playground/styles/graphql-playground.css";
 
+import "@calendar/styles/globals.css";
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],

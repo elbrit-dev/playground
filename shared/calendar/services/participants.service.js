@@ -18,7 +18,8 @@ export async function fetchEmployees() {
       value: node.name,          // ERP ID → saved
       label: node.employee_name, 
       email: node.company_email, 
-      designation: node.designation?.name ?? null,// UI text
+      role: node.designation?.name ?? null,// UI text
+      roleId:node.role_id
     })) || []
   );
 }

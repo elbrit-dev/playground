@@ -248,7 +248,6 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues })
 	/* ---------------------------------------------
 		   Longitude and latitude
 		--------------------------------------------- */
-	const FALLBACK_LAT_LONG = "0,0";
 
 	useEffect(() => {
 		resolveLatLong(form, attending, isEditing, toast);
@@ -964,20 +963,6 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues })
 							</div>
 						)}
 
-						{/* ================= ASSIGNED TO ================= */}
-						{selectedTag === TAG_IDS.TODO_LIST && (
-							<FormField
-								control={form.control}
-								name="assignedTo"
-								render={({ field }) => (
-									<RHFFieldWrapper label="Assigned To">
-										<RHFComboboxField {...field} options={employeeOptions} multiple placeholder="Select employees" searchPlaceholder="Search employee"
-										/>
-									</RHFFieldWrapper>
-								)}
-							/>
-						)}
-
 						{/* ================= EMPLOYEES ================= */}
 						{!tagConfig.hide?.includes("employees") &&
 							(!tagConfig.employee?.autoSelectLoggedIn ||
@@ -1003,7 +988,7 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues })
 									name="allocated_to"
 
 									render={({ field }) => (
-										<RHFFieldWrapper label={"Allocated To"}>
+										<RHFFieldWrapper label={"Assigned To"}>
 											<RHFComboboxField {...field} options={employeeOptions} multiple={isMulti} placeholder="Select employees" searchPlaceholder="Search employee"
 											/>
 										</RHFFieldWrapper>
@@ -1011,6 +996,19 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues })
 								/>
 							)}
 
+						{/* ================= ASSIGNED TO ================= */}
+						{selectedTag === TAG_IDS.TODO_LIST && (
+							<FormField
+								control={form.control}
+								name="assignedTo"
+								render={({ field }) => (
+									<RHFFieldWrapper label="Visibled To">
+										<RHFComboboxField {...field} options={employeeOptions} multiple placeholder="Select employees" searchPlaceholder="Search employee"
+										/>
+									</RHFFieldWrapper>
+								)}
+							/>
+						)}
 						{/* ================= HALF DAY ================= */}
 						{selectedTag === TAG_IDS.LEAVE && (
 							<FormField
@@ -1103,64 +1101,52 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues })
 								<div className="space-y-4">
 									<h4 className="font-medium">POB Details</h4>
 
+									{/* ✅ HEADER (ONLY ONCE) */}
+									<div className="grid grid-cols-[1fr_100px_120px_40px] gap-3 text-sm font-medium text-muted-foreground">
+										<span>Item</span>
+										<span>Qty</span>
+										<span>Amount</span>
+										<span></span>
+									</div>
+
+									{/* ✅ ROWS */}
 									{(form.watch("fsl_doctor_item") ?? []).map((row, index) => (
 										<div
 											key={index}
-											className="flex gap-3 items-end"
+											className="grid grid-cols-[1fr_100px_120px_40px] gap-3 items-end"
 										>
 											{/* Item */}
-											<div className="flex-1 min-w-[200px]">
-												<FormField
-													control={form.control}
-													name={`fsl_doctor_item.${index}.item__name`}
-													render={({ field }) => (
-														<RHFFieldWrapper label="Item">
-															<RHFComboboxField
-																{...field}
-																multiple={false}
-																tagsDisplay={false}
-																options={getAvailableItems(
-																	itemOptions,
-																	form.watch("fsl_doctor_item"),
-																	field.value // 👈 this row’s selected item
-																)}
-																placeholder="Select Item"
-															/>
-
-														</RHFFieldWrapper>
-													)}
-												/>
-											</div>
-											{/* Qty */}
-											<FormField
-												control={form.control}
-												name={`fsl_doctor_item.${index}.qty`}
-												render={({ field }) => (
-													<RHFFieldWrapper label="Qty">
-														<Input
-															type="number"
-															min={1}
-															{...field}
-															onChange={(e) => {
-																const qty = Number(e.target.value);
-																field.onChange(qty);
-																updatePobRow(form, index, { qty });
-															}}
-														/>
-													</RHFFieldWrapper>
+											<RHFComboboxField
+												name={`fsl_doctor_item.${index}.item__name`}
+												options={getAvailableItems(
+													itemOptions,
+													form.watch("fsl_doctor_item"),
+													row.item__name
 												)}
+												tagsDisplay={false}
+												multiple={false}
+												placeholder="Select Item"
 											/>
-											<div >
-												<label className="text-sm font-medium text-muted-foreground">
-													Amount
-												</label>
-												<Input value={row.amount} disabled />
-											</div>
+
+											{/* Qty */}
+											<Input
+												type="number"
+												min={1}
+												value={row.qty}
+												onChange={(e) => {
+													const qty = Number(e.target.value);
+													updatePobRow(form, index, { qty });
+												}}
+											/>
+
+											{/* Amount */}
+											<Input value={row.amount} disabled />
+
+											{/* Remove */}
 											<Button
 												type="button"
 												variant="ghost"
 												size="icon"
-												className="mb-1"
 												onClick={() => {
 													const items = [...form.getValues("fsl_doctor_item")];
 													items.splice(index, 1);
@@ -1189,7 +1175,6 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues })
 										+ Add Item
 									</Button>
 								</div>
-
 							)}
 
 						{/* ================= DESCRIPTION ================= */}

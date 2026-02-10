@@ -5,8 +5,9 @@ export function mapEmployeesToCalendarUsers(employees = []) {
       id: emp.name,          // ⬅ used everywhere already
       name: emp.employee_name,        // ⬅ what you want to display
       email: emp.company_email,
-      role: "Employee",
+      role: emp.designation?.name ?? null,
       status: "Active",
+      roleId:emp.role_id
     }));
   }
   

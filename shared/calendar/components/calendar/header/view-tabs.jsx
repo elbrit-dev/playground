@@ -58,7 +58,7 @@ function Views() {
               key={value}
               layout
               className={cn(
-                "flex h-8 items-center justify-center overflow-hidden rounded-md",
+                "flex h-8 items-center justify-center overflow-hidden rounded-md bg-white",
                 isActive ? "flex-1" : "flex-none"
               )}
               onClick={() => setView(value)}

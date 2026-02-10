@@ -191,7 +191,13 @@ export const TAG_FORM_CONFIG = {
     ui: {
       lockTagOnEdit: true,
       showTags: false,
-      allowDelete: () => true,
+      allowDelete: (event) =>
+        !(
+          event.attending === "Yes" ||
+          event.pob_given === "Yes" ||
+          (Array.isArray(event.fsl_doctor_item) &&
+            event.fsl_doctor_item.length > 0)
+        ),
       allowEdit: () => true,
       primaryEditAction: {
         label: "Visited",        // ← button text
@@ -201,6 +207,7 @@ export const TAG_FORM_CONFIG = {
       },
   
     },
+    
     editReadOnly: {
       fields: [
         { key: "doctor", label: "Doctor", type: "doctor" },

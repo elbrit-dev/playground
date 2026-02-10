@@ -3,7 +3,7 @@ import { createContext, useContext, useState, useEffect, useRef, useMemo } from 
 import { useLocalStorage } from "@calendar/components/calendar/hooks";
 import { fetchEventsByRange } from "@calendar/services/event.service";
 import { resolveCalendarRange } from "@calendar/lib/calendar/range";
-import { EMPLOYEES_QUERY } from "@calendar/services/events.query";
+import { ELBRIT_ROLEID, EMPLOYEES_QUERY } from "@calendar/services/events.query";
 import { mapEmployeesToCalendarUsers } from "@calendar/services/employee-to-calendar-user";
 import { graphqlRequest } from "@calendar/lib/graphql-client";
 import { enrichEventsWithParticipants } from "@calendar/lib/calendar/enrich-events";
@@ -43,6 +43,8 @@ export function CalendarProvider({
 	const [employeeOptions, setEmployeeOptions] = useState([]);
 	const [doctorOptions, setDoctorOptions] = useState([]);
 	const [hqTerritoryOptions, setHqTerritoryOptions] = useState([]);
+	const [elbritRoleEdges, setElbritRoleEdges] = useState([]);
+	const [elbritRoleLoading, setElbritRoleLoading] = useState(true);
 
 	const [eventListDate, setEventListDate] = useState(null);
 	const [activeDate, setActiveDate] = useState(null);
@@ -57,14 +59,14 @@ export function CalendarProvider({
 	const employeeEmailToId = useMemo(() => {
 		const map = new Map();
 		for (const u of users) {
-		  if (u.email && u.id) {
-			map.set(u.email, u.id); // email → Employee ID
-		  }
+			if (u.email && u.id) {
+				map.set(u.email, u.id); // email → Employee ID
+			}
 		}
 		return map;
-	  }, [users]);
-	  
-	  
+	}, [users]);
+
+
 	const setBadgeVariant = (variant) => {
 		setBadgeVariantState(variant);
 		updateSettings({ badgeVariant: variant });
@@ -198,79 +200,79 @@ export function CalendarProvider({
 			cancelled = true;
 		};
 	}, [currentView, selectedDate]);
-	
+
 	useEffect(() => {
 		if (!allEvents.length) return;
-	  
+
 		if (
-		  !employeeOptions.length &&
-		  !doctorOptions.length &&
-		  !employeeEmailToId.size
+			!employeeOptions.length &&
+			!doctorOptions.length &&
+			!employeeEmailToId.size
 		) {
-		  return;
+			return;
 		}
-	  
+
 		let changed = false;
-	  
+
 		const enriched = allEvents.map(event => {
-		  let next = event;
-	  
-		  /* ---------------------------------
-			 1️⃣ ERP participants enrichment
-			 (events only)
-		  --------------------------------- */
-		  if (
-			next.event_participants &&
-			(employeeOptions.length || doctorOptions.length)
-		  ) {
-			const [withParticipants] = enrichEventsWithParticipants(
-			  [next],
-			  employeeOptions,
-			  doctorOptions
-			);
-	  
-			if (withParticipants !== next) {
-			  next = withParticipants;
-			  changed = true;
+			let next = event;
+
+			/* ---------------------------------
+			   1️⃣ ERP participants enrichment
+			   (events only)
+			--------------------------------- */
+			if (
+				next.event_participants &&
+				(employeeOptions.length || doctorOptions.length)
+			) {
+				const [withParticipants] = enrichEventsWithParticipants(
+					[next],
+					employeeOptions,
+					doctorOptions
+				);
+
+				if (withParticipants !== next) {
+					next = withParticipants;
+					changed = true;
+				}
 			}
-		  }
-	  
-		  /* ---------------------------------
-			 2️⃣ TODO allocated_to normalization
-			 email → employeeId
-		  --------------------------------- */
-		  if (
-			next.tags === "Todo List" &&
-			typeof next.allocated_to === "string" && // email from ERP
-			!next.__allocatedToNormalized &&
-			employeeEmailToId.size
-		  ) {
-			const empId = employeeEmailToId.get(next.allocated_to);
-	  
-			if (empId) {
-			  next = {
-				...next,
-				allocated_to: empId, // 🔑 canonical form
-				__allocatedToNormalized: true, // guard
-			  };
-			  changed = true;
+
+			/* ---------------------------------
+			   2️⃣ TODO allocated_to normalization
+			   email → employeeId
+			--------------------------------- */
+			if (
+				next.tags === "Todo List" &&
+				typeof next.allocated_to === "string" && // email from ERP
+				!next.__allocatedToNormalized &&
+				employeeEmailToId.size
+			) {
+				const empId = employeeEmailToId.get(next.allocated_to);
+
+				if (empId) {
+					next = {
+						...next,
+						allocated_to: empId, // 🔑 canonical form
+						__allocatedToNormalized: true, // guard
+					};
+					changed = true;
+				}
 			}
-		  }
-	  
-		  return next;
+
+			return next;
 		});
-	  
+
 		if (!changed) return;
-	  
+
 		setAllEvents(enriched);
 		setFilteredEvents(enriched);
-	  }, [
+	}, [
 		employeeOptions,
 		doctorOptions,
 		employeeEmailToId,
-	  ]);
-	  
-	  
+	]);
+
+
 	useEffect(() => {
 		let cancelled = false;
 
@@ -301,7 +303,33 @@ export function CalendarProvider({
 			cancelled = true;
 		};
 	}, []);
-
+	useEffect(() => {
+		let cancelled = false;
+	  
+		async function hydrateElbritRoles() {
+		  try {
+			const data = await graphqlRequest(ELBRIT_ROLEID, {
+			  first: 1000,
+			});
+	  
+			const edges = data?.ElbritRoleIDS?.edges ?? [];
+			if (!cancelled) {
+			  setElbritRoleEdges(edges);
+			  setElbritRoleLoading(false);
+			}
+		  } catch (err) {
+			console.error("❌ Failed to fetch ElbritRoleIDS", err);
+			setElbritRoleLoading(false);
+		  }
+		}
+	  
+		hydrateElbritRoles();
+	  
+		return () => {
+		  cancelled = true;
+		};
+	  }, []);
+	  
 
 	const value = {
 		selectedDate,
@@ -339,6 +367,8 @@ export function CalendarProvider({
 		setEmployeeOptions,
 		setDoctorOptions,
 		setHqTerritoryOptions,
+		elbritRoleEdges,
+		elbritRoleLoading,
 	};
 
 	return (

@@ -8,13 +8,15 @@ import {
 } from "@calendar/components/ui/popover";
 import { useCalendar } from "@calendar/components/calendar/contexts/calendar-context";
 import { useEffect, useState, useMemo } from "react";
+import {resolveVisibleEmployeeIds} from "@calendar/lib/userVisibility";
 
 export function UserSelect() {
   const {
     users = [],
     usersLoading,
     selectedUserId,
-    filterEventsBySelectedUser,
+    filterEventsBySelectedUser,elbritRoleEdges,
+    elbritRoleLoading,
   } = useCalendar();
 
   // UI-only checkbox state
@@ -54,18 +56,44 @@ export function UserSelect() {
   };
 
   // 🔒 Trigger shows only first 4
-  const visibleUsers = users.slice(0, 4);
-
+  // const visibleUsers = users.slice(0, 4);
+  const visibleUsers = useMemo(() => {
+  
+    if (usersLoading || elbritRoleLoading) return [];
+  
+    const allowedEmployeeIds =
+      resolveVisibleEmployeeIds(elbritRoleEdges, users);
+  
+  
+    return users.filter(u => allowedEmployeeIds.includes(u.id));
+  }, [
+    users,
+    usersLoading,
+    elbritRoleEdges,
+    elbritRoleLoading,
+  ]);
+  
+  
   // 🔍 Filtered users for popover
-  const filteredUsers = useMemo(() => {
-    if (!search.trim()) return users;
+  // const filteredUsers = useMemo(() => {
+  //   if (!search.trim()) return users;
 
+  //   const q = search.toLowerCase();
+  //   return users.filter((u) =>
+  //     u.name?.toLowerCase().includes(q) ||
+  //     u.email?.toLowerCase().includes(q)
+  //   );
+  // }, [users, search]);
+  const filteredUsers = useMemo(() => {
+    if (!search.trim()) return visibleUsers;
+  
     const q = search.toLowerCase();
-    return users.filter((u) =>
-      u.name?.toLowerCase().includes(q) ||
-      u.email?.toLowerCase().includes(q)
+    return visibleUsers.filter(
+      u =>
+        u.label?.toLowerCase().includes(q) ||
+        u.email?.toLowerCase().includes(q)
     );
-  }, [users, search]);
+  }, [visibleUsers, search]);
 
   if (usersLoading) {
     return (
@@ -74,14 +102,14 @@ export function UserSelect() {
       </div>
     );
   }
-
+  const triggerUsers = visibleUsers.slice(0, 4);
   return (
     <Popover>
       {/* 🔒 Trigger */}
       <PopoverTrigger asChild>
         <div className="w-full inline-flex items-center justify-between rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm cursor-pointer">
           <AvatarGroup className="flex items-center" max={4}>
-            {visibleUsers.map((user) => (
+            {triggerUsers.map((user) => (
               <Avatar key={user.id} className="size-5 text-xxs">
                 <AvatarImage
                   src={user.picturePath ?? undefined}

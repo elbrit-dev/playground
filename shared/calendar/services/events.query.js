@@ -59,7 +59,21 @@ query ToDoes($first: Int!) {
   }
 }
 `;
-
+export const ELBRIT_ROLEID=`
+query ElbritRoleIDS($first: Int) {
+  ElbritRoleIDS(first: $first) {
+    edges {
+      node {
+        lft
+        rgt
+        role_id
+        sales_team__name
+        parent_elbrit_role_id__name
+        is_group
+      }
+    }
+  }
+}`
 export const EMPLOYEES_QUERY = `
 query GetEmployees($first: Int!) {
   Employees(
@@ -74,6 +88,7 @@ query GetEmployees($first: Int!) {
         designation{
         name
         }
+        role_id
       }
     }
   }
