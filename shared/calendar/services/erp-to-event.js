@@ -1,7 +1,7 @@
 import { eventSchema } from "@calendar/components/calendar/schemas";
 import { COLOR_HEX_MAP } from "@calendar/components/calendar/constants";
 import { TAG_FORM_CONFIG } from "@calendar/lib/calendar/form-config";
-import { TAG_IDS } from "@calendar/components/calendar/mocks";
+import { TAG_IDS } from "@calendar/components/calendar/constants";
 /**
  * ERP GraphQL → Calendar Event
  * Employees & Doctors are derived ONLY from participants
@@ -89,7 +89,7 @@ export function mapErpGraphqlEventToCalendar(node) {
     startDate: startDate ? startDate.toISOString() : null,
     endDate: endDate ? endDate.toISOString() : null,
     attending,
-
+    roleId: node.fsl_role_id?.name ?? undefined,
     tags: tag,
 
     // ✅ REQUIRED BY eventSchema

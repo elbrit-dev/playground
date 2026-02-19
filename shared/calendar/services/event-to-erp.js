@@ -1,7 +1,7 @@
 import { format } from "date-fns";
 import { COLOR_HEX_MAP } from "@calendar/components/calendar/constants";
 import { LOGGED_IN_USER } from "@calendar/components/auth/calendar-users";
-import { TAG_IDS } from "@calendar/components/calendar/mocks";
+import { TAG_IDS } from "@calendar/components/calendar/constants";
 
 /**
  * Maps form values to an ERP Event document
@@ -16,7 +16,6 @@ export function mapFormToErpEvent(values, options = {}) {
     values.tags === TAG_IDS.DOCTOR_VISIT_PLAN;
 
   const isUpdate = Boolean(erpName);
-  console.log("ERPNAME", erpName)
   function buildParticipants(values) {
     const participants = [];
     /* ---------- Employees ---------- */
@@ -99,6 +98,7 @@ export function mapFormToErpEvent(values, options = {}) {
     attending:values.attending,
     starts_on: format(values.startDate, "yyyy-MM-dd HH:mm:ss"),
     ends_on: format(values.endDate, "yyyy-MM-dd HH:mm:ss"),
+    fsl_role_id: values.roleId,
     event_category: values.tags,
     color:
       COLOR_HEX_MAP[resolvedColor] ??
