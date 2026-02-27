@@ -1,5 +1,6 @@
 'use client';
 
+import GraphQLPlaygroundV2Page from '@/app/graphql-playground-v2/page';
 import { explorerPlugin } from '@graphiql/plugin-explorer';
 import '@graphiql/plugin-explorer/style.css';
 import '@graphiql/react/style.css';
@@ -29,6 +30,9 @@ import {
   GraphiQLStateSync
 } from './components';
 import ProtectedRoute from '@/components/ProtectedRoute';
+
+// Toggle: true = serve v2, false = serve v1 (preserves v1 without backup)
+const USE_V2 = true;
 
 function GraphQLPlayground() {
   // Zustand stores
@@ -378,6 +382,9 @@ function GraphQLPlayground() {
 }
 
 export default function GraphQLPlaygroundPage() {
+  if (USE_V2) {
+    return <GraphQLPlaygroundV2Page />;
+  }
   return (
     <ProtectedRoute>
       <GraphQLPlayground />

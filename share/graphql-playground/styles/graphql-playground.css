@@ -528,8 +528,7 @@
 
 .graphiql-index-overlay .p-tree-container {
   padding: 0.5rem;
-  max-height: 400px;
-  overflow-y: auto;
+  overflow: visible;
 }
 
 .graphiql-index-overlay .p-treenode-content {

@@ -35,6 +35,7 @@ import { Checkbox } from 'primereact/checkbox';
 import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
 import { Dialog } from 'primereact/dialog';
 import { Dropdown } from 'primereact/dropdown';
+import { Editor } from 'primereact/editor';
 import { InputNumber } from 'primereact/inputnumber';
 import { InputText } from 'primereact/inputtext';
 import { Sidebar } from 'primereact/sidebar';
@@ -43,6 +44,7 @@ import { TabPanel, TabView } from 'primereact/tabview';
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { TableOperationsContext } from '../contexts/TableOperationsContext';
+import { useSelectOptionsCacheStore } from '../stores/useSelectOptionsCacheStore';
 import { useDataPipeline } from '../hooks/useDataPipeline';
 import { useMultiSlotPipeline } from '../hooks/useMultiSlotPipeline';
 import { useQueryExecution } from '../hooks/useQueryExecution';
@@ -56,10 +58,208 @@ import { flattenToLeafRows } from '../utils/perSlotPipelineUtils';
 import { useReportData } from '../utils/providerUtils';
 import { exportReportToXLSX } from '../utils/reportExportUtils';
 import { isDateLike, isNumericValue } from '../utils/typeDetectionUtils';
+import { firestoreService } from '@/app/graphql-playground/services/firestoreService';
+import { fetchGraphQLRequest } from '@/app/graphql-playground/utils/query-pipeline';
+import { getEndpointAndAuth } from '../utils/queryEndpointUtils';
 import DataTableComponent from './DataTableNew';
 import { useSlotId } from './DataSlot';
 import FilterSortSidebar from './FilterSortSidebar';
 import MultiselectFilter from './MultiselectFilter';
+import SingleSelectFilter from './SingleSelectFilter';
+
+// Form Select with async getOptions support - getOptions(ctx) receives ctx with columnName, query (row-independent)
+// When cachedOptions is provided, uses it directly to avoid re-fetch on parent re-renders (e.g. cell edit mode changes)
+function FormSelectOptionsField({ col, value, label, handleChange, getOptions, ctx, cachedOptions }) {
+  const [options, setOptions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (cachedOptions !== undefined && Array.isArray(cachedOptions)) {
+      setOptions(cachedOptions.map((s) => ({ label: String(s), value: String(s) })));
+      setLoading(false);
+      return;
+    }
+    if (!getOptions || typeof getOptions !== 'function') {
+      setOptions([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const result = getOptions(ctx);
+    if (result && typeof result.then === 'function') {
+      result.then((arr) => {
+        setOptions(Array.isArray(arr) ? arr.map((s) => ({ label: String(s), value: String(s) })) : []);
+      }).catch(() => {
+        setOptions([]);
+      }).finally(() => setLoading(false));
+    } else {
+      setOptions(Array.isArray(result) ? result.map((s) => ({ label: String(s), value: String(s) })) : []);
+      setLoading(false);
+    }
+  }, [getOptions, ctx.columnName, cachedOptions]);
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs font-medium text-gray-700">{label}</label>
+      <SingleSelectFilter
+        value={value != null ? String(value) : null}
+        options={options}
+        onChange={handleChange}
+        placeholder="Select..."
+        loading={loading}
+        fieldName={label}
+      />
+    </div>
+  );
+}
+
+// Quill Editor toolbar for formInputOverride 'Quill' - Headings, font size, formatting, colors, blockquote, code, RTL, link, image, lists, align, indent
+const quillFormToolbar = (
+  <>
+    <span className="ql-formats">
+      <select className="ql-header" defaultValue="">
+        <option value="1">H1</option>
+        <option value="2">H2</option>
+        <option value="3">H3</option>
+        <option value="4">H4</option>
+        <option value="5">H5</option>
+        <option value="6">H6</option>
+        <option value="">Normal</option>
+      </select>
+      <select className="ql-size" defaultValue="">
+        <option value="small">Small</option>
+        <option value="">Normal</option>
+        <option value="large">Large</option>
+        <option value="huge">Huge</option>
+      </select>
+    </span>
+    <span className="ql-formats">
+      <button type="button" className="ql-bold" aria-label="Bold" />
+      <button type="button" className="ql-italic" aria-label="Italic" />
+      <button type="button" className="ql-underline" aria-label="Underline" />
+      <button type="button" className="ql-strike" aria-label="Strike" />
+    </span>
+    <span className="ql-formats">
+      <select className="ql-color" defaultValue="" />
+      <select className="ql-background" defaultValue="" />
+    </span>
+    <span className="ql-formats">
+      <button type="button" className="ql-blockquote" aria-label="Blockquote" />
+      <button type="button" className="ql-code-block" aria-label="Code block" />
+    </span>
+    <span className="ql-formats">
+      <button type="button" className="ql-direction" value="rtl" aria-label="RTL" />
+    </span>
+    <span className="ql-formats">
+      <button type="button" className="ql-link" aria-label="Link" />
+      <button type="button" className="ql-image" aria-label="Image" />
+    </span>
+    <span className="ql-formats">
+      <select className="ql-list" defaultValue="">
+        <option value="ordered">Ordered</option>
+        <option value="bullet">Bullet</option>
+        <option value="check">Check</option>
+        <option value="">None</option>
+      </select>
+    </span>
+    <span className="ql-formats">
+      <select className="ql-align" defaultValue="" />
+    </span>
+    <span className="ql-formats">
+      <button type="button" className="ql-indent" value="-1" aria-label="Outdent" />
+      <button type="button" className="ql-indent" value="+1" aria-label="Indent" />
+    </span>
+    <span className="ql-formats">
+      <button type="button" className="ql-clean" aria-label="Remove formatting" />
+    </span>
+  </>
+);
+
+// WriteSchema helpers for save payload (create/update structure per write.md)
+function getDoctypeFromWriteSchema(writeSchema) {
+  if (!writeSchema || typeof writeSchema !== 'object') return null;
+  const rootKey = Object.keys(writeSchema)[0];
+  if (!rootKey) return null;
+  return rootKey.endsWith('s') ? rootKey.slice(0, -1) : rootKey;
+}
+
+function getSchemaStructure(writeSchema) {
+  if (!writeSchema || typeof writeSchema !== 'object') return { mainFields: [], childTables: {} };
+  const root = Object.values(writeSchema)[0];
+  const node = root?.edges?.node;
+  if (!node || typeof node !== 'object') return { mainFields: [], childTables: {} };
+  const mainFields = [];
+  const childTables = {};
+  for (const [k, v] of Object.entries(node)) {
+    if (v?.type) mainFields.push(k);
+    else if (v && typeof v === 'object' && !Array.isArray(v)) childTables[k] = Object.keys(v);
+  }
+  return { mainFields, childTables };
+}
+
+function rowToCreateFields(row, schemaStructure, skipKey) {
+  const { mainFields, childTables } = schemaStructure;
+  const fields = {};
+  for (const k of mainFields) {
+    if (skipKey(k)) continue;
+    const v = row[k];
+    if (v === undefined) continue;
+    fields[k] = v;
+  }
+  for (const [tableName, childFieldNames] of Object.entries(childTables)) {
+    const arr = row[tableName];
+    if (!Array.isArray(arr)) continue;
+    fields[tableName] = arr.map((child) => {
+      const obj = {};
+      for (const f of childFieldNames) {
+        if (!skipKey(f) && child && f in child) obj[f] = child[f];
+      }
+      return obj;
+    });
+  }
+  return fields;
+}
+
+function rowToUpdateFields(editRow, changes, schemaStructure, skipKey) {
+  const docName = editRow?.name ?? editRow?.id ?? editRow?.key ?? editRow?.__editingKey__ ?? null;
+  const fields = {};
+  const getNestedKey = (item, idx) => {
+    if (!item || typeof item !== 'object') return `__nested_${idx}`;
+    return item.__editingKey__ ?? item.id ?? item.key ?? item.__id__ ?? `__nested_${idx}`;
+  };
+  for (const [k, val] of Object.entries(changes)) {
+    if (skipKey(k)) continue;
+    if (val?.nested) {
+      const tableName = k;
+      const editArr = editRow[k];
+      if (!Array.isArray(editArr)) continue;
+      const arr = [];
+      for (const n of val.nested) {
+        if (n.type === 'added' && n.row) {
+          const obj = {};
+          for (const [f, v] of Object.entries(n.row)) {
+            if (!skipKey(f) && v !== undefined) obj[f] = v;
+          }
+          arr.push(obj);
+        } else if (n.type === 'changed' && n.changes) {
+          const nestedKey = n.nestedKey;
+          const editItem = editArr.find((child, idx) => getNestedKey(child, idx) === nestedKey);
+          const obj = {};
+          if (editItem?.name != null) obj.name = editItem.name;
+          else if (editItem?.id != null) obj.id = editItem.id;
+          else if (editItem?.key != null) obj.key = editItem.key;
+          for (const [f, cv] of Object.entries(n.changes)) {
+            if (skipKey(f)) continue;
+            if (cv?.to !== undefined) obj[f] = cv.to;
+          }
+          arr.push(obj);
+        }
+      }
+      if (arr.length > 0) fields[tableName] = arr;
+    } else if (val?.to !== undefined) {
+      fields[k] = val.to;
+    }
+  }
+  return { name: docName, fields };
+}
 
 export default function DataProviderNew({
   offlineData,
@@ -71,6 +271,7 @@ export default function DataProviderNew({
   onVariablesChange,
   // Callbacks for parent
   onExecutingQueryChange,
+  onAvailableQueryKeysChange,
   onSelectedQueryKeyChange,
   onLoadingDataChange,
   // Auth control props
@@ -101,6 +302,9 @@ export default function DataProviderNew({
   columnTypesOverride = {}, // Object with column names as keys and type strings as values: {columnName: "date" | "number" | "boolean" | "string"}
   enableCellEdit = false,
   editableColumns = { main: [], nested: {} },
+  formInputOverride = {}, // Per-column override: 'Calendar'|'Checkbox'|'InputNumber'|'InputText'|'Quill'|{ type:'Select', getOptions:(ctx)=>string[]|Promise<string[]> } where ctx={ columnName, query }
+  // When true, do not render ConfirmDialog (parent page provides one - avoids duplicate dialogs)
+  skipConfirmDialog = false,
   // Drawer props
   drawerTabs = [],
   onDrawerTabsChange,
@@ -156,6 +360,7 @@ export default function DataProviderNew({
         columnTypesOverride,
         enableCellEdit,
         editableColumns,
+        formInputOverride,
         drawerTabs,
         enableReport,
         dateColumn,
@@ -163,7 +368,7 @@ export default function DataProviderNew({
         chartHeight,
       },
     };
-  }, [slotsProp, enableSort, enableFilter, enableSummation, enableGrouping, textFilterColumns, allowedColumns, percentageColumns, derivedColumns, groupFields, redFields, greenFields, enableDivideBy1Lakh, columnTypesOverride, enableCellEdit, editableColumns, drawerTabs, enableReport, dateColumn, chartColumns, chartHeight]);
+  }, [slotsProp, enableSort, enableFilter, enableSummation, enableGrouping, textFilterColumns, allowedColumns, percentageColumns, derivedColumns, groupFields, redFields, greenFields, enableDivideBy1Lakh, columnTypesOverride, enableCellEdit, editableColumns, formInputOverride, drawerTabs, enableReport, dateColumn, chartColumns, chartHeight]);
 
   const slotIds = useMemo(() => Object.keys(slots), [slots]);
   // Effective config: per-slot props (slot override on flat). Shared props stay flat.
@@ -184,8 +389,9 @@ export default function DataProviderNew({
     greenFields: mainSlotConfig.greenFields ?? greenFields,
     enableCellEdit: mainSlotConfig.enableCellEdit ?? enableCellEdit,
     editableColumns: mainSlotConfig.editableColumns ?? editableColumns,
+    formInputOverride: mainSlotConfig.formInputOverride ?? formInputOverride,
     drawerTabs: mainSlotConfig.drawerTabs ?? drawerTabs,
-  }), [mainSlotConfig, enableSort, enableFilter, enableSummation, enableGrouping, textFilterColumns, percentageColumns, derivedColumns, groupFields, redFields, greenFields, enableCellEdit, editableColumns, drawerTabs]);
+  }), [mainSlotConfig, enableSort, enableFilter, enableSummation, enableGrouping, textFilterColumns, percentageColumns, derivedColumns, groupFields, redFields, greenFields, enableCellEdit, editableColumns, formInputOverride, drawerTabs]);
   const [preFilterValues, setPreFilterValues] = useState({});
   const [filterSortSidebarVisible, setFilterSortSidebarVisible] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -203,6 +409,7 @@ export default function DataProviderNew({
     onDataChange,
     onVariablesChange,
     onExecutingQueryChange,
+    onAvailableQueryKeysChange,
     onSelectedQueryKeyChange,
     onLoadingDataChange,
     variableOverrides,
@@ -221,6 +428,7 @@ export default function DataProviderNew({
     lastUpdatedAt,
     offlineDataExecuted,
     runQuery,
+    queryFunction,
     checkIndexedDBAndLoadData,
     availableQueryKeys,
     formatLastUpdatedDate,
@@ -376,12 +584,14 @@ export default function DataProviderNew({
   // Drawer state
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [drawerData, setDrawerData] = useState([]);
+  const selectOptionsCache = useSelectOptionsCacheStore((s) => s.cache);
   const [activeDrawerTabIndex, setActiveDrawerTabIndex] = useState(0);
   const [clickedDrawerValues, setClickedDrawerValues] = useState({ outerValue: null, innerValue: null });
   const [drawerHeaderTitle, setDrawerHeaderTitle] = useState(null);
   const [drawerTableOptions, setDrawerTableOptions] = useState(null);
   const [, setDrawerJsonTables] = useState(null); // Store nested JSON tables for drawer
-  
+  const drawerCloseTimeoutRef = useRef(null); // For deferring content clear until after hide animation
+
   // Change tracking for nested tables
   // Map structure: tabId -> { originalData: [...], parentRowData: {...}, nestedTableFieldName: string, parentRowEditingKey: string }
   // Use parent refs if provided (for nested instances), otherwise create own refs
@@ -412,9 +622,12 @@ export default function DataProviderNew({
   const formEditingRowRef = useRef(null);
   formEditingRowRef.current = formEditingRow;
 
-  // Main table save diff dialog (show diff before confirming save)
+  // Main table save payload dialog (show create/update structure before confirming save)
   const [saveDiffDialogVisible, setSaveDiffDialogVisible] = useState(false);
-  const [saveDiffContent, setSaveDiffContent] = useState([]);
+  const [saveDiffDialogSaving, setSaveDiffDialogSaving] = useState(false);
+  const [savePayloadContent, setSavePayloadContent] = useState({ createPayload: null, updatePayload: null, removedRows: [], doctype: null });
+  const [savePayloadDisplayQueries, setSavePayloadDisplayQueries] = useState({ bulkCreate: null, bulkUpdate: null });
+  const savePayloadElbritRef = useRef(null);
 
   // Export group selector (when groupFields active, popup to choose which levels to export)
   const [exportGroupSelectorVisible, setExportGroupSelectorVisible] = useState(false);
@@ -488,6 +701,62 @@ export default function DataProviderNew({
     }
   }, [effectiveMainConfig.drawerTabs, onDrawerTabsChange]);
 
+  // Pre-fetch all Select getOptions (main + nested) in parallel when root mounts - before drawer opens
+  // Cache is ready for FormSelectOptionsField and InlineSelectCellEditor when user opens drawer
+  const selectOptionsPrefetchDoneRef = useRef(false);
+  useEffect(() => {
+    if (parentColumnName || !enableCellEdit) return;
+    if (selectOptionsPrefetchDoneRef.current) return;
+    selectOptionsPrefetchDoneRef.current = true;
+    const fio = effectiveMainConfig.formInputOverride ?? formInputOverride ?? {};
+    const query = queryFunction ?? (async () => { throw new Error('Query execution not available'); });
+    const toFetch = [];
+    const mainOverrides = fio.main ?? {};
+    for (const col of Object.keys(mainOverrides)) {
+      const ov = mainOverrides[col];
+      if (typeof ov === 'object' && ov?.type === 'Select' && (ov.getOptions || ov.getOptionsCode)) toFetch.push({ parentCol: 'main', col });
+    }
+    const nestedOverrides = fio.nested ?? {};
+    for (const parentCol of Object.keys(nestedOverrides)) {
+      const cols = nestedOverrides[parentCol];
+      if (cols && typeof cols === 'object') {
+        for (const col of Object.keys(cols)) {
+          const ov = cols[col];
+          if (typeof ov === 'object' && ov?.type === 'Select' && (ov.getOptions || ov.getOptionsCode)) toFetch.push({ parentCol, col });
+        }
+      }
+    }
+    if (toFetch.length === 0) return;
+    let cancelled = false;
+    const fetchOne = async ({ parentCol, col }) => {
+      const ov = parentCol === 'main' ? (mainOverrides[col]) : (nestedOverrides[parentCol]?.[col]);
+      let getOptions = ov?.getOptions;
+      if (typeof getOptions !== 'function' && typeof ov?.getOptionsCode === 'string' && ov.getOptionsCode?.trim()) {
+        try {
+          getOptions = new Function('ctx', 'return (' + ov.getOptionsCode + ')(ctx);');
+        } catch (err) {
+          console.warn('[FormInputOverride] Invalid getOptionsCode for column', col, err);
+          return;
+        }
+      }
+      if (typeof getOptions !== 'function') return;
+      const ctx = { columnName: col, query };
+      try {
+        const result = await Promise.resolve(getOptions(ctx));
+        const arr = Array.isArray(result) ? result : [];
+        const key = `${parentCol}|${col}`;
+        // Always update Zustand store when result arrives - survives effect cancellation
+        useSelectOptionsCacheStore.getState().setEntry(key, arr);
+      } catch (err) {
+        if (!cancelled) {
+          console.warn('[FormInputOverride] getOptions failed for', parentCol, col, err);
+        }
+      }
+    };
+    toFetch.forEach((entry) => fetchOne(entry));
+    return () => { cancelled = true; };
+  }, [parentColumnName, enableCellEdit, effectiveMainConfig.formInputOverride, formInputOverride, queryFunction]);
+
   // Clear debounced derived recompute timer on unmount
   useEffect(() => {
     return () => {
@@ -500,10 +769,16 @@ export default function DataProviderNew({
   }, []);
 
   // Notify parent when raw data changes (for Auth Control in DataTableControls)
+  // Only call when data meaningfully changes to avoid parent setState -> re-render -> new ref -> infinite loop
+  const prevRawDataLogicalHashRef = useRef(null);
+  const prevTableDataLogicalHashRef = useRef(null);
   useEffect(() => {
-    if (onRawDataChange) {
-      onRawDataChange(rawTableData);
-    }
+    if (!onRawDataChange) return;
+    const len = rawTableData?.length ?? 0;
+    const logicalHash = len === 0 ? '0_empty' : `${len}_${rawTableData[0]?.id ?? rawTableData[0]?.__editingKey__ ?? 'n'}_${rawTableData[len - 1]?.id ?? rawTableData[len - 1]?.__editingKey__ ?? 'n'}`;
+    if (prevRawDataLogicalHashRef.current === logicalHash) return;
+    prevRawDataLogicalHashRef.current = logicalHash;
+    onRawDataChange(rawTableData);
   }, [rawTableData, onRawDataChange]);
 
   // Initialize mainTableEditingData with preFilteredData when it first loads (if empty)
@@ -663,10 +938,16 @@ export default function DataProviderNew({
     if (!tableData || !Array.isArray(tableData) || isEmpty(tableData)) {
       return [];
     }
-    // Exclude __nestedTables__ from columns (it's UI-only metadata, not a data column)
-    return uniq(flatMap(tableData, (item) =>
-      item && typeof item === 'object' ? getDataKeys(item).filter(key => key !== '__nestedTables__') : []
-    ));
+    // Exclude internal metadata (__nestedTables__, __groupKey__, __groupRows__, etc.) from columns
+    const colSet = new Set();
+    tableData.forEach((item) => {
+      if (item && typeof item === 'object') {
+        getDataKeys(item).forEach((key) => {
+          if (key && typeof key === 'string' && !key.startsWith('__')) colSet.add(key);
+        });
+      }
+    });
+    return [...colSet];
   }, [tableData]);
 
   // Compute array fields separately (will be used to filter columns)
@@ -694,7 +975,7 @@ export default function DataProviderNew({
       return arrayFields;
     }
     return new Set();
-  }, [rawTableData, tableData, columns]);
+  }, [rawTableData, tableData]);
 
   // Filter columns based on allowedColumns (if provided)
   // This ensures only developer-approved columns are available throughout the app
@@ -707,16 +988,14 @@ export default function DataProviderNew({
     const allowed = allowedColumns; // shared
     const derived = effectiveMainConfig.derivedColumns;
     
-    // Filter by allowedColumns if provided
-    if (allowed && Array.isArray(allowed) && allowed.length > 0) {
-      const allowedSet = new Set(allowed);
-      result = result.filter(col => allowedSet.has(col));
-    }
-    
-    // Exclude array fields (they will be shown as nested tables, not as columns)
-    if (arrayFieldsForColumnFilter.size > 0) {
-      result = result.filter(col => !arrayFieldsForColumnFilter.has(col));
-    }
+    // Filter by allowedColumns and exclude array fields in a single pass
+    const allowedSet = allowed && Array.isArray(allowed) && allowed.length > 0 ? new Set(allowed) : null;
+    const hasArrayFilter = arrayFieldsForColumnFilter.size > 0;
+    result = result.filter((col) => {
+      if (allowedSet && !allowedSet.has(col)) return false;
+      if (hasArrayFilter && arrayFieldsForColumnFilter.has(col)) return false;
+      return true;
+    });
 
     // Include derived columns at their specified position (position = 0-based index; omit to append at end)
     const mode = derivedColumnsMode ?? 'main';
@@ -732,7 +1011,7 @@ export default function DataProviderNew({
       return detectedTypes;
     }
 
-    const sampleData = take(tableData, 100);
+    const sampleData = take(tableData, 50);
 
     filteredColumns.forEach((col) => {
       let numericCount = 0;
@@ -807,7 +1086,8 @@ export default function DataProviderNew({
   const jsonTableColumns = useMemo(() => {
     if (!tableData || !isArray(tableData) || tableData.length === 0) return {};
     const jsonTableMap = {};
-    const rowsWithNestedTables = tableData.filter(row => row && row.__nestedTables__ && isArray(row.__nestedTables__) && row.__nestedTables__.length > 0);
+    const sampleForStructure = take(tableData, 100);
+    const rowsWithNestedTables = sampleForStructure.filter(row => row && row.__nestedTables__ && isArray(row.__nestedTables__) && row.__nestedTables__.length > 0);
     rowsWithNestedTables.forEach(row => {
       if (row && row.__nestedTables__ && isArray(row.__nestedTables__)) {
         row.__nestedTables__.forEach(nestedTable => {
@@ -829,8 +1109,7 @@ export default function DataProviderNew({
       }
     });
     if (rowsWithNestedTables.length === 0 && columns.length > 0) {
-      const sampleRows = tableData.slice(0, Math.min(50, tableData.length));
-      sampleRows.forEach(row => {
+      sampleForStructure.forEach(row => {
         if (!row || typeof row !== 'object') return;
         columns.forEach(columnName => {
           if (columnName.startsWith('__')) return;
@@ -932,7 +1211,7 @@ export default function DataProviderNew({
     filteredColumns.forEach((col) => {
       const filteredForColumn = filter(tableData, (row) => {
         if (!row || typeof row !== 'object') return false;
-        return every(columns, (otherCol) => {
+        return every(filteredColumns, (otherCol) => {
           if (otherCol === col) return true;
           const filterObj = get(tableFilters, otherCol);
           if (!filterObj || isNil(filterObj.value) || filterObj.value === '') return true;
@@ -970,22 +1249,21 @@ export default function DataProviderNew({
           return includes(strCell, strFilter);
         });
       });
-      const uniqueVals = uniq(filteredForColumn.map((row) => getDataValue(row, col)));
+      const uniqueVals = [...new Set(filteredForColumn.map((row) => getDataValue(row, col)))];
       const hasNull = some(uniqueVals, val => isNil(val));
       const nonNullVals = filter(uniqueVals, val => !isNil(val));
-      const sortedNonNull = orderBy(nonNullVals);
+      const sortedNonNull = orderBy(nonNullVals).slice(0, 500);
       const options = [];
       if (hasNull) {
         options.push({ label: '(null)', value: null });
       }
-      options.push(...sortedNonNull.map((val) => ({
-        label: String(val),
-        value: val,
-      })));
+      sortedNonNull.forEach((val) => {
+        options.push({ label: String(val), value: val });
+      });
       values[col] = options;
     });
     return values;
-  }, [tableData, searchSortSortedData, multiselectColumns, tableFilters, filteredColumns, columnTypes, hasPercentageColumns, percentageColumnNames, isPercentageColumn, getPercentageColumnValue, effectiveMainConfig.enableFilter]);
+  }, [tableData, tableFilters, filteredColumns, columnTypes, multiselectColumns, effectiveMainConfig.enableFilter]);
 
   // filteredData comes from useDataPipeline
 
@@ -1120,9 +1398,8 @@ export default function DataProviderNew({
   }, [allowedColumns, dateColumn, filteredColumns, effectiveGroupFields, percentageColumnNames]);
 
   const sanitizeRowsByAllowedColumns = useCallback((rows) => {
-    if (!allowedFieldSet || !Array.isArray(rows)) {
-      return rows;
-    }
+    if (!rows || !isArray(rows)) return [];
+    if (!allowedFieldSet || allowedFieldSet.size === 0) return rows;
 
     const sanitizeRow = (row) => {
       if (!row || typeof row !== 'object') {
@@ -1150,7 +1427,18 @@ export default function DataProviderNew({
     return rows.map((row) => sanitizeRow(row));
   }, [allowedFieldSet, alwaysAllowedKeys]);
 
-  const reportInputData = useMemo(() => sanitizeRowsByAllowedColumns(filteredData), [filteredData, sanitizeRowsByAllowedColumns]);
+  // Report needs flat leaf rows with date values. When filteredData has group structure (__groupRows__),
+  // getDataValue(groupRow, dateColumn) returns wrong values. Flatten to leaf rows before report.
+  const reportInputData = useMemo(() => {
+    let dataForReport = filteredData;
+    if (dataForReport && isArray(dataForReport) && !isEmpty(dataForReport)) {
+      const first = dataForReport[0];
+      if (first?.__isGroupRow__ && isArray(first?.__groupRows__)) {
+        dataForReport = flattenToLeafRows(dataForReport);
+      }
+    }
+    return sanitizeRowsByAllowedColumns(dataForReport);
+  }, [filteredData, sanitizeRowsByAllowedColumns]);
 
   const drawerReportInputData = useMemo(() => sanitizeRowsByAllowedColumns(drawerData), [drawerData, sanitizeRowsByAllowedColumns]);
 
@@ -1170,23 +1458,23 @@ export default function DataProviderNew({
   // Drawer report data computation using shared hook
   // Get active tab's group fields for drawer report computation
   // Use drawerTabsOverride from tableOptions when opened from a slot (multi-slot), else main config
-  const effectiveDrawerTabs = (drawerTableOptions?.drawerTabsOverride && Array.isArray(drawerTableOptions.drawerTabsOverride) && drawerTableOptions.drawerTabsOverride.length > 0)
+  // When drawerTabsOverride is explicitly provided (including []), use it so scalar-only can show no tabs
+  const effectiveDrawerTabs = (drawerTableOptions?.drawerTabsOverride !== undefined && Array.isArray(drawerTableOptions.drawerTabsOverride))
     ? drawerTableOptions.drawerTabsOverride
     : (effectiveMainConfig.drawerTabs || []);
   const activeDrawerTab = effectiveDrawerTabs.length > 0
     ? effectiveDrawerTabs[Math.min(activeDrawerTabIndex, Math.max(0, effectiveDrawerTabs.length - 1))]
     : null;
-  // Convert drawer tab's outerGroup/innerGroup to groupFields array format
+  // Convert drawer tab to groupFields: if groupFields is set use it, else derive from [outerGroup, innerGroup]
   const drawerGroupFields = useMemo(() => {
     if (!activeDrawerTab) return [];
-    const fields = [];
-    if (activeDrawerTab.outerGroup) fields.push(activeDrawerTab.outerGroup);
-    if (activeDrawerTab.innerGroup) fields.push(activeDrawerTab.innerGroup);
-    // Support groupFields if provided (new format)
     if (activeDrawerTab.groupFields && Array.isArray(activeDrawerTab.groupFields)) {
       return activeDrawerTab.groupFields;
     }
-    return fields;
+    const derived = [];
+    if (activeDrawerTab.outerGroup) derived.push(activeDrawerTab.outerGroup);
+    if (activeDrawerTab.innerGroup) derived.push(activeDrawerTab.innerGroup);
+    return derived;
   }, [activeDrawerTab]);
 
   const { reportData: rawDrawerReportData } = useReportData(
@@ -1416,6 +1704,8 @@ export default function DataProviderNew({
   }, [rawTableData]);
 
   // Initialize buffers from sortedData (final processed data after all preprocessing)
+  // When enableBreakdown is on, sortedData is report data (period_metric columns). Do NOT init buffer from it,
+  // so that when user turns report off, tableData/columns stay derived from the original structure.
   useEffect(() => {
     if (skipNextInitFromSortedDataRef.current) {
       skipNextInitFromSortedDataRef.current = false;
@@ -1425,6 +1715,7 @@ export default function DataProviderNew({
       previousSortedDataHashRef.current = sortedData?.length ? `${sortedData.length}_${firstKey}_${lastKey}` : '0_empty';
       return;
     }
+    if (enableBreakdown) return; // Report mode: sortedData has report structure; keep buffer with original data
     if (!isArray(sortedData)) {
       const currentEditingLength = mainTableEditingDataRef.current.length;
       const currentOriginalLength = mainTableOriginalDataRef.current.length;
@@ -1481,9 +1772,8 @@ export default function DataProviderNew({
     });
     // Initialize original buffer
     mainTableOriginalDataRef.current = cloneDeep(dataWithNestedKeys);
-    
     // Initialize editing buffer (deep clone from original)
-    const editingData = cloneDeep(dataWithNestedKeys);
+    const editingData = cloneDeep(mainTableOriginalDataRef.current);
     mainTableEditingDataRef.current = editingData;
     setMainTableEditingData(editingData);
     // Force pipeline tableData memo to re-run so it picks up the ref (ref doesn't trigger memo deps)
@@ -1492,7 +1782,7 @@ export default function DataProviderNew({
     // Update tracking refs
     previousSortedDataRef.current = sortedData;
     previousSortedDataHashRef.current = dataHash;
-  }, [sortedData, addEditingKeysToRows, setTableDataUpdateTrigger]);
+  }, [sortedData, addEditingKeysToRows, setTableDataUpdateTrigger, enableBreakdown]);
 
   // paginatedData comes from useDataPipeline
 
@@ -1776,6 +2066,10 @@ export default function DataProviderNew({
   // Optional title parameter can be provided to set custom drawer header title
   // Optional tableOptions parameter can be provided to override default table configuration
   const openDrawer = useCallback((dataOrFilters, filters, title, tableOptions) => {
+    if (drawerCloseTimeoutRef.current) {
+      clearTimeout(drawerCloseTimeoutRef.current);
+      drawerCloseTimeoutRef.current = null;
+    }
     let dataToFilter;
     let filtersToApply;
     let customTitle = title;
@@ -1789,6 +2083,12 @@ export default function DataProviderNew({
       // Variant 2: openDrawer(filters, title, tableOptions)
       dataToFilter = filteredData; // Use current filteredData
       filtersToApply = dataOrFilters || null;
+    }
+
+    // Flatten grouped data to leaf rows BEFORE filtering (applyFiltersToData expects flat rows with field values)
+    const firstRow = dataToFilter?.[0];
+    if (firstRow?.__isGroupRow__ && isArray(firstRow?.__groupRows__)) {
+      dataToFilter = flattenToLeafRows(dataToFilter);
     }
 
     // Apply filters if provided
@@ -1846,17 +2146,28 @@ export default function DataProviderNew({
   }, [openDrawer]);
 
   const closeDrawer = useCallback(() => {
+    if (drawerCloseTimeoutRef.current) {
+      clearTimeout(drawerCloseTimeoutRef.current);
+      drawerCloseTimeoutRef.current = null;
+    }
     setDrawerVisible(false);
-    setDrawerHeaderTitle(null);
-    setDrawerTableOptions(null);
-    setDrawerJsonTables(null);
     setSelectedRowData(null);
     formOriginalRowRef.current = null;
     setFormEditingRow(null);
+    // Keep selectOptionsCache - options remain cached for next drawer open
     // Clear change tracking data when drawer closes
     originalNestedTableDataRef.current.clear();
     nestedTableEditingDataRef.current.clear();
     nestedTableDataRefsRef.current.clear();
+    // Defer clearing drawer content until after Sidebar hide animation completes,
+    // to avoid flashing the other slot's tabs during the close transition
+    drawerCloseTimeoutRef.current = setTimeout(() => {
+      drawerCloseTimeoutRef.current = null;
+      setDrawerHeaderTitle(null);
+      setDrawerTableOptions(null);
+      setDrawerJsonTables(null);
+      setDrawerData([]);
+    }, 350);
   }, [effectiveMainConfig.drawerTabs, onDrawerTabsChange]);
 
   // Wrapper so that when user selects another row in the main table (drawer open), form buffer is re-inited
@@ -2100,7 +2411,7 @@ export default function DataProviderNew({
           changes.push({
             type: 'modified',
             rowKey,
-            originalRow: cloneDeep(originalRow),
+            originalRow: originalEntry.row,
             currentRow: cloneDeep(currentRow),
             changedFields,
             index: currentIndex,
@@ -2128,7 +2439,7 @@ export default function DataProviderNew({
       changes.push({
         type: 'deleted',
         rowKey,
-        originalRow: cloneDeep(row),
+        originalRow: row,
         currentRow: null,
         changedFields: {},
         index: index,
@@ -2251,6 +2562,7 @@ export default function DataProviderNew({
     mainTableEditingDataRef.current = updatedEditingData;
     mainTableEditingDataRefEarly.current = updatedEditingData;
     setMainTableEditingData(updatedEditingData);
+    skipNextInitFromSortedDataRef.current = true; // Prevent buffer re-init from overwriting original
     setTableDataUpdateTrigger(prev => prev + 1);
   }, [findParentRowInEditingBuffer, onDataChange, setTableDataUpdateTrigger]);
 
@@ -2276,9 +2588,10 @@ export default function DataProviderNew({
       const editingKey = currentFormRow.__editingKey__;
       const editingData = mainTableEditingData;
       const rowIndex = editingData.findIndex(row => row && row.__editingKey__ === editingKey);
+      const rowToSave = cloneDeep(currentFormRow);
+      const isNewRow = editingKey && String(editingKey).startsWith('main_row_new_');
       if (rowIndex !== -1) {
         const updatedData = [...editingData];
-        const rowToSave = cloneDeep(currentFormRow);
         if (rowToSave && typeof rowToSave === 'object' && rowToSave.id != null && /^main_row_\d+$/.test(String(rowToSave.id))) {
           const { id: _syntheticId, ...rowWithoutSyntheticId } = rowToSave;
           updatedData[rowIndex] = rowWithoutSyntheticId;
@@ -2289,6 +2602,15 @@ export default function DataProviderNew({
         mainTableEditingDataRef.current = updatedData;
         mainTableEditingDataRefEarly.current = updatedData;
         formOriginalRowRef.current = cloneDeep(currentFormRow);
+        skipNextInitFromSortedDataRef.current = true; // Prevent buffer re-init from overwriting original
+        setTableDataUpdateTrigger((t) => t + 1);
+      } else if (isNewRow) {
+        const updatedData = [...editingData, rowToSave];
+        setMainTableEditingData(updatedData);
+        mainTableEditingDataRef.current = updatedData;
+        mainTableEditingDataRefEarly.current = updatedData;
+        formOriginalRowRef.current = cloneDeep(currentFormRow);
+        skipNextInitFromSortedDataRef.current = true; // Prevent buffer re-init from overwriting original (keep baseline for diff)
         setTableDataUpdateTrigger((t) => t + 1);
       }
     }
@@ -2437,21 +2759,34 @@ export default function DataProviderNew({
     }
   }, [mainTableEditingData, onDataChange]);
 
-  // Handle main save - copies editing buffer to original buffer
+  // Handle main save - copies editing buffer to original buffer, shows create/update payload in popup
   const handleMainSave = useCallback(() => {
-    // Derived columns with save !== true are excluded from save diff (e.g. "twice of sales_qty")
+    const writeSchemaRaw = currentQueryDoc?.writeSchema;
+    if (!writeSchemaRaw) {
+      if (onDataChange) {
+        onDataChange({
+          severity: 'warn',
+          summary: 'Write schema not configured',
+          detail: 'Configure write schema in the query to see create/update payload structure.',
+          life: 5000,
+        });
+      }
+      return;
+    }
+    const writeSchema = typeof writeSchemaRaw === 'string' ? (() => { try { return JSON.parse(writeSchemaRaw); } catch { return writeSchemaRaw; } })() : writeSchemaRaw;
+    const doctype = getDoctypeFromWriteSchema(writeSchema);
+    const schemaStructure = getSchemaStructure(writeSchema);
+
     const excludeFromDiff = new Set(
       (derivedColumns || []).filter((dc) => dc.save !== true).map((dc) => dc.columnName).filter(Boolean)
     );
     const skipKey = (k) => String(k).startsWith('__') || excludeFromDiff.has(k);
 
-    // Stable row key for matching: prefer __editingKey__, then id/key, else fallback for original rows
     const getRowKey = (row, origIndex) => {
       if (!row || typeof row !== 'object') return `__match_${origIndex}`;
       return row.__editingKey__ ?? row.id ?? row.key ?? row.__id__ ?? `__match_${origIndex}`;
     };
 
-    // Helper: diff a single field value; if array-of-objects (nested table), diff by row key (not index)
     const diffFieldValue = (o, e) => {
       const isArrayOfObjects = (v) =>
         isArray(v) && v.every((item) => item == null || (typeof item === 'object' && !isArray(item)));
@@ -2520,17 +2855,31 @@ export default function DataProviderNew({
           if (fieldDiff) changes[k] = fieldDiff;
         });
         if (Object.keys(changes).length > 0) {
-          diff.push({ index: editIndex, rowKey: editKey, type: 'changed', changes });
+          diff.push({ index: editIndex, rowKey: editKey, type: 'changed', changes, orig, editRow });
         }
       });
       originalMap.forEach(({ row }, key) => diff.push({ index: -1, rowKey: key, type: 'removed', row }));
+
       if (diff.length > 0) {
-        setSaveDiffContent(diff);
+        const added = diff.filter((e) => e.type === 'added');
+        const changed = diff.filter((e) => e.type === 'changed');
+        const removed = diff.filter((e) => e.type === 'removed');
+
+        const createPayload = added.length > 0
+          ? { doctype, fields: added.map((e) => ({ fields: rowToCreateFields(e.row, schemaStructure, skipKey) })) }
+          : null;
+
+        const updatePayload = changed.length > 0
+          ? { doctype, fields: changed.map((e) => rowToUpdateFields(e.editRow, e.changes, schemaStructure, skipKey)) }
+          : null;
+
+        const removedRows = removed.map((e) => e.row);
+
+        setSavePayloadContent({ createPayload, updatePayload, removedRows, doctype });
         setSaveDiffDialogVisible(true);
         return;
       }
     }
-    // No diff or empty: show "No changes" and do not persist
     if (onDataChange) {
       onDataChange({
         severity: 'info',
@@ -2539,68 +2888,154 @@ export default function DataProviderNew({
         life: 3000,
       });
     }
-  }, [mainTableEditingData, onDataChange, derivedColumns, persistMainSave]);
+  }, [mainTableEditingData, onDataChange, derivedColumns, currentQueryDoc]);
 
-  const handleSaveDiffDialogOk = useCallback(() => {
-    persistMainSave(mainTableEditingData);
-    setSaveDiffDialogVisible(false);
-  }, [persistMainSave, mainTableEditingData]);
+  // Load global functions module when save dialog opens (for display and for Save button)
+  useEffect(() => {
+    if (!saveDiffDialogVisible) return;
+    const hasCreate = savePayloadContent.createPayload?.fields?.length > 0;
+    const hasUpdate = savePayloadContent.updatePayload?.fields?.length > 0;
+    if (!hasCreate && !hasUpdate) return;
 
-  // Format save diff for dialog display (from → to), grouped by New / Updated / Removed
-  const saveDiffFormatted = useMemo(() => {
-    if (!isArray(saveDiffContent) || saveDiffContent.length === 0) return '';
-    const added = saveDiffContent.filter((e) => e.type === 'added');
-    const updated = saveDiffContent.filter((e) => e.type === 'changed');
-    const removed = saveDiffContent.filter((e) => e.type === 'removed');
+    let cancelled = false;
+    let objectUrl = null;
 
-    const formatEntry = (entry, label) => {
-      const lines = [];
-      lines.push(label);
-      if (entry.type === 'added' || entry.type === 'removed') {
-        lines.push('  ' + JSON.stringify(entry.row, null, 2).replace(/\n/g, '\n  '));
-        return lines;
-      }
-      if (entry.changes) {
-        Object.entries(entry.changes).forEach(([field, val]) => {
-          if (val && typeof val === 'object' && val.nested) {
-            lines.push(`  ${field} (nested):`);
-            val.nested.forEach((n, idx) => {
-              const nk = n.nestedKey ?? `[${idx}]`;
-              if (n.type === 'changed' && n.changes) {
-                Object.entries(n.changes).forEach(([k, v]) => {
-                  if (v && (v.from !== undefined || v.to !== undefined)) {
-                    lines.push(`    ${nk} ${k}: ${JSON.stringify(v.from)} → ${JSON.stringify(v.to)}`);
-                  }
-                });
-              } else {
-                lines.push(`    ${nk} ${n.type || 'changed'}`);
-              }
-            });
-          } else if (val && (val.from !== undefined || val.to !== undefined)) {
-            lines.push(`  ${field}: ${JSON.stringify(val.from)} → ${JSON.stringify(val.to)}`);
+    const load = async () => {
+      try {
+        const functionsCode = await firestoreService.loadGlobalFunctions();
+        if (cancelled || !functionsCode?.trim()) return;
+
+        const blob = new Blob([functionsCode], { type: 'text/javascript' });
+        objectUrl = URL.createObjectURL(blob);
+        let elbrit = {};
+        try {
+          elbrit = await import(/* webpackIgnore: true */ objectUrl);
+        } finally {
+          if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            objectUrl = null;
           }
-        });
+        }
+        if (cancelled) return;
+        savePayloadElbritRef.current = elbrit;
+        setSavePayloadDisplayQueries({ bulkCreate: elbrit?.bulkCreate ?? null, bulkUpdate: elbrit?.bulkUpdate ?? null });
+      } catch (err) {
+        if (!cancelled) {
+          setSavePayloadDisplayQueries({ bulkCreate: null, bulkUpdate: null });
+        }
       }
-      return lines;
     };
 
-    const lines = [];
-    if (added.length > 0) {
-      lines.push('=== NEW ROWS ===');
-      added.forEach((entry, i) => formatEntry(entry, `Row (new ${i + 1})`).forEach((l) => lines.push(l)));
-      lines.push('');
+    load();
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [saveDiffDialogVisible, savePayloadContent.createPayload?.fields?.length, savePayloadContent.updatePayload?.fields?.length]);
+
+  const handleSaveDiffDialogOk = useCallback(async () => {
+    const { createPayload, updatePayload, doctype } = savePayloadContent;
+    const hasCreate = createPayload?.fields?.length > 0;
+    const hasUpdate = updatePayload?.fields?.length > 0;
+    if (!hasCreate && !hasUpdate) {
+      persistMainSave(mainTableEditingData);
+      setSaveDiffDialogVisible(false);
+      return;
     }
-    if (updated.length > 0) {
-      lines.push('=== UPDATED ROWS ===');
-      updated.forEach((entry, i) => formatEntry(entry, `Row ${i + 1} (updated)`).forEach((l) => lines.push(l)));
-      lines.push('');
+
+    setSaveDiffDialogSaving(true);
+    let objectUrl = null;
+    try {
+      // Use already-loaded module from ref (loaded when dialog opened) or load now
+      let elbrit = savePayloadElbritRef.current;
+      const needLoad = (hasCreate && !elbrit?.bulkCreate) || (hasUpdate && !elbrit?.bulkUpdate);
+      if (needLoad) {
+        const functionsCode = await firestoreService.loadGlobalFunctions();
+        if (!functionsCode?.trim()) {
+          if (onDataChange) {
+            onDataChange({ severity: 'error', summary: 'Save Failed', detail: 'Global functions not configured. Add bulkCreate and bulkUpdate to #__GLOBAL__#.functions.', life: 5000 });
+          }
+          return;
+        }
+
+        const blob = new Blob([functionsCode], { type: 'text/javascript' });
+        objectUrl = URL.createObjectURL(blob);
+        try {
+          elbrit = await import(/* webpackIgnore: true */ objectUrl);
+        } finally {
+          if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            objectUrl = null;
+          }
+        }
+        savePayloadElbritRef.current = elbrit;
+        setSavePayloadDisplayQueries({ bulkCreate: elbrit?.bulkCreate ?? null, bulkUpdate: elbrit?.bulkUpdate ?? null });
+      }
+
+      const bulkCreate = elbrit?.bulkCreate;
+      const bulkUpdate = elbrit?.bulkUpdate;
+
+      if (hasCreate && !bulkCreate) {
+        if (onDataChange) {
+          onDataChange({ severity: 'error', summary: 'Save Failed', detail: 'bulkCreate not found in global functions.', life: 5000 });
+        }
+        return;
+      }
+      if (hasUpdate && !bulkUpdate) {
+        if (onDataChange) {
+          onDataChange({ severity: 'error', summary: 'Save Failed', detail: 'bulkUpdate not found in global functions.', life: 5000 });
+        }
+        return;
+      }
+
+      const { endpointUrl, authToken } = getEndpointAndAuth(currentQueryDoc);
+      if (!endpointUrl) {
+        if (onDataChange) {
+          onDataChange({ severity: 'error', summary: 'Save Failed', detail: 'GraphQL endpoint URL is not set.', life: 5000 });
+        }
+        return;
+      }
+
+      const options = { endpointUrl, authToken };
+
+      if (hasCreate) {
+        const res = await fetchGraphQLRequest(bulkCreate, { doctype, fields: createPayload.fields }, options);
+        if (!res.ok) {
+          const errBody = await res.text();
+          let errMsg = errBody;
+          try {
+            const errJson = JSON.parse(errBody);
+            errMsg = errJson?.errors?.[0]?.message || errJson?.message || errBody;
+          } catch {}
+          throw new Error(errMsg || `HTTP ${res.status}`);
+        }
+      }
+      if (hasUpdate) {
+        const res = await fetchGraphQLRequest(bulkUpdate, { doctype, fields: updatePayload.fields }, options);
+        if (!res.ok) {
+          const errBody = await res.text();
+          let errMsg = errBody;
+          try {
+            const errJson = JSON.parse(errBody);
+            errMsg = errJson?.errors?.[0]?.message || errJson?.message || errBody;
+          } catch {}
+          throw new Error(errMsg || `HTTP ${res.status}`);
+        }
+      }
+
+      persistMainSave(mainTableEditingData);
+      setSaveDiffDialogVisible(false);
+      setSavePayloadDisplayQueries({ bulkCreate: null, bulkUpdate: null });
+      savePayloadElbritRef.current = null;
+    } catch (err) {
+      if (onDataChange) {
+        onDataChange({ severity: 'error', summary: 'Save Failed', detail: err?.message || String(err), life: 5000 });
+      }
+    } finally {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      setSaveDiffDialogSaving(false);
     }
-    if (removed.length > 0) {
-      lines.push('=== REMOVED ROWS ===');
-      removed.forEach((entry, i) => formatEntry(entry, `Row (removed ${i + 1})`).forEach((l) => lines.push(l)));
-    }
-    return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
-  }, [saveDiffContent]);
+  }, [savePayloadContent, currentQueryDoc, mainTableEditingData, persistMainSave, onDataChange]);
 
   // Handle main cancel - reverts editing buffer to original buffer
   const handleMainCancel = useCallback(() => {
@@ -2631,12 +3066,29 @@ export default function DataProviderNew({
 
   // Handle drawer cancel - reverts drawer editing buffer to original buffer
   const handleDrawerCancel = useCallback(() => {
-    if (!effectiveDrawerTabs || effectiveDrawerTabs.length === 0) {
+    const hasTabs = effectiveDrawerTabs && effectiveDrawerTabs.length > 0;
+    if (!hasTabs) {
+      // Scalar-only: revert form buffer
+      if (formOriginalRowRef.current) {
+        setFormEditingRow(cloneDeep(formOriginalRowRef.current));
+      }
+      if (onDataChange) {
+        onDataChange({
+          severity: 'info',
+          summary: 'Changes Discarded',
+          detail: 'Unsaved changes have been discarded.',
+          life: 3000,
+        });
+      }
       return;
     }
 
     const activeTab = effectiveDrawerTabs[activeDrawerTabIndex];
     if (!activeTab || !activeTab.isJsonTable) {
+      // Group-based tab: revert form buffer if any
+      if (formOriginalRowRef.current) {
+        setFormEditingRow(cloneDeep(formOriginalRowRef.current));
+      }
       return;
     }
 
@@ -2851,6 +3303,44 @@ export default function DataProviderNew({
     openDrawer(firstTableData, null, drawerTitle, tableOptions);
   }, [columns, onDrawerTabsChange, openDrawer, scalarEditableColumns, jsonTableColumns]);
 
+  // Open drawer for a single row in enableWrite mode - works with scalar-only, nested-only, or both
+  const openDrawerForRow = useCallback((rowData, tableOptions = null) => {
+    const nestedTables = rowData?.__nestedTables__;
+    const hasNested = nestedTables && isArray(nestedTables) && nestedTables.length > 0;
+    const hasScalar = scalarEditableColumns.length > 0;
+
+    if (hasNested) {
+      openDrawerWithJsonTables(nestedTables, rowData, tableOptions);
+      return;
+    }
+
+    if (!hasScalar) return;
+
+    // Scalar-only: set empty tabs, init form buffer, open drawer
+    if (onDrawerTabsChange) {
+      onDrawerTabsChange([]);
+    }
+    setSelectedRowData(rowData || null);
+    formOriginalRowRef.current = rowData ? cloneDeep(rowData) : null;
+    setFormEditingRow(rowData ? cloneDeep(rowData) : null);
+
+    let firstColumnValue = null;
+    if (rowData && typeof rowData === 'object') {
+      if (columns && columns.length > 0) {
+        firstColumnValue = getDataValue(rowData, columns[0]);
+      } else {
+        const rowKeys = getDataKeys(rowData).filter(key => !key.startsWith('__'));
+        if (rowKeys.length > 0) {
+          firstColumnValue = getDataValue(rowData, rowKeys[0]);
+        }
+      }
+    }
+    const drawerTitle = firstColumnValue != null ? String(firstColumnValue) : 'Details';
+
+    const tableOptsWithOverride = { ...(tableOptions || {}), drawerTabsOverride: [] };
+    openDrawer([rowData], null, drawerTitle, tableOptsWithOverride);
+  }, [columns, onDrawerTabsChange, openDrawer, openDrawerWithJsonTables, scalarEditableColumns]);
+
   // Open drawer for new row (empty form + empty nested tables) - used by blue "+" in main table
   const openDrawerForNewRow = useCallback(() => {
     let nestedTables = [];
@@ -2921,12 +3411,13 @@ export default function DataProviderNew({
       }
     }
 
-    if (nestedTables.length === 0) {
+    // Block only when both scalar and nested are empty (no editable content at all)
+    if (nestedTables.length === 0 && scalarEditableColumns.length === 0) {
       if (onDataChange) {
         onDataChange({
           severity: 'warn',
           summary: 'Cannot add new row',
-          detail: 'No nested table schema available. Add data first or configure editable columns.',
+          detail: 'No editable schema available. Add data first or configure editable columns.',
           life: 5000,
         });
       }
@@ -3161,36 +3652,37 @@ export default function DataProviderNew({
     let dataToExport;
     let allColumns;
 
-    // Normal mode: use sortedData (full dataset) and compute percentage columns
-    dataToExport = sortedData.map((row) => {
+    // Normal mode: use sortedData (full dataset). Only copy when percentage columns need to be computed
+    if (hasPercentageColumns && percentageColumns) {
+      dataToExport = sortedData.map((row) => {
         const rowWithPercentages = { ...row };
-
-        // Compute percentage columns if configured
-        if (hasPercentageColumns && percentageColumns) {
-          percentageColumns.forEach(pc => {
-            if (pc.columnName && pc.targetField && pc.valueField) {
-              // Compute percentage value for this row
-              const percentageValue = getPercentageColumnValue(row, pc.columnName);
-              rowWithPercentages[pc.columnName] = percentageValue;
-            }
-          });
-        }
-
+        percentageColumns.forEach(pc => {
+          if (pc.columnName && pc.targetField && pc.valueField) {
+            const percentageValue = getPercentageColumnValue(row, pc.columnName);
+            rowWithPercentages[pc.columnName] = percentageValue;
+          }
+        });
         return rowWithPercentages;
-    });
+      });
+    } else {
+      dataToExport = sortedData;
+    }
 
     // Collect columns from data plus percentage columns
-    const dataColumns = isEmpty(dataToExport) ? [] : uniq(flatMap(dataToExport, (item) =>
-      item && typeof item === 'object' ? getDataKeys(item) : []
-    ));
-
-    // Add percentage columns and derived columns explicitly (in case they're null/undefined and don't appear as keys)
+    const dataColSet = new Set();
+    if (!isEmpty(dataToExport)) {
+      dataToExport.forEach((item) => {
+        if (item && typeof item === 'object') {
+          getDataKeys(item).forEach((k) => dataColSet.add(k));
+        }
+      });
+    }
     const percentageColNames = hasPercentageColumns && percentageColumns
       ? percentageColumns.map(pc => pc.columnName).filter(Boolean)
       : [];
     const derivedColNames = getDerivedColumnNames(derivedColumns || [], 'main');
-
-    allColumns = uniq([...dataColumns, ...percentageColNames, ...derivedColNames]);
+    const allColSet = new Set([...dataColSet, ...percentageColNames, ...derivedColNames]);
+    allColumns = [...allColSet];
 
     // Format and export data (same logic for both modes)
     const exportData = dataToExport.map((row) => {
@@ -3318,6 +3810,7 @@ export default function DataProviderNew({
         openDrawerForOuterGroup,
         openDrawerForInnerGroup,
         openDrawerWithJsonTables,
+        openDrawerForRow,
         openDrawerForNewRow,
         handleAddNestedRowAtZero: parentHandleAddNestedRowAtZero || handleAddNestedRowAtZero,
         closeDrawer,
@@ -3365,9 +3858,12 @@ export default function DataProviderNew({
         updateMainTableEditingData,
         // Read-only access to original buffer for comparison
         mainTableOriginalData: mainTableOriginalDataRef.current,
-        // Data control: availableQueryKeys and executingQuery for DataTableControls
-        availableQueryKeys,
-        executingQuery,
+        // queryFunction: execute a query and return processed data (similar to transformer). Used by formInputOverride getOptions.
+        queryFunction,
+        // formInputOverride: per-column override for inline cell editors (Select, Checkbox, etc.)
+        formInputOverride: effectiveMainConfig.formInputOverride ?? formInputOverride ?? {},
+        // selectOptionsCache: pre-fetched options for Select editors (main|col or parentCol|col) - from Zustand store
+        selectOptionsCache,
       };
     } catch (error) {
       console.error('DataProviderNew: Error creating slotContextData', error);
@@ -3380,12 +3876,12 @@ export default function DataProviderNew({
     tableExpandedRows, tableVisibleColumns, effectiveGroupFields,
     updateFilter, clearFilter, clearAllFilters, updateSort, updatePagination, updateExpandedRows,
     updateVisibleColumns, drawerVisible, drawerData, activeDrawerTabIndex, clickedDrawerValues,
-    openDrawer, openDrawerWithData, openDrawerForOuterGroup, openDrawerForInnerGroup, openDrawerWithJsonTables, openDrawerForNewRow, handleAddNestedRowAtZero, closeDrawer, addDrawerTab, removeDrawerTab, updateDrawerTab,
+    openDrawer, openDrawerWithData, openDrawerForOuterGroup, openDrawerForInnerGroup, openDrawerWithJsonTables, openDrawerForRow, openDrawerForNewRow, handleAddNestedRowAtZero, closeDrawer, addDrawerTab, removeDrawerTab, updateDrawerTab,
     selectedRowData, setSelectedRowDataWithFormSync,
     formatHeaderName, isTruthyBoolean, exportToXLSX, isNumericValue, currentQueryDoc, searchTerm, sortConfig, enableBreakdown, reportData, isComputingReport, isApplyingFilterSort, columnGroupBy, filteredColumns, parentColumnName, nestedTableFieldName, nestedTableTabId,
     updateCurrentNestedTableData, getChangedRowsForTab, getAllChangedNestedTableRows, handleDrawerSave, handleMainSave, handleMainCancel, handleDrawerCancel, hasMainTableChanges, hasDrawerChanges, updateMainTableEditingData, forceEnableWrite, parentHandleDrawerSave, parentHandleAddNestedRowAtZero, addEditingKeysToRows, mainTableEditingData,
-    availableQueryKeys, executingQuery, effectiveMainConfig, columnTypesOverride, enableDivideBy1Lakh, enableReport, chartColumns, chartHeight,
-    dataSource, offlineData, offlineDataExecuted
+    queryFunction, effectiveMainConfig, columnTypesOverride, enableDivideBy1Lakh, enableReport, chartColumns, chartHeight,
+    dataSource, offlineData, offlineDataExecuted, formInputOverride, selectOptionsCache
   ]);
 
   // When multi-slot, build per-slot context from pipelinesBySlot with slot-scoped handlers
@@ -3474,6 +3970,7 @@ export default function DataProviderNew({
         openDrawerForOuterGroup,
         openDrawerForInnerGroup,
         openDrawerWithJsonTables,
+        openDrawerForRow,
         openDrawerForNewRow,
         handleAddNestedRowAtZero: parentHandleAddNestedRowAtZero || handleAddNestedRowAtZero,
         closeDrawer,
@@ -3513,8 +4010,9 @@ export default function DataProviderNew({
         hasDrawerChanges,
         updateMainTableEditingData,
         mainTableOriginalData: mainTableOriginalDataRef.current,
-        availableQueryKeys,
-        executingQuery,
+        queryFunction,
+        formInputOverride: effectiveSlotConfig.formInputOverride ?? formInputOverride ?? {},
+        selectOptionsCache,
       };
     }
     return map;
@@ -3525,14 +4023,15 @@ export default function DataProviderNew({
     getSums, mainTableEditingData, columnTypes, columnTypesOverride, multiselectColumns, hasPercentageColumns, percentageColumnNames, getPercentageColumnValue, getPercentageColumnSortFunction,
     reportDataWithDerived, isComputingReport, isApplyingFilterSort, chartColumns, chartHeight, columnGroupBy,
     drawerVisible, drawerData, activeDrawerTabIndex, clickedDrawerValues,
-    openDrawer, openDrawerWithData, openDrawerForOuterGroup, openDrawerForInnerGroup, openDrawerWithJsonTables, openDrawerForNewRow,
+    openDrawer, openDrawerWithData, openDrawerForOuterGroup, openDrawerForInnerGroup, openDrawerWithJsonTables, openDrawerForRow, openDrawerForNewRow,
     parentHandleAddNestedRowAtZero, selectedRowData, setSelectedRowDataWithFormSync,
     formatDateValue, formatHeaderName, isTruthyBoolean, exportToXLSX, isNumericValue,
     currentQueryDoc, searchTerm, sortConfig, forceEnableWrite, parentColumnName, nestedTableFieldName, nestedTableTabId,
     updateCurrentNestedTableData, getChangedRowsForTab, getAllChangedNestedTableRows, parentHandleDrawerSave,
     handleMainSave, handleMainCancel, handleDrawerCancel, hasMainTableChanges, hasDrawerChanges, updateMainTableEditingData,
-    availableQueryKeys, executingQuery,
+    queryFunction, formInputOverride,
     dataSource, offlineData, offlineDataExecuted,
+    selectOptionsCache,
   ]);
 
   // Build single context as slot map: { main: {...}, salesTeamHq: {...}, ... }
@@ -4081,17 +4580,22 @@ export default function DataProviderNew({
     </>
   );
 
-  // Keep existing callback for backward compatibility
   useEffect(() => {
-    if (onTableDataChange) {
-      // Pass full sortedData including __nestedTables__ so Column Type Overrides (and similar UIs) can show nested array structure
-      onTableDataChange(sortedData);
-    }
+    if (!onTableDataChange) return;
+    const len = sortedData?.length ?? 0;
+    const logicalHash = len === 0 ? '0_empty' : `${len}_${sortedData[0]?.__editingKey__ ?? sortedData[0]?.id ?? 'n'}_${sortedData[len - 1]?.__editingKey__ ?? sortedData[len - 1]?.id ?? 'n'}`;
+    if (prevTableDataLogicalHashRef.current === logicalHash) return;
+    prevTableDataLogicalHashRef.current = logicalHash;
+    // Pass full sortedData including __nestedTables__ so Column Type Overrides (and similar UIs) can show nested array structure
+    onTableDataChange(sortedData);
   }, [sortedData, onTableDataChange]);
 
 
   // Drawer sidebar helpers
   const hasDrawerTabs = effectiveDrawerTabs && effectiveDrawerTabs.length > 0;
+  const hasJsonTabs = effectiveDrawerTabs?.some(t => t?.isJsonTable) ?? false;
+  const enableWriteForDrawer = forceEnableWrite !== undefined ? forceEnableWrite : (currentQueryDoc?.enableWrite || false);
+  const shouldShowDrawer = hasDrawerTabs || (enableWriteForDrawer && drawerVisible && (scalarEditableColumns.length > 0 || hasJsonTabs));
   const hasDrawerData = drawerData && drawerData.length > 0;
   const drawerActiveIndex = hasDrawerTabs
     ? Math.min(activeDrawerTabIndex, Math.max(0, effectiveDrawerTabs.length - 1))
@@ -4221,8 +4725,8 @@ export default function DataProviderNew({
         />
       )}
 
-      {/* Drawer Sidebar - Only render if drawer tabs are configured */}
-      {hasDrawerTabs && (() => {
+      {/* Drawer Sidebar - Render when drawer tabs configured, or enableWrite with scalar/nested content */}
+      {shouldShowDrawer && (() => {
         const drawerHeaderIcons = !parentColumnName && enableCellEdit && handleDrawerSave ? (
           <>
             {handleDrawerSave && (
@@ -4265,14 +4769,15 @@ export default function DataProviderNew({
             </h2>
           }
         >
-          <div className="flex flex-col h-full">
-            {/* Scalar editable fields form - sibling above TabView (root provider only) */}
+          <div className="flex flex-col h-full dynamic-form-container">
+            {/* Scalar section - part of dynamic form (root provider only) */}
             {!parentColumnName && drawerVisible && enableCellEdit && scalarEditableColumns.length > 0 && (
-              <div className="shrink-0 p-3 pb-2 border-b border-gray-200">
+              <section className="shrink-0 p-3 pb-2 border-b border-gray-200 drawer-form-inputs">
                 <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                   {(formEditingRow ?? selectedRowData) && (
                     scalarEditableColumns.map((col) => {
                       const formRow = formEditingRow ?? selectedRowData;
+                      const override = effectiveMainConfig.formInputOverride?.main?.[col] ?? formInputOverride?.main?.[col];
                       const mainOverrides = getMainOverrides(columnTypesOverride);
                       const resolvedType = mainOverrides[col] || columnTypes[col] || 'string';
                       const value = getDataValue(formRow, col);
@@ -4280,7 +4785,9 @@ export default function DataProviderNew({
                       const handleChange = (newVal) => {
                         setFormEditingRow(prev => prev ? { ...prev, [col]: newVal } : null);
                       };
-                      if (resolvedType === 'date') {
+                      // formInputOverride: 'Calendar'|'Checkbox'|'InputNumber'|'InputText'|'Quill'|{ type:'Select', getOptions }
+                      const overrideType = typeof override === 'object' && override?.type === 'Select' ? 'Select' : (typeof override === 'string' ? override : null);
+                      if (overrideType === 'Calendar' || (!overrideType && resolvedType === 'date')) {
                         return (
                           <div key={col} className="flex flex-col gap-1">
                             <label className="text-xs font-medium text-gray-700">{label}</label>
@@ -4289,13 +4796,12 @@ export default function DataProviderNew({
                               onChange={(e) => handleChange(e.value)}
                               dateFormat="M d, yy"
                               showIcon
-                              className="w-full"
-                              inputClassName="text-sm w-full"
+                              className="w-full text-sm"
                             />
                           </div>
                         );
                       }
-                      if (resolvedType === 'boolean') {
+                      if (overrideType === 'Checkbox' || (!overrideType && resolvedType === 'boolean')) {
                         return (
                           <div key={col} className="flex flex-col gap-1">
                             <label className="text-xs font-medium text-gray-700">{label}</label>
@@ -4310,35 +4816,81 @@ export default function DataProviderNew({
                           </div>
                         );
                       }
-                      if (resolvedType === 'number') {
+                      if (overrideType === 'InputNumber' || (!overrideType && resolvedType === 'number')) {
                         return (
                           <div key={col} className="flex flex-col gap-1">
                             <label className="text-xs font-medium text-gray-700">{label}</label>
                             <InputNumber
                               value={value != null && value !== '' ? toNumber(value) : null}
                               onValueChange={(e) => handleChange(e.value)}
-                              className="w-full"
-                              inputClassName="text-sm w-full"
+                              className="w-full text-sm"
                             />
                           </div>
                         );
                       }
-                      return (
-                        <div key={col} className="flex flex-col gap-1">
-                          <label className="text-xs font-medium text-gray-700">{label}</label>
-                          <InputText
-                            value={value != null ? String(value) : ''}
-                            onChange={(e) => handleChange(e.target.value)}
-                            className="w-full text-sm"
+                      if (overrideType === 'Select') {
+                        let getOptions = override?.getOptions;
+                        if (typeof getOptions !== 'function' && typeof override?.getOptionsCode === 'string' && override.getOptionsCode.trim()) {
+                          try {
+                            getOptions = new Function('ctx', 'return (' + override.getOptionsCode + ')(ctx);');
+                          } catch (err) {
+                            console.warn('[FormInputOverride] Invalid getOptionsCode for column', col, err);
+                            getOptions = () => [];
+                          }
+                        }
+                        getOptions = typeof getOptions === 'function' ? getOptions : () => [];
+                        const ctx = {
+                          columnName: col,
+                          query: queryFunction ?? (async () => { throw new Error('Query execution not available'); }),
+                        };
+                        const formCachedOptions = selectOptionsCache?.[`main|${col}`];
+                        return (
+                          <FormSelectOptionsField
+                            key={col}
+                            col={col}
+                            value={value}
+                            label={label}
+                            handleChange={handleChange}
+                            getOptions={getOptions}
+                            ctx={ctx}
+                            cachedOptions={formCachedOptions}
                           />
-                        </div>
-                      );
+                        );
+                      }
+                      if (overrideType === 'Quill') {
+                        return (
+                          <div key={col} className="flex flex-col gap-1 col-span-2">
+                            <label className="text-xs font-medium text-gray-700">{label}</label>
+                            <Editor
+                              value={value != null ? String(value) : ''}
+                              onTextChange={(e) => handleChange(e.htmlValue)}
+                              headerTemplate={quillFormToolbar}
+                              style={{ height: '160px' }}
+                              className="w-full"
+                            />
+                          </div>
+                        );
+                      }
+                      if (overrideType === 'InputText' || !overrideType) {
+                        return (
+                          <div key={col} className="flex flex-col gap-1">
+                            <label className="text-xs font-medium text-gray-700">{label}</label>
+                            <InputText
+                              value={value != null ? String(value) : ''}
+                              onChange={(e) => handleChange(e.target.value)}
+                              className="w-full text-sm"
+                            />
+                          </div>
+                        );
+                      }
+                      return null;
                     })
                   )}
                 </div>
-              </div>
+              </section>
             )}
-            <div className="flex-1">
+            {/* Nested tables section (JSON tabs) or group-based tabs - subset of dynamic form */}
+            <div className="flex-1 min-h-0">
               {hasDrawerTabs ? (
                 <TabView
                   activeIndex={drawerActiveIndex}
@@ -4366,14 +4918,14 @@ export default function DataProviderNew({
                       redFields: effectiveMainConfig.redFields || [],
                       greenFields: effectiveMainConfig.greenFields || [],
                       groupFields: (() => {
-                        // Convert tab's outerGroup/innerGroup to groupFields array, or use tab.groupFields if provided
+                        // If tab.groupFields is set use it, else derive from [outerGroup, innerGroup]
                         if (tab.groupFields && Array.isArray(tab.groupFields)) {
                           return tab.groupFields;
                         }
-                        const fields = [];
-                        if (tab.outerGroup) fields.push(tab.outerGroup);
-                        if (tab.innerGroup) fields.push(tab.innerGroup);
-                        return fields.length > 0 ? fields : null;
+                        const derived = [];
+                        if (tab.outerGroup) derived.push(tab.outerGroup);
+                        if (tab.innerGroup) derived.push(tab.innerGroup);
+                        return derived.length > 0 ? derived : null;
                       })(),
                       enableCellEdit: false, // drawer-specific default
                       editableColumns: { main: [], nested: {} }, // drawer-specific default
@@ -4390,6 +4942,7 @@ export default function DataProviderNew({
                       dateColumn, // shared
                       breakdownType: breakdownType, // from main table
                       columnGroupBy: columnGroupBy, // from main table
+                      formInputOverride: effectiveMainConfig.formInputOverride ?? formInputOverride ?? {},
                     };
 
                     // Extract tab-specific overrides (any prop beyond id, name, outerGroup, innerGroup, isJsonTable, data, fieldName, parentColumnName, nestedTableFieldName)
@@ -4409,7 +4962,6 @@ export default function DataProviderNew({
                     const hasTabData = isJsonTable
                       ? (tabDataSource && isArray(tabDataSource))
                       : hasDrawerData;
-
                     return (
                       <TabPanel
                         key={tabId}
@@ -4455,6 +5007,7 @@ export default function DataProviderNew({
                               columnGroupBy={mergedTableProps.columnGroupBy}
                               chartColumns={mergedTableProps.chartColumns || []}
                               chartHeight={mergedTableProps.chartHeight}
+                              formInputOverride={mergedTableProps.formInputOverride ?? effectiveMainConfig.formInputOverride ?? { main: {}, nested: {} }}
                               // Pass enableWrite from parent for nested drawer tables
                               forceEnableWrite={isJsonTable && currentQueryDoc?.enableWrite ? true : undefined}
                               // Pass parent refs so nested instance can access tracking data
@@ -4496,34 +5049,81 @@ export default function DataProviderNew({
                     );
                   })}
                 </TabView>
-              ) : (
+              ) : scalarEditableColumns.length === 0 ? (
                 <DrawerEmptyState
                   icon="pi-inbox"
                   title="No tabs configured"
                   subtitle="Please configure drawer tabs in settings"
                 />
-              )}
+              ) : null}
             </div>
           </div>
         </Sidebar>
         );
       })()}
-      {!parentColumnName && <ConfirmDialog />}
+      {!parentColumnName && !skipConfirmDialog && <ConfirmDialog />}
       {!parentColumnName && (
         <Dialog
-          header="Save diff"
+          header="Save – Create & Update Payloads"
           visible={saveDiffDialogVisible}
-          style={{ width: '90vw', maxWidth: '640px' }}
-          onHide={() => setSaveDiffDialogVisible(false)}
+          style={{ width: '90vw', maxWidth: '720px' }}
+          onHide={() => {
+            setSaveDiffDialogVisible(false);
+            setSavePayloadDisplayQueries({ bulkCreate: null, bulkUpdate: null });
+            savePayloadElbritRef.current = null;
+          }}
           footer={
-            <Button label="OK" onClick={handleSaveDiffDialogOk} />
+            <Button
+              label={saveDiffDialogSaving ? 'Saving...' : 'Save'}
+              icon={saveDiffDialogSaving ? 'pi pi-spin pi-spinner' : undefined}
+              onClick={handleSaveDiffDialogOk}
+              disabled={saveDiffDialogSaving}
+            />
           }
         >
-          <div style={{ maxHeight: '60vh', overflow: 'auto' }}>
-            {saveDiffFormatted ? (
-              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                {saveDiffFormatted}
-              </pre>
+          <div style={{ maxHeight: '60vh', overflow: 'auto' }} className="space-y-4">
+            {savePayloadContent.doctype && (
+              <p style={{ margin: 0, fontSize: '0.875rem', color: '#6b7280' }}>
+                Doctype: <strong>{savePayloadContent.doctype}</strong>
+              </p>
+            )}
+            {savePayloadContent.createPayload ? (
+              <div>
+                <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.875rem', fontWeight: 600 }}>Create (bulkCreate)</h4>
+                <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.75rem', color: '#6b7280' }}>Query</p>
+                <pre style={{ margin: '0 0 0.5rem 0', padding: '0.75rem', background: '#f3f4f6', borderRadius: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.8125rem' }}>
+                  {savePayloadDisplayQueries.bulkCreate?.trim() || 'Loading query...'}
+                </pre>
+                <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.75rem', color: '#6b7280' }}>Variables</p>
+                <pre style={{ margin: 0, padding: '0.75rem', background: '#f9fafb', borderRadius: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.875rem' }}>
+                  {JSON.stringify(savePayloadContent.createPayload, null, 2)}
+                </pre>
+              </div>
+            ) : (
+              <p style={{ margin: 0, fontSize: '0.875rem', color: '#9ca3af' }}>No new rows</p>
+            )}
+            {savePayloadContent.updatePayload ? (
+              <div>
+                <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.875rem', fontWeight: 600 }}>Update (bulkUpdate)</h4>
+                <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.75rem', color: '#6b7280' }}>Query</p>
+                <pre style={{ margin: '0 0 0.5rem 0', padding: '0.75rem', background: '#f3f4f6', borderRadius: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.8125rem' }}>
+                  {savePayloadDisplayQueries.bulkUpdate?.trim() || 'Loading query...'}
+                </pre>
+                <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.75rem', color: '#6b7280' }}>Variables</p>
+                <pre style={{ margin: 0, padding: '0.75rem', background: '#f9fafb', borderRadius: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.875rem' }}>
+                  {JSON.stringify(savePayloadContent.updatePayload, null, 2)}
+                </pre>
+              </div>
+            ) : (
+              <p style={{ margin: 0, fontSize: '0.875rem', color: '#9ca3af' }}>No updated rows</p>
+            )}
+            {savePayloadContent.removedRows?.length > 0 ? (
+              <div>
+                <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.875rem', fontWeight: 600 }}>Removed rows</h4>
+                <pre style={{ margin: 0, padding: '0.75rem', background: '#fef2f2', borderRadius: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.875rem' }}>
+                  {JSON.stringify(savePayloadContent.removedRows, null, 2)}
+                </pre>
+              </div>
             ) : null}
           </div>
         </Dialog>

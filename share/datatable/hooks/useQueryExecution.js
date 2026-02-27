@@ -10,6 +10,7 @@ import { indexedDBService } from '../utils/indexedDBService';
 import { fetchGraphQLSchema } from '@/app/graphql-playground-v2/utils/schema-fetcher';
 import { getEndpointConfigFromUrlKey, getInitialEndpoint } from '@/app/graphql-playground/constants';
 import { firestoreService } from '@/app/graphql-playground/services/firestoreService';
+import { queryRegistry } from '@/app/graphql-playground/services/queryRegistry';
 import { createExecutionContext } from '@/app/graphql-playground/utils/query-pipeline';
 import { parseGraphQLVariables } from '@/app/graphql-playground/utils/variableParser';
 import { serializeGraphQLField } from '../utils/graphqlSchemaSerialization';
@@ -26,6 +27,7 @@ import { serializeGraphQLField } from '../utils/graphqlSchemaSerialization';
  * @param {Function} [options.onDataChange] - Success toast callback
  * @param {Function} [options.onVariablesChange] - Variables changed callback
  * @param {Function} [options.onExecutingQueryChange] - Executing state callback
+ * @param {Function} [options.onAvailableQueryKeysChange] - Available query keys callback
  * @param {Function} [options.onSelectedQueryKeyChange] - Selected key callback
  * @param {Function} [options.onLoadingDataChange] - Loading state callback
  * @param {Object} [options.variableOverrides] - User variable overrides
@@ -41,6 +43,7 @@ export function useQueryExecution(options) {
     onDataChange,
     onVariablesChange,
     onExecutingQueryChange,
+    onAvailableQueryKeysChange,
     onSelectedQueryKeyChange,
     onLoadingDataChange,
     variableOverrides = {},
@@ -103,7 +106,7 @@ export function useQueryExecution(options) {
         }
         const workerAPI = Comlink.wrap(worker);
         const nestedQueryCallback = Comlink.proxy(async (queryId) => {
-          const queryDoc = await firestoreService.loadQuery(queryId);
+          const queryDoc = await queryRegistry.loadQuery(queryId);
           if (queryDoc) {
             allQueryDocsRef.current[queryId] = queryDoc;
             return { ...queryDoc, transformerCode: queryDoc.transformerCode || null };
@@ -137,7 +140,7 @@ export function useQueryExecution(options) {
     const loadSavedQueries = async () => {
       setLoadingQueries(true);
       try {
-        const queries = await firestoreService.getAllQueries();
+        const queries = await queryRegistry.getAllQueries();
         setSavedQueries(queries);
       } catch (err) {
         if (onErrorRef.current) {
@@ -298,6 +301,13 @@ export function useQueryExecution(options) {
     if (cacheLoadInProgressRef.current === cacheLoadKey) return;
     cacheLoadInProgressRef.current = cacheLoadKey;
     setLoadingFromCache(true);
+    const isOffline = queryDoc?.json != null && queryDoc?.body;
+    if (isOffline) {
+      cacheLoadInProgressRef.current = null;
+      setLoadingFromCache(false);
+      if (runQueryRef.current) await runQueryRef.current(queryId, true);
+      return;
+    }
     if (!queryDoc || queryDoc.clientSave !== true) {
       cacheLoadInProgressRef.current = null;
       setLoadingFromCache(false);
@@ -417,7 +427,7 @@ export function useQueryExecution(options) {
     queries.forEach((q) => { if (q.id) allQueryDocsRef.current[q.id] = q; });
     const queryMap = new Map(queries.filter((q) => q.id).map((q) => [q.id, q]));
     queries.forEach((query) => {
-      if (!query.id || !query.index?.trim() || query.clientSave !== true) return;
+      if (!query.id || !query.index?.trim() || query.clientSave !== true || (query.json != null && query.body)) return;
       const queryDoc = query;
       const onChangeCallback = async (queryId, oldResult, newResult, updatedAt, queryDocFromSave) => {
         const queryDocToUse = queryDocFromSave || queryMap.get(queryId) || queryDoc;
@@ -484,16 +494,25 @@ export function useQueryExecution(options) {
     try {
       let queryDocToUse = currentQueryDoc;
       if (!queryDocToUse) {
-        queryDocToUse = await firestoreService.loadQuery(queryId);
+        queryDocToUse = await queryRegistry.loadQuery(queryId);
         if (queryDocToUse) allQueryDocsRef.current[queryId] = queryDocToUse;
       }
       if (!queryDocToUse) throw new Error(`Query "${queryId}" not found`);
+      const isOffline = queryDocToUse?.json != null && queryDocToUse?.body;
       const { endpointUrl, authToken } = getEndpointAndAuth(queryDocToUse);
       const finalEndpointUrl = endpointUrl || getInitialEndpoint()?.code || null;
       const finalAuthToken = authToken ?? null;
-      if (!finalEndpointUrl) throw new Error('GraphQL endpoint URL is not set');
+      if (!isOffline && !finalEndpointUrl) throw new Error('GraphQL endpoint URL is not set');
+      // Wait for worker to be ready (handles race when offline data loads before worker initializes)
+      const maxWaitMs = 10000;
+      const pollIntervalMs = 50;
+      let waited = 0;
+      while (!workerRef.current && waited < maxWaitMs) {
+        await new Promise((r) => setTimeout(r, pollIntervalMs));
+        waited += pollIntervalMs;
+      }
       if (!workerRef.current) throw new Error('Worker is not available.');
-      if (queryDocToUse.month === true && monthRange?.length === 2) {
+      if (!isOffline && queryDocToUse.month === true && monthRange?.length === 2) {
         const finalData = await executeAndCacheMonthRange(queryId, queryDocToUse, monthRange, finalEndpointUrl, finalAuthToken, mergedVariables);
         setProcessedData(finalData);
         await fetchLastUpdatedAt(queryDocToUse, monthRange);
@@ -504,7 +523,7 @@ export function useQueryExecution(options) {
               { year: monthRange[1].getFullYear(), month: monthRange[1].getMonth(), day: monthRange[1].getDate() },
             ]
           : undefined;
-        if (queryDocToUse.index?.trim() && queryDocToUse.clientSave === true && workerRef.current) {
+        if (!isOffline && queryDocToUse.index?.trim() && queryDocToUse.clientSave === true && workerRef.current) {
           try {
             if (monthRangeToPass) {
               await workerRef.current.executeIndexQueryForMonthRange(queryId, queryDocToUse, finalEndpointUrl, finalAuthToken, monthRangeToPass);
@@ -543,6 +562,81 @@ export function useQueryExecution(options) {
       setExecutingQuery(false);
     }
   }, [onDataChange, onError, monthRange, executingQuery, variableOverrides, currentQueryDoc, searchTerm, sortConfig, createExecutionKey, executeAndCacheMonthRange, fetchLastUpdatedAt]);
+
+  /**
+   * Execute a query and return processed data (similar to transformer's queryFunction).
+   * Used by formInputOverride getOptions and other contexts that need to fetch query results.
+   * @param {string} queryId - Query ID to execute
+   * @returns {Promise<Object>} Processed data from the query pipeline
+   */
+  const queryFunction = useCallback(async (queryId) => {
+    if (!queryId || !queryId.trim()) {
+      throw new Error('Query key is required');
+    }
+    let mergedVariables = { ...queryVariablesRef.current, ...variableOverrides };
+    if (monthRange?.length === 2) {
+      const { startDate, endDate, ...rest } = mergedVariables;
+      mergedVariables = rest;
+    }
+    let queryDocToUse = allQueryDocsRef.current[queryId];
+    if (!queryDocToUse) {
+      queryDocToUse = await queryRegistry.loadQuery(queryId);
+      if (queryDocToUse) allQueryDocsRef.current[queryId] = queryDocToUse;
+    }
+    if (!queryDocToUse) {
+      throw new Error(`Query "${queryId}" not found`);
+    }
+    if (queryDocToUse.clientSave === false) {
+      if (searchTerm?.trim()) mergedVariables.searchText = searchTerm.trim();
+      if (sortConfig?.field) {
+        const [topLevelKey, ...nestedParts] = sortConfig.field.split('.');
+        const nestedPath = nestedParts.join('.');
+        let shouldAdd = true;
+        if (queryDocToUse.sortFields?.[topLevelKey]) {
+          shouldAdd = nestedPath ? queryDocToUse.sortFields[topLevelKey].includes(nestedPath) : true;
+        }
+        if (shouldAdd) {
+          mergedVariables.sortField = nestedPath || topLevelKey;
+          mergedVariables.sortDirection = sortConfig.direction || 'asc';
+        }
+      }
+    }
+    const isOffline = queryDocToUse?.json != null && queryDocToUse?.body;
+    const { endpointUrl, authToken } = getEndpointAndAuth(queryDocToUse);
+    const finalEndpointUrl = endpointUrl || getInitialEndpoint()?.code || null;
+    const finalAuthToken = authToken ?? null;
+    if (!isOffline && !finalEndpointUrl) {
+      throw new Error('GraphQL endpoint URL is not set');
+    }
+    const maxWaitMs = 10000;
+    const pollIntervalMs = 50;
+    let waited = 0;
+    while (!workerRef.current && waited < maxWaitMs) {
+      await new Promise((r) => setTimeout(r, pollIntervalMs));
+      waited += pollIntervalMs;
+    }
+    if (!workerRef.current) {
+      throw new Error('Worker is not available');
+    }
+    const monthRangeToPass = monthRange?.length === 2
+      ? [
+          { year: monthRange[0].getFullYear(), month: monthRange[0].getMonth(), day: monthRange[0].getDate() },
+          { year: monthRange[1].getFullYear(), month: monthRange[1].getMonth(), day: monthRange[1].getDate() },
+        ]
+      : undefined;
+    if (queryDocToUse.month === true && monthRange?.length === 2) {
+      return executeAndCacheMonthRange(queryId, queryDocToUse, monthRange, finalEndpointUrl, finalAuthToken, mergedVariables);
+    }
+    return workerRef.current.executePipeline(
+      queryId,
+      queryDocToUse,
+      finalEndpointUrl,
+      finalAuthToken,
+      monthRangeToPass,
+      mergedVariables,
+      allQueryDocsRef.current
+    );
+  }, [variableOverrides, monthRange, searchTerm, sortConfig, executeAndCacheMonthRange]);
 
   useEffect(() => {
     if (!executionContextRef.current) executionContextRef.current = createExecutionContext();
@@ -607,7 +701,7 @@ export function useQueryExecution(options) {
       isInitialLoadRef.current = true;
       const loadQueryMetadata = async () => {
         try {
-          const queryDoc = await firestoreService.loadQuery(dataSource);
+          const queryDoc = await queryRegistry.loadQuery(dataSource);
           if (queryDoc) {
             setCurrentQueryDoc(queryDoc);
             const { month, variables: rawVariables } = queryDoc;
@@ -679,12 +773,13 @@ export function useQueryExecution(options) {
   }, [monthRange, currentQueryDoc, dataSource, fetchLastUpdatedAt]);
 
   const availableQueryKeys = useMemo(() => {
-    if (!processedData || !dataSource) return [];
-    return getDataKeys(processedData).filter((key) => {
-      const value = getDataValue(processedData, key);
-      return value && value.length > 0;
-    });
-  }, [processedData, dataSource]);
+    const saved = currentQueryDoc?.queryKeys;
+    return (dataSource && Array.isArray(saved)) ? saved : [];
+  }, [dataSource, currentQueryDoc?.queryKeys]);
+
+  useEffect(() => {
+    if (onAvailableQueryKeysChange) onAvailableQueryKeysChange(availableQueryKeys);
+  }, [availableQueryKeys, onAvailableQueryKeysChange]);
 
   useEffect(() => {
     const dataSourceChanged = previousDataSourceRef.current !== dataSource;
@@ -764,6 +859,7 @@ export function useQueryExecution(options) {
     offlineDataExecuted,
     setOfflineDataExecuted,
     runQuery,
+    queryFunction,
     checkIndexedDBAndLoadData,
     availableQueryKeys,
     workerRef,

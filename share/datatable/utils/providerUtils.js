@@ -31,10 +31,12 @@ export function useReportData(
   const [reportData, setReportData] = useState(null);
   const [isComputingReport, setIsComputingReport] = useState(false);
   const computationIdRef = useRef(0);
+  const prevInputSignatureRef = useRef('');
 
   useEffect(() => {
     // If toggle is off, reset everything immediately
     if (!enableBreakdown) {
+      prevInputSignatureRef.current = '';
       setReportData(null);
       setIsComputingReport(false);
       return;
@@ -43,15 +45,22 @@ export function useReportData(
     // Ensure effectiveGroupFields is an array
     const groupFields = Array.isArray(effectiveGroupFields) ? effectiveGroupFields : [];
 
-    // If conditions not met, show loader but don't compute yet
+    // If conditions not met, don't compute and don't show computing state
     if (!dateColumn || isEmpty(data) || groupFields.length === 0) {
-      // Keep loader showing if toggle is on but conditions aren't ready
-      setIsComputingReport(true);
+      prevInputSignatureRef.current = '';
       setReportData(null);
+      setIsComputingReport(false);
       return;
     }
 
-    // Start computation immediately when toggle is on and conditions are met
+    // Stabilize: only run computation when input signature actually changed (avoids rapid re-runs from unstable refs)
+    const sortKey = sortConfig ? `${sortConfig.field ?? ''}-${sortConfig.direction ?? ''}` : '';
+    const inputSignature = `${data?.length ?? 0}-${groupFields.join(',')}-${dateColumn}-${breakdownType}-${sortKey}`;
+    if (prevInputSignatureRef.current === inputSignature) {
+      return;
+    }
+    prevInputSignatureRef.current = inputSignature;
+
     const computationId = ++computationIdRef.current;
     setIsComputingReport(true);
 

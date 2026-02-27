@@ -23,7 +23,7 @@ import {
 } from '../utils/jsonArrayParser';
 import { detectColumnTypesLikeProvider, inferColumnType, parseToDate } from '../utils/typeDetectionUtils';
 import { applyDerivedColumns, getDerivedColumnNames, getOrderedColumnsWithDerived } from '../utils/derivedColumnsUtils';
-import { buildPipelineColumnMeta } from '../utils/perSlotPipelineUtils';
+import { buildPipelineColumnMeta, aggregateNonNumeric } from '../utils/perSlotPipelineUtils';
 
 const isNaNNumber = Number.isNaN;
 
@@ -151,9 +151,9 @@ export function useDataPipeline(options) {
       return rawTableData;
     }
     if (isAdminMode) return rawTableData;
-    let filtered = [...rawTableData];
+    let data = rawTableData;
     if (salesTeamColumn && salesTeamValues && salesTeamValues.length > 0) {
-      filtered = filtered.filter((row) => {
+      data = data.filter((row) => {
         if (!row || typeof row !== 'object') return false;
         const rowValue = getDataValue(row, salesTeamColumn);
         if (isNil(rowValue)) {
@@ -171,7 +171,7 @@ export function useDataPipeline(options) {
       hqValues &&
       hqValues.length > 0
     ) {
-      filtered = filtered.filter((row) => {
+      data = data.filter((row) => {
         if (!row || typeof row !== 'object') return false;
         const rowValue = getDataValue(row, hqColumn);
         if (isNil(rowValue)) {
@@ -182,7 +182,7 @@ export function useDataPipeline(options) {
         return hqValues.some((val) => String(val) === String(rowValue));
       });
     }
-    return filtered;
+    return data;
   }, [
     rawTableData,
     isAdminMode,
@@ -227,7 +227,7 @@ export function useDataPipeline(options) {
       }
       return true;
     });
-  }, [authFilteredData, preFilterSets, preFilterValues]);
+  }, [authFilteredData, preFilterSets]);
 
   const tableData = useMemo(() => {
     const editingData = mainTableEditingDataRefEarly.current;
@@ -404,11 +404,12 @@ export function useDataPipeline(options) {
           compareFn = (a, b) =>
             String(a.sortValue || '').localeCompare(String(b.sortValue || ''));
       }
-      const sortedCache = [...sortValueCache].sort((a, b) => {
-        const comparison = compareFn(a, b);
+      const indices = sortValueCache.map((_, i) => i);
+      indices.sort((a, b) => {
+        const comparison = compareFn(sortValueCache[a], sortValueCache[b]);
         return direction === 'asc' ? comparison : -comparison;
       });
-      return sortedCache.map((item) => item.originalRow);
+      return indices.map((i) => sortValueCache[i].originalRow);
     }
     const fieldType =
       columnTypesOverride[field] ||
@@ -632,8 +633,8 @@ export function useDataPipeline(options) {
         if (!firstItem) return null;
 
         cols.forEach((col) => {
+          if (col && typeof col === 'string' && col.startsWith('__')) return;
           const colType = colTypes[col] || 'string';
-          const isDerivedCol = derivedColumnNamesSet.has(col);
           if (col === currentField) {
             summaryRow[col] = groupKey === '__null__' ? null : groupKey;
           } else if (
@@ -641,7 +642,7 @@ export function useDataPipeline(options) {
             fields.slice(currentLevel + 1).includes(col)
           ) {
             summaryRow[col] = null;
-          } else if (!isDerivedCol && colType === 'number') {
+          } else if (colType === 'number') {
             const sum = sumBy(innerData, (row) => {
               const val = getCell(row, col);
               if (isNil(val)) return 0;
@@ -650,7 +651,7 @@ export function useDataPipeline(options) {
             });
             summaryRow[col] = sum;
           } else {
-            const canSum = !isDerivedCol && (() => {
+            const canSum = (() => {
               if (!isArray(innerData) || innerData.length === 0) return false;
               let numeric = 0;
               let meaningful = 0;
@@ -671,12 +672,18 @@ export function useDataPipeline(options) {
                 return isNaNNumber(numVal) ? 0 : numVal;
               });
             } else {
-              const firstNonNull = isArray(innerData)
-                ? innerData.find((row) => !isNil(getCell(row, col)))
-                : null;
-              summaryRow[col] = firstNonNull
-                ? getCell(firstNonNull, col)
-                : getCell(firstItem, col);
+              // Use rows (leaf data) not innerData - innerData can be group rows with pre-aggregated strings
+              const { display, breakdown } = aggregateNonNumeric(col, colType, rows, getCell);
+              summaryRow[col] = display ?? (() => {
+                const firstNonNull = isArray(rows)
+                  ? rows.find((row) => !isNil(getCell(row, col)))
+                  : null;
+                return firstNonNull ? getCell(firstNonNull, col) : getCell(firstItem, col);
+              })();
+              if (breakdown && breakdown.length > 0) {
+                if (!summaryRow.__stringBreakdown__) summaryRow.__stringBreakdown__ = {};
+                summaryRow.__stringBreakdown__[col] = breakdown;
+              }
             }
           }
         });
@@ -720,7 +727,6 @@ export function useDataPipeline(options) {
       getSortComparator,
       pipelineColumnMeta,
       percentageColumns,
-      derivedColumnNamesSet,
     ]
   );
 

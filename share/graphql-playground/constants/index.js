@@ -1,12 +1,21 @@
-// GraphQL Endpoint Configuration
-export const GRAPHQL_ENDPOINTS = {
-  UAT: process.env.NEXT_PUBLIC_GRAPHQL_ENDPOINT_UAT,
-  ERP: process.env.NEXT_PUBLIC_GRAPHQL_ENDPOINT_ERP,
-};
+import {
+  getEndpoints,
+  getTokens,
+  getEndpointList,
+  getDefaultEndpoint,
+  getEndpointByKey,
+  getEndpointConfig as getEndpointConfigFromLib,
+} from '@/lib/graphql-endpoints';
 
-// Firestore Collections
+// GraphQL Endpoint Configuration (dynamic from env)
+export const GRAPHQL_ENDPOINTS = getEndpoints();
+
+// Firestore Collection - uses GQL_COLLECTION env (singular)
+export const DEFAULT_GQL_COLLECTION = process.env.NEXT_PUBLIC_GQL_COLLECTION || 'gql';
+export const GQL_COLLECTIONS = [DEFAULT_GQL_COLLECTION];
+
 export const FIRESTORE_COLLECTIONS = {
-  GQL: 'gql',
+  GQL: DEFAULT_GQL_COLLECTION,
 };
 
 // Query Types
@@ -19,61 +28,25 @@ export const QUERY_TYPES = {
 // Default Auth Token
 export const DEFAULT_AUTH_TOKEN = '';
 
-// Endpoint-specific Auth Tokens
-export const ENDPOINT_TOKENS = {
-  UAT: process.env.NEXT_PUBLIC_GRAPHQL_AUTH_TOKEN_UAT || '',
-  ERP: process.env.NEXT_PUBLIC_GRAPHQL_AUTH_TOKEN_ERP || '',
-};
+// Endpoint-specific Auth Tokens (dynamic from env)
+export const ENDPOINT_TOKENS = getTokens();
 
 // Get initial endpoint configuration
-export const getInitialEndpoint = () => {
-  const uatUrl = GRAPHQL_ENDPOINTS.UAT;
-  const erpUrl = GRAPHQL_ENDPOINTS.ERP;
-
-  // Prefer UAT if available, otherwise use ERP
-  if (erpUrl) {
-    return { name: 'ERP', code: erpUrl };
-  }
-  if (uatUrl) {
-    return { name: 'UAT', code: uatUrl };
-  }
-  return null;
-};
+export const getInitialEndpoint = () => getDefaultEndpoint();
 
 // Get endpoint options
-export const getEndpointOptions = () => {
-  const options = [];
-  if (GRAPHQL_ENDPOINTS.UAT) {
-    options.push({ name: 'UAT', code: GRAPHQL_ENDPOINTS.UAT });
-  }
-  if (GRAPHQL_ENDPOINTS.ERP) {
-    options.push({ name: 'ERP', code: GRAPHQL_ENDPOINTS.ERP });
-  }
-  return options;
-};
+export const getEndpointOptions = () => getEndpointList();
 
 // Get endpoint configuration from urlKey
-export const getEndpointFromUrlKey = (urlKey) => {
-  if (!urlKey) return null;
-  
-  const upperKey = urlKey.toUpperCase();
-  if (upperKey === 'UAT' && GRAPHQL_ENDPOINTS.UAT) {
-    return { name: 'UAT', code: GRAPHQL_ENDPOINTS.UAT };
-  }
-  if (upperKey === 'ERP' && GRAPHQL_ENDPOINTS.ERP) {
-    return { name: 'ERP', code: GRAPHQL_ENDPOINTS.ERP };
-  }
-  return null;
-};
+export const getEndpointFromUrlKey = (urlKey) => getEndpointByKey(urlKey);
 
 // Get endpoint URL and token from urlKey
 export const getEndpointConfigFromUrlKey = (urlKey) => {
-  const endpoint = getEndpointFromUrlKey(urlKey);
-  if (!endpoint) return { endpointUrl: null, authToken: null };
-  
+  const config = getEndpointConfigFromLib(urlKey);
+  if (!config.endpointUrl) return { endpointUrl: null, authToken: null };
   return {
-    endpointUrl: endpoint.code,
-    authToken: ENDPOINT_TOKENS[endpoint.name] || '',
+    endpointUrl: config.endpointUrl,
+    authToken: config.authToken || '',
   };
 };
 

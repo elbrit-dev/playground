@@ -16,6 +16,21 @@ export class IndexedDBServiceWorker {
     constructor() {
         this.callbacks = new Map(); // Map<queryId, callback>
         this.queryDatabases = new Map(); // Map<queryId, Dexie instance> - cache for query databases
+        this._cacheLockByQuery = new Map(); // Per-queryId lock to serialize cache operations
+    }
+
+    /**
+     * Run a function with exclusive cache lock for the given queryId.
+     * Serializes ensureStores + save so only one runs at a time per query.
+     * @param {string} queryId - The query identifier
+     * @param {Function} fn - Async function to run
+     * @returns {Promise<*>} Result of fn
+     */
+    async _withCacheLock(queryId, fn) {
+        const prev = this._cacheLockByQuery.get(queryId) ?? Promise.resolve();
+        const next = prev.then(() => fn(), () => fn());
+        this._cacheLockByQuery.set(queryId, next);
+        return next;
     }
 
     /**
@@ -165,7 +180,8 @@ export class IndexedDBServiceWorker {
                 if (queryDb.isOpen()) {
                     queryDb.close();
                 }
-                
+                this.queryDatabases.delete(queryId);
+
                 // Small delay to let other operations complete
                 if (attempt > 0) {
                     await new Promise(resolve => setTimeout(resolve, retryDelay * attempt));
@@ -181,10 +197,11 @@ export class IndexedDBServiceWorker {
                     return;
                 }
 
-                // Close fresh connection
+                // Close fresh connection and remove from cache before creating new version
                 if (freshDb.isOpen()) {
                     freshDb.close();
                 }
+                this.queryDatabases.delete(queryId);
 
                 // Create new version with additional stores
                 const newStores = {};
@@ -477,7 +494,6 @@ export class IndexedDBServiceWorker {
             return;
         }
 
-        const queryDb = await this.getQueryDatabase(queryId, queryDoc);
         const storeKeys = Object.keys(pipelineResult).filter(
             (key) =>
                 pipelineResult[key] !== null && pipelineResult[key] !== undefined && Array.isArray(pipelineResult[key]),
@@ -487,39 +503,50 @@ export class IndexedDBServiceWorker {
             return;
         }
 
-        // Get existing stores
-        const existingStores = queryDb.tables.map((table) => table.name);
+        const maxRetries = 3;
+        const isRetryableError = (err) =>
+            err?.name === 'DatabaseClosedError' ||
+            err?.name === 'NotFoundError' ||
+            err?.message?.includes('object store') ||
+            (err?.inner?.name === 'NotFoundError');
 
-        // Process each store/key
-        for (const key of storeKeys) {
-            const arrayData = pipelineResult[key];
-            if (!Array.isArray(arrayData) || arrayData.length === 0) {
-                continue;
-            }
-
-            // For month == true, prefix store name with YYYY-MM
-            const storeName = yearMonthPrefix ? `${yearMonthPrefix}_${key}` : key;
-
-            // Check if store exists
-            if (!existingStores.includes(storeName)) {
-                console.warn(`Store "${storeName}" does not exist for queryId ${queryId}, skipping`);
-                continue;
-            }
-
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
             try {
-                // Clear existing entries for this store
-                await queryDb.table(storeName).clear();
+                const queryDb = await this.getQueryDatabase(queryId, queryDoc);
+                const existingStores = queryDb.tables.map((table) => table.name);
 
-                // Prepare entries for bulk insert
-                const entries = arrayData.map((dataItem, index) => ({
-                    index: index,
-                    data: dataItem, // Store as JSON object (not stringified)
-                }));
+                for (const key of storeKeys) {
+                    const arrayData = pipelineResult[key];
+                    if (!Array.isArray(arrayData) || arrayData.length === 0) {
+                        continue;
+                    }
 
-                // Bulk insert entries
-                await queryDb.table(storeName).bulkAdd(entries);
+                    const storeName = yearMonthPrefix ? `${yearMonthPrefix}_${key}` : key;
+
+                    if (!existingStores.includes(storeName)) {
+                        console.warn(`Store "${storeName}" does not exist for queryId ${queryId}, skipping`);
+                        continue;
+                    }
+
+                    const entries = arrayData.map((dataItem, index) => ({
+                        index: index,
+                        data: dataItem,
+                    }));
+
+                    await queryDb.transaction('rw', storeName, async () => {
+                        await queryDb.table(storeName).clear();
+                        await queryDb.table(storeName).bulkAdd(entries);
+                    });
+                }
+                return;
             } catch (error) {
-                console.error(`Error saving pipeline result entries for key "${storeName}" in queryId ${queryId}:`, error);
+                if (isRetryableError(error) && attempt < maxRetries - 1) {
+                    this.queryDatabases.delete(queryId);
+                    console.warn(`Retry ${attempt + 1}/${maxRetries} for savePipelineResultEntries on ${queryId}:`, error?.message || error);
+                    await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
+                    continue;
+                }
+                console.error(`Error saving pipeline result entries for queryId ${queryId}:`, error);
                 throw error;
             }
         }

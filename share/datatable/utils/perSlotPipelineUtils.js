@@ -28,6 +28,7 @@ import {
   extractJsonNestedTablesRecursive,
 } from './jsonArrayParser';
 import { detectColumnTypesLikeProvider, inferColumnType, parseToDate } from './typeDetectionUtils';
+import { formatDateValue } from './dateFormatUtils';
 import { applyDerivedColumns, getDerivedColumnNames, getOrderedColumnsWithDerived } from './derivedColumnsUtils';
 
 const isNaNNumber = Number.isNaN;
@@ -82,7 +83,7 @@ export function buildPipelineColumnMeta(options) {
   const columns = uniq(
     flatMap(data, (item) =>
       item && typeof item === 'object'
-        ? getDataKeys(item).filter((key) => key !== '__nestedTables__')
+        ? getDataKeys(item).filter((key) => key && typeof key === 'string' && !key.startsWith('__'))
         : []
     )
   );
@@ -190,6 +191,60 @@ function getSortComparatorForQuery(config, fieldType, topLevelKey, nestedPath) {
 }
 
 /**
+ * Aggregate non-numeric columns by type. Returns { display, breakdown }.
+ * breakdown is set for string columns only (for drawer).
+ * @param {string} col - Column name
+ * @param {string} colType - 'date' | 'boolean' | 'string' | etc.
+ * @param {Array} innerData - Rows in the group
+ * @param {Function} getCell - (row, col) => value
+ * @returns {{ display: *, breakdown?: Array<{value: string, count: number}> }}
+ */
+export function aggregateNonNumeric(col, colType, innerData, getCell) {
+  if (!isArray(innerData) || innerData.length === 0) {
+    return { display: null };
+  }
+  const vals = innerData.map((row) => getCell(row, col)).filter((v) => !isNil(v) && v !== '');
+
+  if (vals.length === 0) return { display: null };
+
+  if (colType === 'date') {
+    const dates = vals.map((v) => parseToDate(v)).filter(Boolean);
+    if (dates.length === 0) return { display: null };
+    const timestamps = dates.map((d) => d.getTime());
+    const minDate = new Date(Math.min(...timestamps));
+    const maxDate = new Date(Math.max(...timestamps));
+    const minStr = formatDateValue(minDate);
+    const maxStr = formatDateValue(maxDate);
+    return { display: minStr === maxStr ? minStr : `${minStr} - ${maxStr}` };
+  }
+
+  if (colType === 'boolean') {
+    const isTruthy = (v) => v === true || v === 'true' || v === 1 || v === '1' || v === 'yes' || v === 'y';
+    const isFalsy = (v) => v === false || v === 'false' || v === 0 || v === '0' || v === 'no' || v === 'n';
+    const t = vals.filter(isTruthy).length;
+    const f = vals.filter(isFalsy).length;
+    return { display: `true: ${t}, false: ${f}` };
+  }
+
+  if (colType === 'string' || !['number', 'date', 'boolean'].includes(colType)) {
+    const countMap = new Map();
+    vals.forEach((v) => {
+      const key = String(v);
+      countMap.set(key, (countMap.get(key) || 0) + 1);
+    });
+    const entries = Array.from(countMap.entries()).sort((a, b) => (b[1] - a[1]));
+    const first = entries[0];
+    const display = first ? `${first[0]} x ${first[1]}` : '';
+    const moreCount = entries.length - 1;
+    const displayWithMore = moreCount > 0 ? `${display} +${moreCount} more` : display;
+    const breakdown = entries.map(([value, count]) => ({ value, count }));
+    return { display: displayWithMore || null, breakdown };
+  }
+
+  return { display: vals[0] };
+}
+
+/**
  * Flatten grouped data to leaf data rows. When data contains __isGroupRow__ rows (e.g. from
  * another slot's pipeline output or shared ref), groupDataRecursive skips them, producing empty
  * groups. Extract leaf rows from __groupRows__ so grouping works for this slot.
@@ -252,46 +307,54 @@ function groupDataRecursive(data, fields, currentLevel, parentPath, options) {
     if (!firstItem) return null;
 
     cols.forEach((col) => {
+      if (col && typeof col === 'string' && col.startsWith('__')) return;
       const colType = colTypes[col] || 'string';
-      const isDerivedCol = derivedColumnNamesSet.has(col);
       if (col === currentField) {
         summaryRow[col] = groupKey === '__null__' ? null : groupKey;
       } else if (currentLevel < fields.length - 1 && fields.slice(currentLevel + 1).includes(col)) {
         summaryRow[col] = null;
-      } else if (!isDerivedCol && colType === 'number') {
+      } else if (colType === 'number') {
         const sum = sumBy(innerData, (row) => {
-            const val = getCell(row, col);
-            if (isNil(val)) return 0;
-            const numVal = isNumber(val) ? val : toNumber(val);
+          const val = getCell(row, col);
+          if (isNil(val)) return 0;
+          const numVal = isNumber(val) ? val : toNumber(val);
           return isNaNNumber(numVal) ? 0 : numVal;
         });
         summaryRow[col] = sum;
       } else {
-        const canSum = !isDerivedCol && (() => {
-            if (!isArray(innerData) || innerData.length === 0) return false;
-            let numeric = 0;
-            let meaningful = 0;
-            for (const row of innerData) {
-              const val = getCell(row, col);
-              if (val == null || val === '') continue;
-              meaningful++;
-              const n = isNumber(val) ? val : toNumber(val);
-              if (!isNaNNumber(n) && Number.isFinite(n)) numeric++;
-            }
+        const canSum = (() => {
+          if (!isArray(innerData) || innerData.length === 0) return false;
+          let numeric = 0;
+          let meaningful = 0;
+          for (const row of innerData) {
+            const val = getCell(row, col);
+            if (val == null || val === '') continue;
+            meaningful++;
+            const n = isNumber(val) ? val : toNumber(val);
+            if (!isNaNNumber(n) && Number.isFinite(n)) numeric++;
+          }
           return meaningful > 0 && numeric / meaningful >= 0.8;
         })();
         if (canSum) {
           summaryRow[col] = sumBy(innerData, (row) => {
-              const val = getCell(row, col);
-              if (isNil(val)) return 0;
-              const numVal = isNumber(val) ? val : toNumber(val);
+            const val = getCell(row, col);
+            if (isNil(val)) return 0;
+            const numVal = isNumber(val) ? val : toNumber(val);
             return isNaNNumber(numVal) ? 0 : numVal;
           });
         } else {
-          const firstNonNull = isArray(innerData) ? innerData.find((row) => !isNil(getCell(row, col))) : null;
-          summaryRow[col] = firstNonNull ? getCell(firstNonNull, col) : getCell(firstItem, col);
+          // Use rows (leaf data) not innerData - innerData can be group rows with pre-aggregated strings
+          const { display, breakdown } = aggregateNonNumeric(col, colType, rows, getCell);
+          summaryRow[col] = display ?? (() => {
+            const firstNonNull = isArray(rows) ? rows.find((row) => !isNil(getCell(row, col))) : null;
+            return firstNonNull ? getCell(firstNonNull, col) : getCell(firstItem, col);
+          })();
+          if (breakdown && breakdown.length > 0) {
+            if (!summaryRow.__stringBreakdown__) summaryRow.__stringBreakdown__ = {};
+            summaryRow.__stringBreakdown__[col] = breakdown;
+          }
         }
-    }
+      }
     });
 
     if (pipelineColumnMeta.hasPercentageColumns && percentageColumns.length) {

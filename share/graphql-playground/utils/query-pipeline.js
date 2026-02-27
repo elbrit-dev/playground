@@ -4,6 +4,7 @@ import jmespath_plus from '@metrichor/jmespath-plus'
 import _ from "lodash";
 import { parse as parseJsonc, stripComments } from "jsonc-parser";
 import { firestoreService } from "../services/firestoreService";
+import { queryRegistry } from "../services/queryRegistry";
 import { extractDataFromResponse } from "./data-extractor";
 import { removeIndexKeys } from "./data-flattener";
 import { DEFAULT_AUTH_TOKEN, getInitialEndpoint, getEndpointConfigFromUrlKey } from "../constants";
@@ -455,35 +456,39 @@ export async function executePipeline(queryId, context, options = {}) {
     let finalAuthToken = authToken;
 
     try {
-        // Load query document from Firestore
-        queryDoc = await firestoreService.loadQuery(queryId);
+        // Load query document from registry (Firebase + offline merged)
+        queryDoc = await queryRegistry.loadQuery(queryId);
 
         if (!queryDoc) {
             console.error(`Query not found: ${queryId}`);
             throw new Error(`Query "${queryId}" not found`);
         }
 
-        // Get endpoint and token from urlKey if available, otherwise use provided options
-        if (queryDoc.urlKey) {
-            const urlKeyConfig = getEndpointConfigFromUrlKey(queryDoc.urlKey);
-            if (urlKeyConfig.endpointUrl) {
-                finalEndpointUrl = urlKeyConfig.endpointUrl;
-                finalAuthToken = urlKeyConfig.authToken;
-            }
-        }
+        const isOffline = queryDoc.json != null && queryDoc.body;
 
-        // Fallback to provided options or defaults if urlKey didn't provide endpoint
-        if (!finalEndpointUrl) {
-            finalEndpointUrl = endpointUrl || getInitialEndpoint()?.code;
-            finalAuthToken = authToken || DEFAULT_AUTH_TOKEN;
+        if (!isOffline) {
+            // Online: get endpoint and token from urlKey if available
+            if (queryDoc.urlKey) {
+                const urlKeyConfig = getEndpointConfigFromUrlKey(queryDoc.urlKey);
+                if (urlKeyConfig.endpointUrl) {
+                    finalEndpointUrl = urlKeyConfig.endpointUrl;
+                    finalAuthToken = urlKeyConfig.authToken;
+                }
+            }
+
+            // Fallback to provided options or defaults if urlKey didn't provide endpoint
             if (!finalEndpointUrl) {
-                console.error("No endpoint URL available");
-                throw new Error("GraphQL endpoint URL is not set");
+                finalEndpointUrl = endpointUrl || getInitialEndpoint()?.code;
+                finalAuthToken = authToken || DEFAULT_AUTH_TOKEN;
+                if (!finalEndpointUrl) {
+                    console.error("No endpoint URL available");
+                    throw new Error("GraphQL endpoint URL is not set");
+                }
             }
         }
 
-        // Mark as in-flight with endpoint URL
-        context.inFlight.set(queryId, { endpointUrl: finalEndpointUrl });
+        // Mark as in-flight with endpoint URL (or 'offline' for offline docs)
+        context.inFlight.set(queryId, { endpointUrl: finalEndpointUrl || 'offline' });
         context.dependencyStack.push(queryId);
 
         const { transformerCode, body, variables } = queryDoc;
@@ -499,17 +504,26 @@ export async function executePipeline(queryId, context, options = {}) {
             variableOverrides = { ...variableOverrides, ...monthOverrides };
         }
 
-        // Execute GraphQL query
-        let rawData = await executeGraphQLQuery(queryDoc, {
-            endpointUrl: finalEndpointUrl,
-            authToken: finalAuthToken,
-            variableOverrides,
-        });
+        let rawData;
+        if (isOffline) {
+            // Offline: use json + body with extractDataFromResponse (no GQL execution)
+            rawData = extractDataFromResponse(queryDoc.json, queryDoc.body);
+            if (!rawData) {
+                console.warn(`No data extracted from offline json: ${queryId}`);
+                rawData = {};
+            }
+        } else {
+            // Online: Execute GraphQL query
+            rawData = await executeGraphQLQuery(queryDoc, {
+                endpointUrl: finalEndpointUrl,
+                authToken: finalAuthToken,
+                variableOverrides,
+            });
 
-        if (!rawData) {
-            console.warn(`No data returned from GraphQL query: ${queryId}`);
-            // Return empty object to allow pipeline to continue gracefully
-            rawData = {};
+            if (!rawData) {
+                console.warn(`No data returned from GraphQL query: ${queryId}`);
+                rawData = {};
+            }
         }
 
         // Create query function for transformer (reuses the pipeline)

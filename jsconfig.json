@@ -2,8 +2,9 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/app/*": ["./share/*"],
-      "@/components/*": ["./share/components/*"],
+      "@/app/*": ["./share/src/app/*"],
+      "@/components/*": ["./share/src/components/*"],
+      "@/resource/*": ["./share/src/resource/*"],
       "@/*": ["./*"],
       "@shared/*": ["./shared/components/src/*"],
       "@calendar/*": ["./shared/calendar/*"]

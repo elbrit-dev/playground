@@ -5,7 +5,7 @@ import { create } from 'zustand';
  * Store for GraphQL Playground v2
  * Manages query, variables, response state, schema, and environment
  */
-export const usePlaygroundStore = create((set) => {
+export const usePlaygroundStore = create((set, get) => {
   // Get initial environment
   const initialEndpoint = getInitialEndpoint();
   const initialEnvironment = initialEndpoint?.name || 'UAT';
@@ -18,6 +18,10 @@ export const usePlaygroundStore = create((set) => {
     rawTableData: null,
     transformedTableData: null,
     transformerLogs: [],
+    executeTrigger: 0,
+    flushTransformerRequested: 0,
+    flushQueryRequested: 0,
+    flushVariablesRequested: 0,
   });
 
   return {
@@ -27,6 +31,20 @@ export const usePlaygroundStore = create((set) => {
     setQuery: (query) => set({ query }),
     setVariables: (variables) => set({ variables }),
     setResponse: (response) => set({ response }),
+    executeTrigger: 0,
+    incrementExecuteTrigger: () => set((s) => ({ executeTrigger: (s.executeTrigger ?? 0) + 1 })),
+    flushTransformerRequested: 0,
+    flushQueryRequested: 0,
+    flushVariablesRequested: 0,
+    requestTransformerFlush: () => set((s) => ({ flushTransformerRequested: (s.flushTransformerRequested ?? 0) + 1 })),
+    requestQueryFlush: () => set((s) => ({ flushQueryRequested: (s.flushQueryRequested ?? 0) + 1 })),
+    requestVariablesFlush: () => set((s) => ({ flushVariablesRequested: (s.flushVariablesRequested ?? 0) + 1 })),
+    /** Flush all editors to store on demand (Execute, tab switch, etc.) */
+    requestAllEditorsFlush: () => set((s) => ({
+      flushTransformerRequested: (s.flushTransformerRequested ?? 0) + 1,
+      flushQueryRequested: (s.flushQueryRequested ?? 0) + 1,
+      flushVariablesRequested: (s.flushVariablesRequested ?? 0) + 1,
+    })),
     setTransformerFunction: (transformerFunction) => set({ transformerFunction }),
     setRawTableData: (rawTableData) => set({ rawTableData }),
     setTransformedTableData: (transformedTableData) => set({ transformedTableData }),
@@ -45,11 +63,11 @@ export const usePlaygroundStore = create((set) => {
     // Workspace reset tracking
     workspaceRevision: 0,
     resetWorkspace: () => set((state) => ({
-      ...getWorkspaceDefaults(),
-      isDirty: false,
-      isTransforming: false,
-      workspaceRevision: state.workspaceRevision + 1,
-    })),
+        ...getWorkspaceDefaults(),
+        isDirty: false,
+        isTransforming: false,
+        workspaceRevision: state.workspaceRevision + 1,
+      })),
 
     // Environment selector
     selectedEnvironment: initialEnvironment,

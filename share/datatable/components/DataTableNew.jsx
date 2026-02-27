@@ -6,6 +6,7 @@ import { DataTable } from 'primereact/datatable';
 import { Column } from 'primereact/column';
 import { InputText } from 'primereact/inputtext';
 import { InputNumber } from 'primereact/inputnumber';
+import { Checkbox } from 'primereact/checkbox';
 import { Calendar } from 'primereact/calendar';
 import { Paginator } from 'primereact/paginator';
 import { Dialog } from 'primereact/dialog';
@@ -49,10 +50,57 @@ import { useTableOperations } from '../contexts/TableOperationsContext';
 import { SlotContext } from './DataSlot';
 import { DataProvider as PlasmicDataProvider } from '@plasmicapp/loader-nextjs';
 import MultiselectFilter from './MultiselectFilter';
+import SingleSelectFilter from './SingleSelectFilter';
+import { Chip } from 'primereact/chip';
 import { ColumnGroup } from 'primereact/columngroup';
 import { Row } from 'primereact/row';
 import { getTimePeriodLabel, getTimePeriodLabelShort, reorganizePeriodsForPeriodOverPeriod } from '../utils/timeBreakdownUtils';
 import { computeReportColumnsStructure, generateReportHeaderGroup, getMetricLabel, getReportColumns } from '../utils/reportRenderingUtils';
+
+// Inline Select cell editor - loads options via getOptions(ctx) or uses cachedOptions when available. ctx = { columnName, query } (row-independent)
+function InlineSelectCellEditor({ options: editorOptions, col, getOptions, queryFunction, cachedOptions }) {
+  const [opts, setOpts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const query = queryFunction ?? (async () => { throw new Error('Query execution not available'); });
+  const ctx = useMemo(() => ({ columnName: col, query }), [col, query]);
+  useEffect(() => {
+    if (cachedOptions !== undefined && Array.isArray(cachedOptions)) {
+      setOpts(cachedOptions.map((s) => ({ label: String(s), value: String(s) })));
+      setLoading(false);
+      return;
+    }
+    if (!getOptions || typeof getOptions !== 'function') {
+      setOpts([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const result = getOptions(ctx);
+    if (result && typeof result.then === 'function') {
+      result.then((arr) => {
+        setOpts(Array.isArray(arr) ? arr.map((s) => ({ label: String(s), value: String(s) })) : []);
+      }).catch(() => {
+        setOpts([]);
+      }).finally(() => setLoading(false));
+    } else {
+      setOpts(Array.isArray(result) ? result.map((s) => ({ label: String(s), value: String(s) })) : []);
+      setLoading(false);
+    }
+  }, [getOptions, col, cachedOptions]);
+  const value = editorOptions.value != null ? String(editorOptions.value) : null;
+  return (
+    <div onKeyDown={(e) => e.stopPropagation()}>
+      <SingleSelectFilter
+        value={value}
+        options={opts}
+        onChange={(val) => editorOptions.editorCallback(val)}
+        loading={loading}
+        placeholder="Select..."
+        style={{ width: '100%' }}
+      />
+    </div>
+  );
+}
 
 // Date format patterns for detection
 const DATE_PATTERNS = [
@@ -759,6 +807,7 @@ export default function DataTableNew({
     openDrawerForOuterGroup,
     openDrawerForInnerGroup,
     openDrawerWithJsonTables,
+    openDrawerForRow,
     openDrawerForNewRow,
     handleAddNestedRowAtZero,
     enableWrite,
@@ -795,6 +844,9 @@ export default function DataTableNew({
     nestedTableFieldName: contextNestedTableFieldName,
     nestedTableTabId: contextNestedTableTabId,
     derivedColumns,
+    formInputOverride = {},
+    queryFunction,
+    selectOptionsCache,
   } = tableOps;
   
   // Use context values if available, otherwise fall back to props
@@ -933,7 +985,7 @@ export default function DataTableNew({
     let filteredColumns = columns;
     debugPayload('start', { filteredAfterInit: [...filteredColumns] });
 
-    // When grouping is active, show only numeric columns, but always include outer group field
+    // When grouping is active, include group fields and all aggregated columns (numeric, string, date, bool)
     // Inner group field is hidden in main table (only shown in nested table)
     if (outerGroupField) {
       filteredColumns = columns.filter(col => {
@@ -945,15 +997,18 @@ export default function DataTableNew({
         if (col === innerGroupField) {
           return false;
         }
-        // Otherwise, only show numeric columns
-        const colType = get(columnTypesFlags, col, {});
-        return get(colType, 'isNumeric', false);
+        // Exclude other group fields from deeper levels (they appear in nested tables)
+        if (effectiveGroupFields && effectiveGroupFields.length > 1 && effectiveGroupFields.indexOf(col) > 0) {
+          return false;
+        }
+        // Include all columns - we now aggregate string, date, bool (oldest-newest, true: N false: M, value x N + more)
+        return true;
       });
       debugPayload('after outerGroupField filter', { filteredColumns: [...filteredColumns], columnTypesSample: columns.slice(0, 3).map(c => ({ col: c, type: columnTypesFlags[c], isNumeric: get(columnTypesFlags[c], 'isNumeric') })) });
     }
 
-    // Always exclude __editingKey__ from visible columns (internal use only)
-    filteredColumns = filteredColumns.filter(col => col !== '__editingKey__');
+    // Always exclude internal metadata columns (__editingKey__, __groupKey__, __groupRows__, etc.)
+    filteredColumns = filteredColumns.filter(col => !col || typeof col !== 'string' || !col.startsWith('__'));
 
     // Apply visibleColumns filter if provided (and not empty)
     if (!isEmpty(visibleColumns) && isArray(visibleColumns)) {
@@ -1082,7 +1137,7 @@ export default function DataTableNew({
 
     if (isNestedDrawer) debugPayload('final orderedColumns', { finalResult: [...finalResult] });
     return finalResult;
-  }, [columns, visibleColumns, outerGroupField, innerGroupField, columnTypesFlags, hasPercentageColumns, percentageColumns, finalParentColumnName]);
+  }, [columns, visibleColumns, outerGroupField, innerGroupField, effectiveGroupFields, columnTypesFlags, hasPercentageColumns, percentageColumns, finalParentColumnName]);
 
   // Report mode: Pre-compute column structure (shared by header and columns)
   const reportColumnsStructure = useMemo(() => {
@@ -1137,22 +1192,18 @@ export default function DataTableNew({
   const availableColumnsForVisibility = useMemo(() => {
     if (isEmpty(columns)) return [];
 
-    // When both outerGroupField and innerGroupField are set, show only numeric columns (plus group fields)
-    if (outerGroupField && innerGroupField) {
+    // When grouping is active, include all columns (we aggregate string, date, bool)
+    // Group fields from deeper levels are excluded in orderedColumns
+    if (outerGroupField) {
       return columns.filter(col => {
-        // Always include group fields
-        if (col === outerGroupField || col === innerGroupField) {
-          return true;
-        }
-        // Include only numeric columns
-        const colType = get(columnTypesFlags, col, {});
-        return get(colType, 'isNumeric', false);
+        if (col && typeof col === 'string' && col.startsWith('__')) return false;
+        return true;
       });
     }
 
     // Default: show all columns
     return columns;
-  }, [columns, outerGroupField, innerGroupField, columnTypes]);
+  }, [columns, outerGroupField, columnTypesFlags]);
 
   const formatCellValue = useCallback((value, colType) => {
     if (isNil(value)) return '';
@@ -1674,6 +1725,7 @@ export default function DataTableNew({
     const colorClass = getColumnColorClass(col);
 
     // Handle clickable group columns - use context drawer actions for all levels
+    // When in nested table (within drawer), do not open another drawer on click
     if (isGroupCol) {
       return (rowData) => {
         const value = getDataValue(rowData, col);
@@ -1696,11 +1748,12 @@ export default function DataTableNew({
           ? 'hover:bg-green-50' 
           : 'hover:bg-purple-50';
         
+        const isNestedInDrawer = !!finalParentColumnName;
         return (
           <div
-            className={`text-xs sm:text-sm truncate cursor-pointer ${hoverColorClass} px-1 py-0.5 rounded transition-colors ${isNumericCol ? 'text-right' : 'text-left'} ${colorClass}`}
+            className={`text-xs sm:text-sm truncate px-1 py-0.5 rounded transition-colors ${isNumericCol ? 'text-right' : 'text-left'} ${colorClass} ${!isNestedInDrawer ? `cursor-pointer ${hoverColorClass}` : ''}`}
             title={cellValue}
-            onClick={(e) => {
+            onClick={!isNestedInDrawer ? (e) => {
               e.stopPropagation();
               // Use slot's filteredData and drawerTabs so drawer shows correct data+tabs in multi-slot mode
               const dataToUse = contextFilteredData && Array.isArray(contextFilteredData) ? contextFilteredData : undefined;
@@ -1715,7 +1768,7 @@ export default function DataTableNew({
                 const outerValue = getDataValue(rowData, effectiveGroupFields[0]);
                 onInnerGroupClick(rowData, col, value);
               }
-            }}
+            } : undefined}
           >
             {cellValue}
           </div>
@@ -1731,29 +1784,52 @@ export default function DataTableNew({
     }
     
     // Check if this is the first column and enableWrite is true
+    // When in nested table (within drawer), do not make first column clickable to open another drawer
     const isFirstColumn = orderedColumns && orderedColumns.length > 0 && col === orderedColumns[0];
-    const hasNestedTables = isFirstColumn && enableWrite;
-    
+    const hasNestedTables = isFirstColumn && enableWrite && !finalParentColumnName;
+
     return (rowData) => {
       const value = getDataValue(rowData, col);
       const cellValue = formatCellValue(value, colType);
+      const stringBreakdown = rowData?.__isGroupRow__ && rowData?.__stringBreakdown__?.[col];
       const nestedTables = rowData?.__nestedTables__;
       const canOpenJsonTables = hasNestedTables && nestedTables && isArray(nestedTables) && nestedTables.length > 0;
-      
-      if (canOpenJsonTables) {
+
+      if (stringBreakdown && isArray(stringBreakdown) && stringBreakdown.length > 0 && !finalParentColumnName) {
+        const match = String(cellValue || '').match(/^(.+?) \+(\d+) more$/);
+        const primary = match ? match[1] : (cellValue || '');
+        const moreCount = match ? parseInt(match[2], 10) : null;
+        return (
+          <div
+            className={`flex flex-nowrap gap-0.5 items-center min-w-0 overflow-hidden ${isNumericCol ? 'justify-end' : 'justify-start'} ${colorClass}`}
+            title={`${cellValue} (Expand row for value breakdown)`}
+          >
+            <Chip label={primary} className="text-[10px] py-0 px-1.5 h-5 shrink-0 [&_.p-chip-text]:text-[10px]" removable={false} />
+            {moreCount != null && moreCount > 0 && (
+              <Chip label={`+${moreCount} more`} className="text-[10px] py-0 px-1.5 h-5 shrink-0 bg-gray-100 text-gray-700 [&_.p-chip-text]:text-[10px]" removable={false} />
+            )}
+          </div>
+        );
+      }
+
+      if (hasNestedTables) {
+        const currentEditableColumns = editableColumnsRef.current;
+        const tableOptions = {
+          editableColumns: currentEditableColumns,
+          enableCellEdit: true
+        };
+        const title = canOpenJsonTables ? `${cellValue} (Click to view nested tables)` : cellValue;
         return (
           <div
             className={`text-xs sm:text-sm truncate cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded transition-colors ${isNumericCol ? 'text-right' : 'text-left'} ${colorClass}`}
-            title={`${cellValue} (Click to view nested tables)`}
+            title={title}
             onClick={(e) => {
               e.stopPropagation();
-              // Pass editableColumns via tableOptions - use ref to get current value
-              const currentEditableColumns = editableColumnsRef.current;
-              const tableOptions = {
-                editableColumns: currentEditableColumns,
-                enableCellEdit: true // Enable cell editing in drawer
-              };
-              openDrawerWithJsonTables(nestedTables, rowData, tableOptions);
+              if (canOpenJsonTables) {
+                openDrawerWithJsonTables(nestedTables, rowData, tableOptions);
+              } else {
+                openDrawerForRow?.(rowData, tableOptions);
+              }
             }}
           >
             {cellValue}
@@ -1770,7 +1846,7 @@ export default function DataTableNew({
         </div>
       );
     };
-  }, [columnTypesFlags, effectiveGroupFields, onOuterGroupClick, onInnerGroupClick, booleanBodyTemplate, dateBodyTemplate, formatCellValue, isPercentageColumn, getPercentageColumnValue, getColumnColorClass, openDrawer, orderedColumns, enableWrite, openDrawerWithJsonTables, contextFilteredData, drawerTabs]);
+  }, [columnTypesFlags, effectiveGroupFields, onOuterGroupClick, onInnerGroupClick, booleanBodyTemplate, dateBodyTemplate, formatCellValue, isPercentageColumn, getPercentageColumnValue, getColumnColorClass, openDrawer, orderedColumns, enableWrite, openDrawerWithJsonTables, openDrawerForRow, contextFilteredData, drawerTabs, finalParentColumnName]);
 
   // Helper to check if a column (top-level key) is in sortFields
 
@@ -1805,8 +1881,8 @@ export default function DataTableNew({
     const isDateCol = get(colType, 'isDate', false);
     const isNumericCol = get(colType, 'isNumeric', false);
 
-    // Don't allow editing of group fields, boolean, or date columns
-    if (col === outerGroupField || col === innerGroupField || isBooleanCol || isDateCol) {
+    // Don't allow editing of group fields or date columns (boolean columns are allowed for Checkbox editor)
+    if (col === outerGroupField || col === innerGroupField || isDateCol) {
       return undefined;
     }
 
@@ -1844,6 +1920,48 @@ export default function DataTableNew({
         }
       }
 
+      // Same structure as editableColumns: main = main table, nested = per parent column
+      const override = finalParentColumnName
+        ? (formInputOverride?.nested?.[finalParentColumnName]?.[col] ?? formInputOverride?.main?.[col])
+        : formInputOverride?.main?.[col];
+      const overrideType = typeof override === 'object' && override?.type === 'Select' ? 'Select' : (typeof override === 'string' ? override : null);
+
+      // Checkbox: formInputOverride 'Checkbox' or boolean column type
+      if (overrideType === 'Checkbox' || override?.type === 'Checkbox' || isBooleanCol) {
+        return (
+          <Checkbox
+            checked={!!options.value}
+            onChange={(e) => options.editorCallback(e.checked)}
+            onKeyDown={(e) => e.stopPropagation()}
+          />
+        );
+      }
+
+      // Select: formInputOverride { type: 'Select', getOptions }
+      if (overrideType === 'Select' && (override?.getOptions || override?.getOptionsCode)) {
+        let resolvedGetOptions = override?.getOptions;
+        if (typeof resolvedGetOptions !== 'function' && typeof override?.getOptionsCode === 'string' && override.getOptionsCode?.trim()) {
+          try {
+            resolvedGetOptions = new Function('ctx', 'return (' + override.getOptionsCode + ')(ctx);');
+          } catch (err) {
+            console.warn('[FormInputOverride] Invalid getOptionsCode for column', col, err);
+            resolvedGetOptions = () => [];
+          }
+        }
+        resolvedGetOptions = typeof resolvedGetOptions === 'function' ? resolvedGetOptions : () => [];
+        const cacheKey = `${finalParentColumnName || 'main'}|${col}`;
+        const cachedOptions = selectOptionsCache?.[cacheKey];
+        return (
+          <InlineSelectCellEditor
+            options={options}
+            col={col}
+            getOptions={resolvedGetOptions}
+            queryFunction={queryFunction}
+            cachedOptions={cachedOptions}
+          />
+        );
+      }
+
       if (isNumericCol) {
         return (
           <InputNumber
@@ -1865,7 +1983,7 @@ export default function DataTableNew({
         />
       );
     };
-  }, [effectiveEnableCellEdit, columnTypesFlags, outerGroupField, innerGroupField, editableColumns, isCellEditable, finalParentColumnName, finalNestedTableFieldName]);
+  }, [effectiveEnableCellEdit, columnTypesFlags, outerGroupField, innerGroupField, editableColumns, isCellEditable, finalParentColumnName, finalNestedTableFieldName, formInputOverride, queryFunction, selectOptionsCache]);
 
   // Handle cell edit complete
   const handleCellEditComplete = useCallback((e) => {
@@ -1953,6 +2071,10 @@ export default function DataTableNew({
   const allowExpansion = useCallback((rowData) => {
     // Check for JSON nested tables (works in all modes)
     const hasJsonNestedTables = rowData.__nestedTables__ && rowData.__nestedTables__.length > 0;
+    // Check for string value count breakdown (inline table, not drawer)
+    const hasStringBreakdown = rowData.__stringBreakdown__ && Object.keys(rowData.__stringBreakdown__).some(
+      (col) => isArray(rowData.__stringBreakdown__[col]) && rowData.__stringBreakdown__[col].length > 0
+    );
     if (enableBreakdown && reportData && effectiveGroupFields.length > 1) {
       // For report mode, check if there are more nesting levels
       const currentLevel = rowData.__groupLevel__ || 0;
@@ -1967,9 +2089,9 @@ export default function DataTableNew({
         const compositeKey = pathKeys.join('|');
         const nestedRows = reportData.nestedTableData[compositeKey];
         const result = nestedRows && nestedRows.length > 0;
-        return result || hasJsonNestedTables;
+        return result || hasJsonNestedTables || hasStringBreakdown;
       }
-      return hasJsonNestedTables;
+      return hasJsonNestedTables || hasStringBreakdown;
     }
     
     // Check for group rows
@@ -1980,10 +2102,10 @@ export default function DataTableNew({
       const currentLevel = rowData.__groupLevel__ || 0;
       const hasMoreLevelsBelow = (currentLevel + 1) < effectiveGroupFields.length;
       const hasNestedGroupRows = rowData.__groupRows__.some(row => row.__isGroupRow__);
-      return hasNestedGroupRows || hasMoreLevelsBelow || hasJsonNestedTables;
+      return hasNestedGroupRows || hasMoreLevelsBelow || hasJsonNestedTables || hasStringBreakdown;
     }
     
-    return hasJsonNestedTables;
+    return hasJsonNestedTables || hasStringBreakdown;
   }, [effectiveGroupFields, enableBreakdown, reportData]);
 
   // Nested (expanded) tables: keep independent filter state and debounce timers per group
@@ -2449,8 +2571,11 @@ export default function DataTableNew({
   const rowExpansionTemplate = useCallback((rowData) => {
     const hasGroupRows = rowData.__groupRows__ && !isEmpty(rowData.__groupRows__);
     const hasJsonNestedTables = rowData.__nestedTables__ && rowData.__nestedTables__.length > 0;
+    const hasStringBreakdown = rowData.__stringBreakdown__ && Object.keys(rowData.__stringBreakdown__).some(
+      (col) => isArray(rowData.__stringBreakdown__[col]) && rowData.__stringBreakdown__[col].length > 0
+    );
 
-    if (!hasGroupRows && !hasJsonNestedTables) {
+    if (!hasGroupRows && !hasJsonNestedTables && !hasStringBreakdown) {
       return null;
     }
 
@@ -2790,10 +2915,43 @@ export default function DataTableNew({
       );
     }
 
+    // Render string value count breakdown tables (inline, similar to JSON nested tables)
+    let stringBreakdownContent = null;
+    if (hasStringBreakdown) {
+      const breakdownEntries = Object.entries(rowData.__stringBreakdown__).filter(
+        ([, arr]) => isArray(arr) && arr.length > 0
+      );
+      stringBreakdownContent = (
+        <div className="space-y-4">
+          {breakdownEntries.map(([col, breakdown]) => {
+            const colLabel = col ? startCase(String(col).split('__').join(' ').split('_').join(' ')) : 'Value';
+            return (
+              <div key={`${rowKey}_breakdown_${col}`} className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+                <div className="text-sm font-semibold text-gray-700 mb-2 p-2 bg-gray-100 border-b">
+                  {colLabel} ({breakdown.length} {breakdown.length === 1 ? 'value' : 'values'})
+                </div>
+                <DataTable
+                  value={breakdown}
+                  showGridlines
+                  stripedRows
+                  className="p-datatable-sm"
+                  style={{ minWidth: '100%' }}
+                >
+                  <Column field="value" header="Value" />
+                  <Column field="count" header="Count" align="right" />
+                </DataTable>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
     return (
       <div className="p-3 bg-gray-50 space-y-4">
         {groupTableContent}
         {jsonTablesContent}
+        {stringBreakdownContent}
       </div>
     );
   }, [outerGroupField, innerGroupField, effectiveGroupFields, orderedColumns, columnTypes, formatHeaderName, getBodyTemplate, calculateColumnWidths, getHeaderTemplate, multiselectColumns, nestedFiltersMap, updateNestedFilter, nestedDebouncedUpdateFilter, nestedCancelDebounced, expandedRows, updateExpandedRows, renderJsonNestedTable]);

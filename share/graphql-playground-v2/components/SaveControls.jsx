@@ -2459,6 +2459,9 @@ export function SaveControls() {
           const selectedRootField = selectedFieldPaths.find(path => isRootField(path)) || 
             (selectedFieldPaths.length > 0 ? getRootFieldForKey(selectedFieldPaths[0]) : null);
 
+          // Use same source as table viewer tab names: top-level keys from processedData tree nodes
+          const queryKeys = processedDataTreeNodesMemo.map((node) => node.key).filter(Boolean);
+
           const saveData = {
             body: queryToSave || '',
             urlKey: urlKey || '',
@@ -2477,6 +2480,7 @@ export function SaveControls() {
             }),
             searchFields: searchFields,  // Object: {user: ["profile.name"], ...}
             sortFields: sortFields,      // Object: {user: ["profile.name"], ...}
+            queryKeys,
             // Timestamp tracking - only update if field changed, otherwise preserve existing timestamp
             bodyUpdatedAt: bodyChanged ? now : (existingData?.bodyUpdatedAt || null),
             variablesUpdatedAt: variablesChanged ? now : (existingData?.variablesUpdatedAt || null),
@@ -2497,7 +2501,7 @@ export function SaveControls() {
         }
       },
     });
-  }, [clientSave, selectedKeys, month, monthIndexKeys, treeNodes, formatFieldName, transformerCode, query, variables, selectedEnvironment, user, searchFields, sortFields, enableWrite, writeSchemaSelectionKeys, isRootField, getRootFieldForKey, setVariables, loadSavedQueries, getFieldTypeInfo, schema]);
+  }, [clientSave, selectedKeys, month, monthIndexKeys, treeNodes, processedDataTreeNodesMemo, formatFieldName, transformerCode, query, variables, selectedEnvironment, user, searchFields, sortFields, enableWrite, writeSchemaSelectionKeys, isRootField, getRootFieldForKey, setVariables, loadSavedQueries, getFieldTypeInfo, schema]);
 
   return (
     <>
@@ -2624,12 +2628,18 @@ export function SaveControls() {
 
         .graphiql-index-overlay .p-overlaypanel-content {
           padding: 0;
+          overflow: hidden;
         }
 
         .graphiql-overlay-scroll {
           max-height: 320px;
           overflow-y: auto;
           overscroll-behavior: contain;
+        }
+
+        /* Single scroll: disable Tree's inner scroll so only graphiql-overlay-scroll scrolls */
+        .graphiql-index-overlay .p-tree-container {
+          overflow: visible;
         }
 
         .graphiql-write-toggle {

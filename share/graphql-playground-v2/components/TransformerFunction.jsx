@@ -12,18 +12,33 @@ export function TransformerFunction() {
   const setTransformerFunction = usePlaygroundStore(
     (state) => state.setTransformerFunction
   );
+  const flushTransformerRequested = usePlaygroundStore(
+    (state) => state.flushTransformerRequested
+  );
 
   // Local state for immediate UI updates
   const [localTransformerFunction, setLocalTransformerFunction] = useState(transformerFunction);
   const markDirty = usePlaygroundStore((state) => state.markDirty);
   const lastSentValueRef = useRef(transformerFunction);
   const editorRef = useRef(null);
+  const localTransformerRef = useRef(localTransformerFunction);
 
   // Debounce store updates (300ms delay)
   const debouncedSetTransformerFunction = useDebounce((value) => {
     lastSentValueRef.current = value;
     setTransformerFunction(value);
   }, 300);
+
+  localTransformerRef.current = localTransformerFunction;
+
+  // When Execute is clicked, flush pending edits to store immediately (before debounce)
+  useEffect(() => {
+    if (!flushTransformerRequested) return;
+    const latest = localTransformerRef.current;
+    setTransformerFunction(latest);
+    lastSentValueRef.current = latest;
+    debouncedSetTransformerFunction.cancel?.();
+  }, [flushTransformerRequested, setTransformerFunction, debouncedSetTransformerFunction]);
 
   // Sync store value to local state when changed externally
   // Only sync if the store value is different from what we last sent

@@ -1963,6 +1963,9 @@ export const SaveControls = React.forwardRef((props, ref) => {
           const currentSearchFields = currentTabDataForSave?.searchFields || {};
           const currentSortFields = currentTabDataForSave?.sortFields || {};
 
+          // Use same source as table viewer tab names: top-level keys from processedData tree nodes
+          const queryKeys = processedDataTreeNodesMemo.map((node) => node.key).filter(Boolean);
+
           const saveData = {
             body: queryToSave || '',
             urlKey: urlKey || '',
@@ -1979,6 +1982,7 @@ export const SaveControls = React.forwardRef((props, ref) => {
             }),
             searchFields: currentSearchFields,  // Object: {user: ["profile.name"], ...}
             sortFields: currentSortFields,      // Object: {user: ["profile.name"], ...}
+            queryKeys,
             // Timestamp tracking - only update if field changed, otherwise preserve existing timestamp
             bodyUpdatedAt: bodyChanged ? now : (existingData?.bodyUpdatedAt || null),
             variablesUpdatedAt: variablesChanged ? now : (existingData?.variablesUpdatedAt || null),
@@ -1997,7 +2001,7 @@ export const SaveControls = React.forwardRef((props, ref) => {
         }
       },
     });
-  }, [clientSave, selectedKeys, month, monthIndexKeys, treeNodes, queryEditor, variableEditor, formatFieldName, transformerCode, activeTabIndex, setTabData, queryString, variablesString, selectedEndpoint, user]);
+  }, [clientSave, selectedKeys, month, monthIndexKeys, treeNodes, processedDataTreeNodesMemo, queryEditor, variableEditor, formatFieldName, transformerCode, activeTabIndex, setTabData, queryString, variablesString, selectedEndpoint, user]);
 
   // Expose handleSave via ref
   useImperativeHandle(ref, () => ({

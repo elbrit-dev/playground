@@ -7,7 +7,6 @@ import { Dropdown } from 'primereact/dropdown';
 import { InputText } from 'primereact/inputtext';
 import { MultiSelect } from 'primereact/multiselect';
 import React, { useState } from 'react';
-import { useTableOperations } from '../contexts/TableOperationsContext';
 import { defaultDataTableConfig } from '../config/defaultConfig';
 import { getMainOverrides, getNestedOverridesAtPath, setOverrideAtPath } from '../utils/columnTypesOverrideUtils';
 import { getDataValue } from '../utils/dataAccessUtils';
@@ -568,6 +567,106 @@ function ColumnTypeOverridesTree({ columnTree, columnTypesOverride, onColumnType
   );
 }
 
+function FormInputOverrideTree({ columns, formInputOverride, onFormInputOverrideChange, formatFieldName }) {
+  const typeOptions = [
+    { label: '(default)', value: '' },
+    { label: 'Calendar', value: 'Calendar' },
+    { label: 'Checkbox', value: 'Checkbox' },
+    { label: 'InputNumber', value: 'InputNumber' },
+    { label: 'InputText', value: 'InputText' },
+    { label: 'Quill', value: 'Quill' },
+    { label: 'Select', value: 'Select' },
+  ];
+
+  const handleTypeChange = (col, value) => {
+    const next = { ...formInputOverride };
+    if (!value) {
+      delete next[col];
+    } else if (value === 'Select') {
+      next[col] = { type: 'Select', getOptionsCode: next[col]?.getOptionsCode ?? '' };
+    } else {
+      next[col] = value;
+    }
+    onFormInputOverrideChange?.(next);
+  };
+
+  const handleGetOptionsCodeChange = (col, code) => {
+    const next = { ...formInputOverride };
+    if (!next[col] || typeof next[col] !== 'object') {
+      next[col] = { type: 'Select', getOptionsCode: code };
+    } else {
+      next[col] = { ...next[col], getOptionsCode: code };
+    }
+    onFormInputOverrideChange?.(next);
+  };
+
+  if (!columns?.length) {
+    return (
+      <div className="text-xs text-gray-500 p-2 bg-gray-50 rounded">
+        No columns available.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <table className="w-full border-collapse">
+        <thead>
+          <tr className="border-b border-gray-200">
+            <th className="text-left py-2 px-3 text-xs font-semibold text-gray-700">Column</th>
+            <th className="text-left py-2 px-3 text-xs font-semibold text-gray-700">Form Input Type</th>
+          </tr>
+        </thead>
+        <tbody>
+          {columns.map((col) => {
+            const override = formInputOverride?.[col];
+            const currentType = typeof override === 'object' && override?.type === 'Select' ? 'Select' : (typeof override === 'string' ? override : '');
+            const getOptionsCode = typeof override === 'object' && override?.type === 'Select' ? (override.getOptionsCode ?? '') : '';
+            return (
+              <React.Fragment key={col}>
+                <tr className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="py-2 px-3 text-sm text-gray-800">{formatFieldName(col)}</td>
+                  <td className="py-2 px-3">
+                    <Dropdown
+                      value={currentType}
+                      onChange={(e) => handleTypeChange(col, e.value || '')}
+                      options={typeOptions}
+                      optionLabel="label"
+                      optionValue="value"
+                      placeholder="(default)"
+                      className="flex-1 text-sm"
+                      style={{ minWidth: '140px' }}
+                    />
+                  </td>
+                </tr>
+                {currentType === 'Select' && (
+                  <tr className="border-b border-gray-100 hover:bg-gray-50">
+                    <td colSpan={2} className="py-2 px-3">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        getOptions function (ctx = `{'{ columnName, query }'}`)
+                      </label>
+                      <textarea
+                        value={getOptionsCode}
+                        onChange={(e) => handleGetOptionsCodeChange(col, e.target.value)}
+                        placeholder={`async (ctx) => {
+  const d = await ctx.query("Customers");
+  return [...new Set((d?.Customers||[]).map(r=>r?.name).filter(Boolean))];
+}`}
+                        rows={6}
+                        className="w-full px-3 py-2 text-xs font-mono border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function DataTableControls({
   enableSort = defaultDataTableConfig.enableSort,
   enableFilter = defaultDataTableConfig.enableFilter,
@@ -628,6 +727,8 @@ export default function DataTableControls({
   onHqValuesChange,
   columnTypesOverride = defaultDataTableConfig.columnTypesOverride,
   onColumnTypesOverrideChange,
+  formInputOverride = defaultDataTableConfig.formInputOverride,
+  onFormInputOverrideChange,
   // Report settings
   enableReport = defaultDataTableConfig.enableReport,
   dateColumn = defaultDataTableConfig.dateColumn,
@@ -641,14 +742,13 @@ export default function DataTableControls({
   onChartHeightChange,
   // Data Source and Query Key props
   selectedQueryKey = null,
+  availableQueryKeys,
+  executingQuery,
   savedQueries = [],
   loadingQueries = false,
   onDataSourceChange,
   onSelectedQueryKeyChange,
 }) {
-  const tableOps = useTableOperations();
-  const availableQueryKeys = tableOps?.availableQueryKeys ?? [];
-  const executingQuery = tableOps?.executingQuery ?? false;
 
   const [customOptions, setCustomOptions] = useState(
     Array.isArray(rowsPerPageOptions) ? rowsPerPageOptions.join(', ') : ''
@@ -1173,12 +1273,7 @@ export default function DataTableControls({
                     onChange={(e) => {
                       onDataSourceChange(e.value);
                     }}
-                    options={[
-                      { label: 'Offline', value: 'offline' },
-                      { label: 'Test Data', value: 'test' },
-                      { label: 'Nested Data', value: 'nested' },
-                      ...savedQueries.map(q => ({ label: q.name, value: q.id }))
-                    ]}
+                    options={savedQueries.map(q => ({ label: q.name, value: q.id }))}
                     optionLabel="label"
                     optionValue="value"
                     placeholder="Select a data source"
@@ -1968,6 +2063,68 @@ export default function DataTableControls({
                                 />
                               </div>
                             )}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Group Fields (optional)
+                              </label>
+                              <p className="text-xs text-gray-500 mb-2">
+                                When set, overrides outer/inner above. Supports multi-level grouping.
+                              </p>
+                              {(() => {
+                                const tabGroupFields = (tab.groupFields && Array.isArray(tab.groupFields) && tab.groupFields.length > 0)
+                                  ? tab.groupFields
+                                  : (tab.outerGroup ? [tab.outerGroup, ...(tab.innerGroup ? [tab.innerGroup] : [])] : []);
+                                const handleTabGroupLevelChange = (levelIndex, value) => {
+                                  if (!onUpdateDrawerTab) return;
+                                  const newGroupFields = [...tabGroupFields];
+                                  if (value === null) {
+                                    newGroupFields.splice(levelIndex);
+                                  } else {
+                                    if (levelIndex < newGroupFields.length) {
+                                      newGroupFields[levelIndex] = value;
+                                      newGroupFields.splice(levelIndex + 1);
+                                    } else {
+                                      newGroupFields.push(value);
+                                    }
+                                  }
+                                  onUpdateDrawerTab(tab.id, { groupFields: newGroupFields.length > 0 ? newGroupFields : null });
+                                };
+                                const getTabAvailableColumns = (levelIndex) =>
+                                  columns.filter(col => !tabGroupFields.slice(0, levelIndex).includes(col));
+                                return (
+                                  <div className="space-y-3">
+                                    {tabGroupFields.map((field, idx) => (
+                                      <div key={idx} className="flex items-center gap-2">
+                                        <SingleFieldSelector
+                                          columns={getTabAvailableColumns(idx)}
+                                          selectedField={field}
+                                          onSelectionChange={(v) => handleTabGroupLevelChange(idx, v)}
+                                          formatFieldName={formatFieldName}
+                                          placeholder={`Level ${idx + 1}...`}
+                                        />
+                                        {idx > 0 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleTabGroupLevelChange(idx, null)}
+                                            className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                                            title="Remove level"
+                                          >
+                                            <i className="pi pi-times text-sm" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    ))}
+                                    <SingleFieldSelector
+                                      columns={getTabAvailableColumns(tabGroupFields.length)}
+                                      selectedField={null}
+                                      onSelectionChange={(v) => handleTabGroupLevelChange(tabGroupFields.length, v)}
+                                      formatFieldName={formatFieldName}
+                                      placeholder={tabGroupFields.length === 0 ? 'Add group level...' : `Add Level ${tabGroupFields.length + 1}...`}
+                                    />
+                                  </div>
+                                );
+                              })()}
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -2204,6 +2361,30 @@ export default function DataTableControls({
                       columnTree={columnTree}
                       columnTypesOverride={columnTypesOverride}
                       onColumnTypesOverrideChange={onColumnTypesOverrideChange}
+                      formatFieldName={formatFieldName}
+                    />
+                  </div>
+                </div>
+              </AccordionTab>
+            )}
+
+            {/* FORM INPUT OVERRIDE */}
+            {!isEmpty(columns) && onFormInputOverrideChange && (
+              <AccordionTab header={
+                <div className="flex align-items-center gap-2">
+                  <i className="pi pi-pencil"></i>
+                  <span>Form Input Override</span>
+                </div>
+              }>
+                <div className="m-0">
+                  <div className="mb-4">
+                    <p className="text-xs text-gray-500 mb-3">
+                      Override form input component per column in the sidebar. For Select, enter getOptions function code
+                    </p>
+                    <FormInputOverrideTree
+                      columns={columns.filter((c) => !jsonTableColumns[c])}
+                      formInputOverride={formInputOverride?.main ?? {}}
+                      onFormInputOverrideChange={(newMain) => onFormInputOverrideChange({ ...(formInputOverride || {}), main: newMain })}
                       formatFieldName={formatFieldName}
                     />
                   </div>

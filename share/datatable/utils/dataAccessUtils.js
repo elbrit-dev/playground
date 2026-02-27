@@ -70,3 +70,17 @@ export function getNestedValue(row, topLevelKey, nestedPath) {
   // If no nestedPath, return top-level value (or undefined if it doesn't exist)
   return topLevelValue;
 }
+
+/**
+ * Get available query keys from processed data (top-level keys with non-empty arrays)
+ * @param {Object|Map} processedData - Processed GraphQL response
+ * @param {string|null} dataSource - Current data source (query id or null for offline)
+ * @returns {Array<string>} Array of query keys that have data
+ */
+export function getAvailableQueryKeys(processedData, dataSource) {
+  if (!processedData || !dataSource) return [];
+  return getDataKeys(processedData).filter((key) => {
+    const value = getDataValue(processedData, key);
+    return value && value.length > 0;
+  });
+}

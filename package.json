@@ -6,8 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "copy-shared": "git clone git@github.com:VICTORVICKIE/Elbrit-Play.git temp-elbrit && git clone https://github.com/NetArt-Org/Elbrit.git temp-elbrit-calendar && powershell -Command \"mkdir share\\datatable -Force; mkdir share\\graphql-playground -Force; mkdir share\\components -Force; robocopy .\\temp-elbrit\\src\\app .\\share /E /MIR; robocopy .\\temp-elbrit\\src\\components .\\share\\components /E /MIR; rmdir .\\temp-elbrit -Recurse -Force; mkdir shared\\calendar -Force; if (Test-Path .\\temp-elbrit-calendar\\components) { robocopy .\\temp-elbrit-calendar\\components .\\shared\\calendar\\components /E /MIR }; if (Test-Path .\\temp-elbrit-calendar\\lib) { robocopy .\\temp-elbrit-calendar\\lib .\\shared\\calendar\\lib /E /MIR }; if (Test-Path .\\temp-elbrit-calendar\\services) { robocopy .\\temp-elbrit-calendar\\services .\\shared\\calendar\\services /E /MIR }; if (Test-Path .\\temp-elbrit-calendar\\styles) { robocopy .\\temp-elbrit-calendar\\styles .\\shared\\calendar\\styles /E /MIR }; if (Test-Path .\\temp-elbrit-calendar\\pages) { robocopy .\\temp-elbrit-calendar\\pages .\\shared\\calendar\\pages /E /MIR }; rmdir .\\temp-elbrit-calendar -Recurse -Force\""
-  },
+    "copy-shared": "git clone git@github.com:VICTORVICKIE/Elbrit-Play.git temp-elbrit && git clone https://github.com/NetArt-Org/Elbrit.git temp-elbrit-calendar && powershell -Command \"mkdir share\\src -Force; robocopy .\\temp-elbrit\\src .\\share\\src /E /MIR; rmdir .\\temp-elbrit -Recurse -Force; mkdir shared\\calendar -Force; if (Test-Path .\\temp-elbrit-calendar\\components) { robocopy .\\temp-elbrit-calendar\\components .\\shared\\calendar\\components /E /MIR }; if (Test-Path .\\temp-elbrit-calendar\\lib) { robocopy .\\temp-elbrit-calendar\\lib .\\shared\\calendar\\lib /E /MIR }; if (Test-Path .\\temp-elbrit-calendar\\services) { robocopy .\\temp-elbrit-calendar\\services .\\shared\\calendar\\services /E /MIR }; if (Test-Path .\\temp-elbrit-calendar\\styles) { robocopy .\\temp-elbrit-calendar\\styles .\\shared\\calendar\\styles /E /MIR }; if (Test-Path .\\temp-elbrit-calendar\\pages) { robocopy .\\temp-elbrit-calendar\\pages .\\shared\\calendar\\pages /E /MIR }; rmdir .\\temp-elbrit-calendar -Recurse -Force\""  },
   "dependencies": {
     "@graphiql/plugin-explorer": "^5.1.1",
     "@graphiql/react": "^0.37.3",
@@ -80,6 +79,6 @@
     "zustand": "^5.0.9"
   },
   "devDependencies": {
-    "tailwindcss": "^4"
+     "tailwindcss": "^4"
   }
 }

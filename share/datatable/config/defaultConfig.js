@@ -1,3 +1,5 @@
+import { Descriptions } from "antd";
+
 /**
  * Default configuration for DataTable
  * This object contains all default settings for the datatable page
@@ -25,11 +27,14 @@ export const defaultDataTableConfig = {
     nonEditableColumns: [],
 
     // Fields that can be edited (leave empty to allow all). Main = scalar columns; nested = per JSON table column (flat: column -> list of editable columns).
+    // editableColumns: {
+    //     main: ["distributor_customer_name", "items"],
+    //     nested: {
+    //         items: ["item_name", "item__name", "sales_qty"], // item__name = GraphQL alias for item_name
+    //     },
+    // },
     editableColumns: {
-        main: ["distributor_customer_name", "items"],
-        nested: {
-            items: ["sales_qty"], // JSON Table Columns: Items - Select Columns: Sales Qty
-        },
+        main: ["name", "subject", "description"]
     },
     percentageColumns: [],
     derivedColumns: [
@@ -58,10 +63,47 @@ export const defaultDataTableConfig = {
     // Grouping
     // groupFields: ["sales_team", "hq", "customer_name"],
     // groupFields: ["sales_team", "hq"],
+    // groupFields: ["item", "warehouse"],
     groupFields: [],
 
     // Column types override
     columnTypesOverride: {},
+
+    // Form input override: same structure as editableColumns. main = main table; nested = per parent column.
+    // Each value: 'Calendar'|'Checkbox'|'InputNumber'|'InputText'|'Quill'|{ type:'Select', getOptions } or { type:'Select', getOptionsCode }. ctx={ columnName, query }
+    formInputOverride: {
+        main: {
+            description: "Quill"
+            // distributor_customer_name: {
+            //     type: "Select",
+            //     getOptionsCode: `async (ctx) => {
+            //         const data = await ctx.query("Customers");
+            //         const rows = data?.Customers || [];
+            //         return [...new Set(rows.map((r) => r?.name ?? "").filter(Boolean))];
+            //     }`,
+            // },
+        },
+        // nested: {
+        //     items: {
+        //         item_name: {
+        //             type: "Select",
+        //             getOptionsCode: `async (ctx) => {
+        //                 const data = await ctx.query("Item");
+        //                 const rows = data?.data || data?.Item || data?.Items || [];
+        //                 return [...new Set(rows.map((r) => r?.item_name ?? r?.name ?? "").filter(Boolean))];
+        //             }`,
+        //         },
+        //         item__name: {
+        //             type: "Select",
+        //             getOptionsCode: `async (ctx) => {
+        //                 const data = await ctx.query("Item");
+        //                 const rows = data?.data || data?.Item || data?.Items || [];
+        //                 return [...new Set(rows.map((r) => r?.item_name ?? r?.name ?? "").filter(Boolean))];
+        //             }`,
+        //         },
+        //     },
+        // },
+    },
 
     // Drawer tabs
     drawerTabs: [
@@ -86,8 +128,14 @@ export const defaultDataTableConfig = {
     hqValues: [],
 
     // Data source
-    dataSource: "WriteQuery",
-    selectedQueryKey: "secondary",
+    // dataSource: "Primary",
+    // selectedQueryKey: "primary",
+    // dataSource: "WriteQuery",
+    // selectedQueryKey: "secondary",
+    dataSource: "Issues",
+    selectedQueryKey: "Issues",
+    // dataSource: "PrimaryStockOffline",
+    // selectedQueryKey: "primary",
 };
 
 /**
@@ -103,6 +151,25 @@ export function mergeConfig(userConfig = {}) {
         columnTypesOverride: {
             ...defaultDataTableConfig.columnTypesOverride,
             ...(userConfig.columnTypesOverride || {}),
+        },
+        formInputOverride: {
+            main: {
+                ...(defaultDataTableConfig.formInputOverride?.main || {}),
+                ...(userConfig.formInputOverride?.main || {}),
+            },
+            nested: (() => {
+                const defaultNested = defaultDataTableConfig.formInputOverride?.nested || {};
+                const userNested = userConfig.formInputOverride?.nested || {};
+                const tableNames = new Set([...Object.keys(defaultNested), ...Object.keys(userNested)]);
+                const merged = {};
+                for (const tableName of tableNames) {
+                    merged[tableName] = {
+                        ...(defaultNested[tableName] || {}),
+                        ...(userNested[tableName] || {}),
+                    };
+                }
+                return merged;
+            })(),
         },
         drawerTabs: userConfig.drawerTabs || defaultDataTableConfig.drawerTabs,
         percentageColumns: userConfig.percentageColumns || defaultDataTableConfig.percentageColumns,
@@ -153,6 +220,9 @@ export function extractStateFromConfig(config, setters = {}) {
 
         // Column types override
         columnTypesOverride: config.columnTypesOverride ?? defaultDataTableConfig.columnTypesOverride,
+
+        // Form input override
+        formInputOverride: config.formInputOverride ?? defaultDataTableConfig.formInputOverride,
 
         // Drawer tabs
         drawerTabs: config.drawerTabs ?? defaultDataTableConfig.drawerTabs,

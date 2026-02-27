@@ -6,7 +6,7 @@ import DataProvider from "./share/datatable/components/DataProviderNew";
 import DataTableNew from "./share/datatable/components/DataTableNew";
 import Navigation from "./share/navigation/components/Navigation";
 import CalendarPage from "@calendar/components/CalendarPage";
-import NovuInbox from "./components/NovuInbox";
+// import NovuInbox from "./components/NovuInbox";
 import jmespath_plus from '@metrichor/jmespath-plus';
 import * as jmespath from 'jmespath';
 import jsonata from 'jsonata';
@@ -504,37 +504,37 @@ PLASMIC.registerComponent(Navigation, {
   importPath: "./share/navigation/components/Navigation",
 });
 
-PLASMIC.registerComponent(NovuInbox, {
-  name: "NovuInbox",
-  props: {
-    subscriberId: {
-      type: "string",
-      description: "Novu subscriber ID (user identifier). If not provided, will use 'employeeid' from localStorage, then fall back to NEXT_PUBLIC_NOVU_SUBSCRIBER_ID from environment variables.",
-    },
-    applicationIdentifier: {
-      type: "string",
-      description: "Novu application identifier. If not provided, will use NEXT_PUBLIC_NOVU_APPLICATION_IDENTIFIER from environment variables.",
-    },
-    subscriberHash: {
-      type: "string",
-      description: "Optional subscriber hash for HMAC authentication (only needed if using HMAC). If not provided, will use NEXT_PUBLIC_NOVU_SUBSCRIBER_HASH from environment variables. Can be left empty if not using HMAC.",
-    },
-    email: {
-      type: "string",
-      description: "User email address (optional). Will be added to OneSignal user profile.",
-    },
-    phone: {
-      type: "string",
-      description: "User phone number in E.164 format, e.g., +91XXXXXXXXXX (optional). Will be added to OneSignal user profile.",
-    },
-    tags: {
-      type: "object",
-      description: "User tags as key-value pairs (optional). Flat object only, no nested objects. Example: { role: 'admin', division: 'sales' }",
-    },
-    className: {
-      type: "string",
-      description: "CSS class name for the container",
-    },
-  },
-  importPath: "./components/NovuInbox",
-});
+// PLASMIC.registerComponent(NovuInbox, {
+//   name: "NovuInbox",
+//   props: {
+//     subscriberId: {
+//       type: "string",
+//       description: "Novu subscriber ID (user identifier). If not provided, will use 'employeeid' from localStorage, then fall back to NEXT_PUBLIC_NOVU_SUBSCRIBER_ID from environment variables.",
+//     },
+//     applicationIdentifier: {
+//       type: "string",
+//       description: "Novu application identifier. If not provided, will use NEXT_PUBLIC_NOVU_APPLICATION_IDENTIFIER from environment variables.",
+//     },
+//     subscriberHash: {
+//       type: "string",
+//       description: "Optional subscriber hash for HMAC authentication (only needed if using HMAC). If not provided, will use NEXT_PUBLIC_NOVU_SUBSCRIBER_HASH from environment variables. Can be left empty if not using HMAC.",
+//     },
+//     email: {
+//       type: "string",
+//       description: "User email address (optional). Will be added to OneSignal user profile.",
+//     },
+//     phone: {
+//       type: "string",
+//       description: "User phone number in E.164 format, e.g., +91XXXXXXXXXX (optional). Will be added to OneSignal user profile.",
+//     },
+//     tags: {
+//       type: "object",
+//       description: "User tags as key-value pairs (optional). Flat object only, no nested objects. Example: { role: 'admin', division: 'sales' }",
+//     },
+//     className: {
+//       type: "string",
+//       description: "CSS class name for the container",
+//     },
+//   },
+//   importPath: "./components/NovuInbox",
+// });

@@ -14,6 +14,7 @@ import jmespath_plus from '@metrichor/jmespath-plus'
 import { extractYearMonthFromDate, generateMonthRangeArray } from './utils/dateUtils';
 import { IndexedDBServiceWorker } from './utils/indexedDBServiceWorker';
 import { applyMonthRangeToVariables, cleanProcessedData, createExecutionContext, executeGraphQLQuery, fetchGraphQLRequest } from './utils/query-pipeline';
+import { extractDataFromResponse } from './utils/data-extractor';
 import { extractValueFromGraphQLResponse } from './utils/queryExtractor';
 import { parseGraphQLVariables } from './utils/variableParser';
 
@@ -557,26 +558,33 @@ async function executePipeline(queryId, queryDoc, endpointUrl, authToken, monthR
     // Create execution context
     const context = createExecutionContext();
 
-    // Get endpoint/auth from query's urlKey or provided params
+    // Offline: skip endpoint (json + body used for extraction)
+    const isOffline = queryDoc.json != null && queryDoc.body;
+
+    // Get endpoint/auth from query's urlKey or provided params (online only)
     let finalEndpointUrl = endpointUrl;
     let finalAuthToken = authToken;
 
-    if (queryDoc.urlKey) {
-        const config = await getEndpointConfigFromUrlKey(queryDoc.urlKey);
-        if (config.endpointUrl) {
-            finalEndpointUrl = config.endpointUrl;
-            finalAuthToken = config.authToken;
+    if (!isOffline) {
+        if (queryDoc.urlKey) {
+            const config = await getEndpointConfigFromUrlKey(queryDoc.urlKey);
+            if (config.endpointUrl) {
+                finalEndpointUrl = config.endpointUrl;
+                finalAuthToken = config.authToken;
+            }
         }
-    }
 
-    if (!finalEndpointUrl) {
-        const defaultEndpoint = await getInitialEndpoint();
-        finalEndpointUrl = defaultEndpoint?.endpointUrl || null;
-        finalAuthToken = defaultEndpoint?.authToken || null;
-    }
+        if (!finalEndpointUrl) {
+            const defaultEndpoint = await getInitialEndpoint();
+            finalEndpointUrl = defaultEndpoint?.endpointUrl || null;
+            finalAuthToken = defaultEndpoint?.authToken || null;
+        }
 
-    if (!finalEndpointUrl) {
-        throw new Error('GraphQL endpoint URL is not set');
+        if (!finalEndpointUrl) {
+            throw new Error('GraphQL endpoint URL is not set');
+        }
+    } else {
+        finalEndpointUrl = finalEndpointUrl || 'offline';
     }
 
     // For month == true, extract YYYY-MM from monthRange dates
@@ -625,10 +633,12 @@ async function executePipeline(queryId, queryDoc, endpointUrl, authToken, monthR
         allQueryDocs
     });
 
-    // Cache result if clientSave is true
-    if (queryDoc.clientSave === true && pipelineResult && typeof pipelineResult === 'object') {
-        await indexedDBService.ensureStoresForPipelineResult(queryId, pipelineResult, yearMonthPrefix, queryDoc);
-        await indexedDBService.savePipelineResultEntries(queryId, pipelineResult, yearMonthPrefix, queryDoc);
+    // Cache result if clientSave is true (skip for offline - data is in json)
+    if (!isOffline && queryDoc.clientSave === true && pipelineResult && typeof pipelineResult === 'object') {
+        await indexedDBService._withCacheLock(queryId, async () => {
+            await indexedDBService.ensureStoresForPipelineResult(queryId, pipelineResult, yearMonthPrefix, queryDoc);
+            await indexedDBService.savePipelineResultEntries(queryId, pipelineResult, yearMonthPrefix, queryDoc);
+        });
         console.log(`Pipeline executed and cached for ${queryId}${yearMonthPrefix ? ` with prefix ${yearMonthPrefix}` : ''}`);
     }
 
@@ -659,25 +669,31 @@ async function executePipelineWorkerInternal(queryId, queryDoc, context, options
         throw new Error(`Query "${queryId}" is already being executed.${inFlightInfo ? ` (endpoint: ${inFlightInfo.endpointUrl})` : ''}`);
     }
 
-    // Get endpoint and token before marking as in-flight
+    const isOffline = queryDoc.json != null && queryDoc.body;
+
+    // Get endpoint and token before marking as in-flight (online only)
     let finalEndpointUrl = endpointUrl;
     let finalAuthToken = authToken;
 
-    if (queryDoc.urlKey) {
-        const urlKeyConfig = await getEndpointConfigFromUrlKey(queryDoc.urlKey);
-        if (urlKeyConfig.endpointUrl) {
-            finalEndpointUrl = urlKeyConfig.endpointUrl;
-            finalAuthToken = urlKeyConfig.authToken;
+    if (!isOffline) {
+        if (queryDoc.urlKey) {
+            const urlKeyConfig = await getEndpointConfigFromUrlKey(queryDoc.urlKey);
+            if (urlKeyConfig.endpointUrl) {
+                finalEndpointUrl = urlKeyConfig.endpointUrl;
+                finalAuthToken = urlKeyConfig.authToken;
+            }
         }
-    }
 
-    if (!finalEndpointUrl) {
-        const defaultEndpoint = await getInitialEndpoint();
-        finalEndpointUrl = endpointUrl || defaultEndpoint?.endpointUrl || null;
-        finalAuthToken = authToken || defaultEndpoint?.authToken || DEFAULT_AUTH_TOKEN;
         if (!finalEndpointUrl) {
-            throw new Error("GraphQL endpoint URL is not set");
+            const defaultEndpoint = await getInitialEndpoint();
+            finalEndpointUrl = endpointUrl || defaultEndpoint?.endpointUrl || null;
+            finalAuthToken = authToken || defaultEndpoint?.authToken || DEFAULT_AUTH_TOKEN;
+            if (!finalEndpointUrl) {
+                throw new Error("GraphQL endpoint URL is not set");
+            }
         }
+    } else {
+        finalEndpointUrl = finalEndpointUrl || 'offline';
     }
 
     // Mark as in-flight with endpoint URL
@@ -699,16 +715,26 @@ async function executePipelineWorkerInternal(queryId, queryDoc, context, options
             variableOverrides = { ...variableOverrides, ...monthOverrides };
         }
 
-        // Execute GraphQL query
-        let rawData = await executeGraphQLQuery(queryDoc, {
-            endpointUrl: finalEndpointUrl,
-            authToken: finalAuthToken,
-            variableOverrides,
-        });
+        let rawData;
+        if (isOffline) {
+            // Offline: use json + body with extractDataFromResponse (no GQL execution)
+            rawData = extractDataFromResponse(queryDoc.json, queryDoc.body);
+            if (!rawData) {
+                console.warn(`No data extracted from offline json: ${queryId}`);
+                rawData = {};
+            }
+        } else {
+            // Execute GraphQL query
+            rawData = await executeGraphQLQuery(queryDoc, {
+                endpointUrl: finalEndpointUrl,
+                authToken: finalAuthToken,
+                variableOverrides,
+            });
 
-        if (!rawData) {
-            console.warn(`No data returned from GraphQL query: ${queryId}`);
-            rawData = {};
+            if (!rawData) {
+                console.warn(`No data returned from GraphQL query: ${queryId}`);
+                rawData = {};
+            }
         }
 
         // Create query function for transformer (handles nested queries)
@@ -1017,6 +1043,7 @@ async function executeAndCacheIndexQueries(queries) {
     // The executeIndexQuery function will use the endpoint config getter that was set during initialization
     const indexQueryPromises = queries
         .filter(query => {
+            if (query.json != null && query.body) return false; // skip offline
             if (query.clientSave !== true) {
                 return false;
             }

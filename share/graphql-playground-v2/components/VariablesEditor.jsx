@@ -8,12 +8,15 @@ import { usePlaygroundStore } from '../stores/usePlaygroundStore';
 export function VariablesEditor() {
   const variables = usePlaygroundStore((state) => state.variables);
   const setVariables = usePlaygroundStore((state) => state.setVariables);
+  const flushVariablesRequested = usePlaygroundStore((state) => state.flushVariablesRequested);
   const markDirty = usePlaygroundStore((state) => state.markDirty);
 
   // Local state for immediate UI updates
   const [localVariables, setLocalVariables] = useState(variables);
   const lastSentValueRef = useRef(variables);
   const editorRef = useRef(null);
+  const localVariablesRef = useRef(localVariables);
+  localVariablesRef.current = localVariables;
 
   // Debounce store updates (300ms delay)
   const debouncedSetVariables = useDebounce((value) => {
@@ -21,15 +24,18 @@ export function VariablesEditor() {
     setVariables(value);
   }, 300);
 
-  // Sync store value to local state when changed externally
-  // Only sync if the store value is different from what we last sent
-  // This prevents flicker when our debounced update finally fires
+  // On-demand flush: when Execute or tab switch requests it, push local to store immediately
   useEffect(() => {
-    // If the store value matches what we last sent, it's from our debounced update - ignore it
-    if (variables === lastSentValueRef.current) {
-      return;
-    }
-    // Otherwise, it's an external update - sync it
+    if (!flushVariablesRequested) return;
+    const latest = localVariablesRef.current;
+    setVariables(latest);
+    lastSentValueRef.current = latest;
+    debouncedSetVariables.cancel?.();
+  }, [flushVariablesRequested, setVariables, debouncedSetVariables]);
+
+  // Sync store value to local state when changed externally
+  useEffect(() => {
+    if (variables === lastSentValueRef.current) return;
     setLocalVariables(variables);
     lastSentValueRef.current = variables;
   }, [variables]);

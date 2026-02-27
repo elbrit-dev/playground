@@ -8,12 +8,15 @@ import { usePlaygroundStore } from '../stores/usePlaygroundStore';
 export function QueryEditor({ onQueryChange }) {
   const query = usePlaygroundStore((state) => state.query);
   const setQuery = usePlaygroundStore((state) => state.setQuery);
+  const flushQueryRequested = usePlaygroundStore((state) => state.flushQueryRequested);
   const markDirty = usePlaygroundStore((state) => state.markDirty);
 
   // Local state for immediate UI updates
   const [localQuery, setLocalQuery] = useState(query);
   const lastSentValueRef = useRef(query);
   const editorRef = useRef(null);
+  const localQueryRef = useRef(localQuery);
+  localQueryRef.current = localQuery;
 
   // Debounce store updates (300ms delay)
   const debouncedSetQuery = useDebounce((value) => {
@@ -21,15 +24,18 @@ export function QueryEditor({ onQueryChange }) {
     setQuery(value);
   }, 300);
 
-  // Sync store value to local state when changed externally
-  // Only sync if the store value is different from what we last sent
-  // This prevents flicker when our debounced update finally fires
+  // On-demand flush: when Execute or tab switch requests it, push local to store immediately
   useEffect(() => {
-    // If the store value matches what we last sent, it's from our debounced update - ignore it
-    if (query === lastSentValueRef.current) {
-      return;
-    }
-    // Otherwise, it's an external update (e.g., from GraphQLExplorer) - sync it
+    if (!flushQueryRequested) return;
+    const latest = localQueryRef.current;
+    setQuery(latest);
+    lastSentValueRef.current = latest;
+    debouncedSetQuery.cancel?.();
+  }, [flushQueryRequested, setQuery, debouncedSetQuery]);
+
+  // Sync store value to local state when changed externally
+  useEffect(() => {
+    if (query === lastSentValueRef.current) return;
     setLocalQuery(query);
     lastSentValueRef.current = query;
   }, [query]);
@@ -40,10 +46,7 @@ export function QueryEditor({ onQueryChange }) {
     setLocalQuery(newValue);
     debouncedSetQuery(newValue);
     markDirty();
-    // Notify parent component of immediate changes for real-time updates
-    if (onQueryChange) {
-      onQueryChange(newValue);
-    }
+    if (onQueryChange) onQueryChange(newValue);
   }, [debouncedSetQuery, markDirty, onQueryChange]);
 
   // Handle editor mount

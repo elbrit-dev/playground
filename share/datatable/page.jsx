@@ -1,10 +1,7 @@
 'use client';
 
 import ProtectedRoute from '@/components/ProtectedRoute';
-import data from '@/resource/data';
-import testData from '@/resource/test';
-import nestedData from '@/resource/nested';
-import { firestoreService } from '@/app/graphql-playground/services/firestoreService';
+import { queryRegistry } from '@/app/graphql-playground/services/queryRegistry';
 import { debounce, flatMap, get, isEmpty, isNil, filter as lodashFilter, startCase, uniq } from 'lodash';
 import { Dropdown } from 'primereact/dropdown';
 import { Splitter, SplitterPanel } from 'primereact/splitter';
@@ -30,16 +27,10 @@ function DataTablePage() {
   // Initialize dataSource first
   const [dataSource, setDataSource] = useState(defaultDataTableConfig.dataSource);
   
-  // Initialize table data based on default dataSource
-  const getInitialData = (ds) => {
-    if (ds === 'test') return testData;
-    if (ds === 'nested') return nestedData;
-    return data;
-  };
-  
-  const [tableData, setTableData] = useState(getInitialData(defaultDataTableConfig.dataSource)); // Filtered data for DataTable
-  const [rawTableData, setRawTableData] = useState(getInitialData(defaultDataTableConfig.dataSource)); // Full/original data for Auth Control in DataTableControls
+  const [tableData, setTableData] = useState([]); // Filtered data for DataTable
+  const [rawTableData, setRawTableData] = useState([]); // Full/original data for Auth Control in DataTableControls
   const [selectedQueryKey, setSelectedQueryKey] = useState(defaultDataTableConfig.selectedQueryKey);
+  const [availableQueryKeys, setAvailableQueryKeys] = useState([]);
   // Controller fetches savedQueries for Data Source dropdown
   const [savedQueries, setSavedQueries] = useState([]);
   const [loadingQueries, setLoadingQueries] = useState(false);
@@ -67,6 +58,7 @@ function DataTablePage() {
   const [queryVariables, setQueryVariables] = useState({});
   const [variableOverrides, setVariableOverrides] = useState({});
   const [columnTypesOverride, setColumnTypesOverride] = useState(defaultDataTableConfig.columnTypesOverride);
+  const [formInputOverride, setFormInputOverride] = useState(defaultDataTableConfig.formInputOverride);
   // Auth Control settings
   const [isAdminMode, setIsAdminMode] = useState(defaultDataTableConfig.isAdminMode);
   const [salesTeamColumn, setSalesTeamColumn] = useState(defaultDataTableConfig.salesTeamColumn);
@@ -141,25 +133,11 @@ function DataTablePage() {
     setSelectedQueryKey(null);
   }, []);
 
-  // Select the appropriate offline data based on dataSource
-  const offlineData = useMemo(() => {
-    if (dataSource === 'test') {
-      return testData;
-    }
-    if (dataSource === 'nested') {
-      return nestedData;
-    }
-    return data;
-  }, [dataSource]);
+  // Offline docs (ExampleOffline, etc.) are now in registry and run through pipeline
+  const offlineData = useMemo(() => [], []);
 
-  // Convert 'offline', 'test', and 'nested' to null for DataProvider
-  // DataProvider only checks for null (offline mode) vs query ID
-  const dataSourceForProvider = useMemo(() => {
-    if (dataSource === 'offline' || dataSource === 'test' || dataSource === 'nested') {
-      return null;
-    }
-    return dataSource;
-  }, [dataSource]);
+  // All data sources come from registry (Firebase + offline merged)
+  const dataSourceForProvider = dataSource;
 
   // Store original data reference on mount and when tableData changes
   useEffect(() => {
@@ -178,7 +156,7 @@ function DataTablePage() {
     const loadSavedQueries = async () => {
       setLoadingQueries(true);
       try {
-        const queries = await firestoreService.getAllQueries();
+        const queries = await queryRegistry.getAllQueries();
         setSavedQueries(queries);
       } catch (error) {
         console.error('Error loading saved queries:', error);
@@ -377,8 +355,7 @@ function DataTablePage() {
     setGroupFieldsRaw(newGroupFields);
   };
 
-  // Slots config for DataProvider (per-slot only; shared props stay flat)
-  // Per-slot: groupFields, derivedColumns, editableColumns, drawerTabs, redFields, greenFields, percentageColumns, textFilterColumns, enableSort, enableFilter, enableSummation, enableCellEdit
+  // Slots config for DataProvider (per-slot; includes report props for slot self-containment)
   const slotsConfig = useMemo(() => ({
     main: {
       enableSort,
@@ -392,9 +369,14 @@ function DataTablePage() {
       greenFields,
       enableCellEdit,
       editableColumns,
+      formInputOverride,
       drawerTabs,
+      enableReport,
+      dateColumn,
+      chartColumns,
+      chartHeight,
     },
-  }), [enableSort, enableFilter, enableSummation, textFilterColumns, percentageColumns, derivedColumns, groupFields, redFields, greenFields, enableCellEdit, editableColumns, drawerTabs]);
+  }), [enableSort, enableFilter, enableSummation, textFilterColumns, percentageColumns, derivedColumns, groupFields, redFields, greenFields, enableCellEdit, editableColumns, formInputOverride, drawerTabs, enableReport, dateColumn, chartColumns, chartHeight]);
 
   // Clear salesTeamValues, hqColumn, and hqValues when salesTeamColumn changes
   // Use refs to avoid including lengths in dependencies (which change when we clear values)
@@ -542,6 +524,7 @@ function DataTablePage() {
             dataSource={dataSourceForProvider}
             selectedQueryKey={selectedQueryKey}
             onExecutingQueryChange={setExecutingQuery}
+            onAvailableQueryKeysChange={setAvailableQueryKeys}
             onLoadingDataChange={setIsLoadingData}
             onSelectedQueryKeyChange={setSelectedQueryKey}
             isAdminMode={isAdminMode}
@@ -567,6 +550,7 @@ function DataTablePage() {
             columnTypesOverride={columnTypesOverride}
             enableCellEdit={enableCellEdit}
             editableColumns={editableColumns}
+            formInputOverride={formInputOverride}
             drawerTabs={drawerTabs}
             onDrawerTabsChange={setDrawerTabs}
             enableReport={enableReport}
@@ -753,6 +737,8 @@ function DataTablePage() {
                     onHqValuesChange={setHqValues}
                     columnTypesOverride={columnTypesOverride}
                     onColumnTypesOverrideChange={handleColumnTypesOverrideChange}
+                    formInputOverride={formInputOverride}
+                    onFormInputOverrideChange={setFormInputOverride}
                     enableReport={enableReport}
                     dateColumn={dateColumn}
                     showChart={showChart}
@@ -765,6 +751,8 @@ function DataTablePage() {
                     onChartHeightChange={setChartHeight}
                     dataSource={dataSource}
                     selectedQueryKey={selectedQueryKey}
+                    availableQueryKeys={availableQueryKeys}
+                    executingQuery={executingQuery}
                     savedQueries={savedQueries}
                     loadingQueries={loadingQueries}
                     onDataSourceChange={handleDataSourceChange}

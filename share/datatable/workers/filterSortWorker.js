@@ -407,7 +407,70 @@ async function computeFilterSortGrouped(
 
   // Step 5: Apply grouping using recursive grouping function
   let groupedData = sortedData;
-  
+
+  function parseToDateWorker(value) {
+    if (value == null || value === '') return null;
+    if (value instanceof Date && !isNaN(value.getTime())) return value;
+    if (typeof value === 'number' && isFinite(value)) {
+      const d = new Date(value);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    if (typeof value === 'string') {
+      const d = dayjs(value);
+      return d.isValid() ? d.toDate() : null;
+    }
+    return null;
+  }
+
+  function formatDateWorker(value) {
+    const d = parseToDateWorker(value);
+    if (!d) return '';
+    return dayjs(d).format('MMM D, YYYY');
+  }
+
+  function aggregateNonNumericWorker(col, colType, innerData, getCell) {
+    if (!isArray(innerData) || innerData.length === 0) return { display: null };
+    const vals = innerData.map((row) => getCell(row, col)).filter((v) => v != null && v !== '');
+
+    if (vals.length === 0) return { display: null };
+
+    if (colType === 'date') {
+      const dates = vals.map((v) => parseToDateWorker(v)).filter(Boolean);
+      if (dates.length === 0) return { display: null };
+      const timestamps = dates.map((d) => d.getTime());
+      const minDate = new Date(Math.min(...timestamps));
+      const maxDate = new Date(Math.max(...timestamps));
+      const minStr = formatDateWorker(minDate);
+      const maxStr = formatDateWorker(maxDate);
+      return { display: minStr === maxStr ? minStr : `${minStr} - ${maxStr}` };
+    }
+
+    if (colType === 'boolean') {
+      const isTruthy = (v) => v === true || v === 'true' || v === 1 || v === '1' || v === 'yes' || v === 'y';
+      const isFalsy = (v) => v === false || v === 'false' || v === 0 || v === '0' || v === 'no' || v === 'n';
+      const t = vals.filter(isTruthy).length;
+      const f = vals.filter(isFalsy).length;
+      return { display: `true: ${t}, false: ${f}` };
+    }
+
+    if (colType === 'string' || !['number', 'date', 'boolean'].includes(colType)) {
+      const countMap = new Map();
+      vals.forEach((v) => {
+        const key = String(v);
+        countMap.set(key, (countMap.get(key) || 0) + 1);
+      });
+      const entries = Array.from(countMap.entries()).sort((a, b) => (b[1] - a[1]));
+      const first = entries[0];
+      const display = first ? `${first[0]} x ${first[1]}` : '';
+      const moreCount = entries.length - 1;
+      const displayWithMore = moreCount > 0 ? `${display} +${moreCount} more` : display;
+      const breakdown = entries.map(([value, count]) => ({ value, count }));
+      return { display: displayWithMore || null, breakdown };
+    }
+
+    return { display: vals[0] };
+  }
+
   // Recursive grouping function for multi-level nesting
   function groupDataRecursive(data, groupFields, currentLevel = 0, currentPath = []) {
     if (!isArray(groupFields) || groupFields.length === 0 || currentLevel >= groupFields.length) {
@@ -460,28 +523,32 @@ async function computeFilterSortGrouped(
         __groupField__: currentField,
         [currentField]: groupValue,
         __groupKey__: newPath.join('|'),
+        __groupPath__: newPath,
         __rowCount__: rows.length,
       };
 
-      // Aggregate numeric columns (skip derived columns - use first value)
-      const derivedSet = new Set(derivedColumnNames || []);
+      // Aggregate all columns by type (use rows = leaf rows in this group)
+      const getCell = (row, c) => (isPctCol(c) ? getPercentageColumnValue(row, c, percentageColumns) : getDataValue(row, c));
+      const firstItem = rows.length ? rows[0] : null;
+
       columns.forEach((col) => {
-        if (derivedSet.has(col)) {
-          // Derived columns: use first value, never aggregate
-          const firstVal = rows.length ? getDataValue(rows[0], col) : undefined;
-          summaryRow[col] = firstVal;
-          return;
-        }
+        if (col === currentField) return;
+        if (col && typeof col === 'string' && col.startsWith('__')) return;
         const colType = columnTypes[col] || 'string';
         if (colType === 'number' || isPctCol(col)) {
           const sum = rows.reduce((acc, row) => {
-            const value = isPctCol(col)
-              ? getPercentageColumnValue(row, col, percentageColumns)
-              : getDataValue(row, col);
+            const value = getCell(row, col);
             const numValue = toNumber(value);
             return acc + (isFinite(numValue) ? numValue : 0);
           }, 0);
           summaryRow[col] = sum;
+        } else {
+          const { display, breakdown } = aggregateNonNumericWorker(col, colType, rows, getCell);
+          summaryRow[col] = display ?? (firstItem ? getCell(firstItem, col) : undefined);
+          if (breakdown && breakdown.length > 0) {
+            if (!summaryRow.__stringBreakdown__) summaryRow.__stringBreakdown__ = {};
+            summaryRow.__stringBreakdown__[col] = breakdown;
+          }
         }
       });
 

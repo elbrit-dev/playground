@@ -4,6 +4,7 @@ import { indexedDBService } from '@/app/datatable/utils/indexedDBService';
 import { fetchGraphQLSchema } from '@/app/graphql-playground-v2/utils/schema-fetcher';
 import { getEndpointConfigFromUrlKey, getInitialEndpoint } from '@/app/graphql-playground/constants';
 import { firestoreService } from '@/app/graphql-playground/services/firestoreService';
+import { queryRegistry } from '@/app/graphql-playground/services/queryRegistry';
 import { createExecutionContext } from '@/app/graphql-playground/utils/query-pipeline';
 import { parseGraphQLVariables } from '@/app/graphql-playground/utils/variableParser';
 import RangePicker from '@/components/RangePicker';
@@ -62,6 +63,7 @@ import { TableOperationsContext } from '../contexts/TableOperationsContext';
 import FilterSortSidebar from './FilterSortSidebar';
 import { getDataKeys, getDataValue, getNestedValue } from '../utils/dataAccessUtils';
 import { getDerivedColumnNames } from '../utils/derivedColumnsUtils';
+import { aggregateNonNumeric } from '../utils/perSlotPipelineUtils';
 import { isJsonArrayOfObjectsString, extractJsonNestedTablesRecursive } from '../utils/jsonArrayParser';
 import { useReportData } from '../utils/providerUtils';
 import { exportReportToXLSX } from '../utils/reportExportUtils';
@@ -709,6 +711,7 @@ export default function DataProviderNew({
   onVariablesChange,
   // Callbacks for parent
   onExecutingQueryChange,
+  onAvailableQueryKeysChange,
   onSelectedQueryKeyChange,
   onLoadingDataChange,
   // Auth control props
@@ -859,8 +862,8 @@ export default function DataProviderNew({
 
         // Set up nested query callback
         const nestedQueryCallback = Comlink.proxy(async (queryId) => {
-          // Load query from Firestore
-          const queryDoc = await firestoreService.loadQuery(queryId);
+          // Load query from registry (Firebase + offline merged)
+          const queryDoc = await queryRegistry.loadQuery(queryId);
           if (queryDoc) {
             // Cache it
             allQueryDocsRef.current[queryId] = queryDoc;
@@ -923,7 +926,7 @@ export default function DataProviderNew({
     const loadSavedQueries = async () => {
       setLoadingQueries(true);
       try {
-        const queries = await firestoreService.getAllQueries();
+        const queries = await queryRegistry.getAllQueries();
         setSavedQueries(queries);
         // Don't execute index queries here - they will be executed when saved queries are loaded
       } catch (error) {
@@ -1205,7 +1208,7 @@ export default function DataProviderNew({
       // Load query metadata and auto-execute
       const loadQueryMetadata = async () => {
         try {
-          const queryDoc = await firestoreService.loadQuery(dataSource);
+          const queryDoc = await queryRegistry.loadQuery(dataSource);
           if (queryDoc) {
             setCurrentQueryDoc(queryDoc);
             const { month, variables: rawVariables } = queryDoc;
@@ -1448,6 +1451,13 @@ export default function DataProviderNew({
     cacheLoadInProgressRef.current = cacheLoadKey;
     setLoadingFromCache(true);
 
+    const isOffline = queryDoc?.json != null && queryDoc?.body;
+    if (isOffline) {
+      cacheLoadInProgressRef.current = null;
+      setLoadingFromCache(false);
+      if (runQueryRef.current) await runQueryRef.current(queryId, true);
+      return;
+    }
     if (!queryDoc || queryDoc.clientSave !== true) {
       // No IndexedDB support, go directly to API
       cacheLoadInProgressRef.current = null;
@@ -1711,14 +1721,15 @@ export default function DataProviderNew({
     }
   }, [monthRange, currentQueryDoc, dataSource, fetchLastUpdatedAt]);
 
-  // Get available query keys from processedData
+  // Get available query keys from saved queryKeys (always present when saved)
   const availableQueryKeys = useMemo(() => {
-    if (!processedData || !dataSource) return [];
-    return getDataKeys(processedData).filter(key => {
-      const value = getDataValue(processedData, key);
-      return value && value.length > 0;
-    });
-  }, [processedData, dataSource]);
+    const saved = currentQueryDoc?.queryKeys;
+    return (dataSource && Array.isArray(saved)) ? saved : [];
+  }, [dataSource, currentQueryDoc?.queryKeys]);
+
+  useEffect(() => {
+    if (onAvailableQueryKeysChange) onAvailableQueryKeysChange(availableQueryKeys);
+  }, [availableQueryKeys, onAvailableQueryKeysChange]);
 
   // Reset selectedQueryKey immediately when dataSource changes (separate effect to avoid loop)
   useEffect(() => {
@@ -2044,7 +2055,7 @@ export default function DataProviderNew({
       // Load query doc if not already loaded
       let queryDocToUse = currentQueryDoc;
       if (!queryDocToUse) {
-        queryDocToUse = await firestoreService.loadQuery(queryId);
+        queryDocToUse = await queryRegistry.loadQuery(queryId);
         if (queryDocToUse) {
           allQueryDocsRef.current[queryId] = queryDocToUse;
         }
@@ -2054,21 +2065,31 @@ export default function DataProviderNew({
         throw new Error(`Query "${queryId}" not found`);
       }
 
+      // Offline: skip endpoint (json + body used for extraction)
+      const isOffline = queryDocToUse?.json != null && queryDocToUse?.body;
+
       // Get endpoint URL and auth token
       const { endpointUrl, authToken } = getEndpointAndAuth(queryDocToUse);
       const finalEndpointUrl = endpointUrl || getInitialEndpoint()?.code || null;
       const finalAuthToken = authToken || null;
 
-      if (!finalEndpointUrl) {
+      if (!isOffline && !finalEndpointUrl) {
         throw new Error('GraphQL endpoint URL is not set');
       }
 
-      // Always use worker for pipeline execution
+      // Wait for worker to be ready (handles race when offline data loads before worker initializes)
+      const maxWaitMs = 10000;
+      const pollIntervalMs = 50;
+      let waited = 0;
+      while (!workerRef.current && waited < maxWaitMs) {
+        await new Promise((r) => setTimeout(r, pollIntervalMs));
+        waited += pollIntervalMs;
+      }
       if (!workerRef.current) {
         throw new Error('Worker is not available. Please ensure worker is initialized.');
       }
-      // For month == true queries with monthRange, always execute per month
-      if (queryDocToUse.month === true && monthRange && Array.isArray(monthRange) && monthRange.length === 2) {
+      // For month == true queries with monthRange, execute per month (skip for offline - use single path)
+      if (!isOffline && queryDocToUse.month === true && monthRange && Array.isArray(monthRange) && monthRange.length === 2) {
         // Execute per month: execute → save to cache → load from cache → combine
         const finalData = await executeAndCacheMonthRange(
           queryId,
@@ -2094,8 +2115,8 @@ export default function DataProviderNew({
           ]
           : undefined;
 
-        // Execute index queries BEFORE executing the pipeline
-        if (queryDocToUse.index && queryDocToUse.index.trim() && queryDocToUse.clientSave === true) {
+        // Execute index queries BEFORE executing the pipeline (skip for offline)
+        if (!isOffline && queryDocToUse.index && queryDocToUse.index.trim() && queryDocToUse.clientSave === true) {
           try {
             if (monthRangeToPass) {
               // For monthRange, use executeIndexQueryForMonthRange
@@ -2864,9 +2885,9 @@ export default function DataProviderNew({
     if (!tableData || !Array.isArray(tableData) || isEmpty(tableData)) {
       return [];
     }
-    // Exclude __nestedTables__ from columns (it's UI-only metadata, not a data column)
+    // Exclude internal metadata (__nestedTables__, __groupKey__, __groupRows__, etc.) from columns
     return uniq(flatMap(tableData, (item) =>
-      item && typeof item === 'object' ? getDataKeys(item).filter(key => key !== '__nestedTables__') : []
+      item && typeof item === 'object' ? getDataKeys(item).filter(key => key && typeof key === 'string' && !key.startsWith('__')) : []
     ));
   }, [tableData]);
 
@@ -3440,17 +3461,16 @@ export default function DataProviderNew({
   const activeDrawerTab = drawerTabs && drawerTabs.length > 0
     ? drawerTabs[Math.min(activeDrawerTabIndex, Math.max(0, drawerTabs.length - 1))]
     : null;
-  // Convert drawer tab's outerGroup/innerGroup to groupFields array format
+  // Convert drawer tab to groupFields: if groupFields is set use it, else derive from [outerGroup, innerGroup]
   const drawerGroupFields = useMemo(() => {
     if (!activeDrawerTab) return [];
-    const fields = [];
-    if (activeDrawerTab.outerGroup) fields.push(activeDrawerTab.outerGroup);
-    if (activeDrawerTab.innerGroup) fields.push(activeDrawerTab.innerGroup);
-    // Support groupFields if provided (new format)
     if (activeDrawerTab.groupFields && Array.isArray(activeDrawerTab.groupFields)) {
       return activeDrawerTab.groupFields;
     }
-    return fields;
+    const derived = [];
+    if (activeDrawerTab.outerGroup) derived.push(activeDrawerTab.outerGroup);
+    if (activeDrawerTab.innerGroup) derived.push(activeDrawerTab.innerGroup);
+    return derived;
   }, [activeDrawerTab]);
 
   const { reportData: rawDrawerReportData, isComputingReport: isComputingDrawerReport } = useReportData(
@@ -3568,18 +3588,15 @@ export default function DataProviderNew({
       const firstItem = Array.isArray(innerData) && innerData.length > 0 ? innerData[0] : null;
       if (!firstItem) return null;
 
+      const getCell = (row, c) => getDataValue(row, c);
       filteredColumns.forEach((col) => {
-        const colType = columnTypes[col] || {};
-        // Set current field value
+        if (col && typeof col === 'string' && col.startsWith('__')) return;
+        const colType = columnTypes[col] || 'string';
         if (col === currentField) {
           summaryRow[col] = groupKey === '__null__' ? null : groupKey;
-        }
-        // Clear fields from deeper levels (they'll be in nested tables)
-        else if (currentLevel < fields.length - 1 && fields.slice(currentLevel + 1).includes(col)) {
+        } else if (currentLevel < fields.length - 1 && fields.slice(currentLevel + 1).includes(col)) {
           summaryRow[col] = null;
-        }
-        // Aggregate numeric columns (skip derived - they use first value)
-        else if (colType === 'number' && !derivedColumnNamesSet.has(col)) {
+        } else if (colType === 'number') {
           const sum = sumBy(innerData, (row) => {
             const val = getDataValue(row, col);
             if (isNil(val)) return 0;
@@ -3587,20 +3604,48 @@ export default function DataProviderNew({
             return _isNaN(numVal) ? 0 : numVal;
           });
           summaryRow[col] = sum;
-        }
-        // For derived columns and other non-numeric columns, use first non-null value
-        else {
-          const firstNonNull = Array.isArray(innerData)
-            ? innerData.find(row => !isNil(getDataValue(row, col)))
-            : null;
-          summaryRow[col] = firstNonNull ? getDataValue(firstNonNull, col) : getDataValue(firstItem, col);
+        } else {
+          const canSum = (() => {
+            if (!isArray(innerData) || innerData.length === 0) return false;
+            let numeric = 0;
+            let meaningful = 0;
+            for (const row of innerData) {
+              const val = getDataValue(row, col);
+              if (val == null || val === '') continue;
+              meaningful++;
+              const n = isNumber(val) ? val : toNumber(val);
+              if (!_isNaN(n) && _isFinite(n)) numeric++;
+            }
+            return meaningful > 0 && numeric / meaningful >= 0.8;
+          })();
+          if (canSum) {
+            summaryRow[col] = sumBy(innerData, (row) => {
+              const val = getDataValue(row, col);
+              if (isNil(val)) return 0;
+              const numVal = isNumber(val) ? val : toNumber(val);
+              return _isNaN(numVal) ? 0 : numVal;
+            });
+          } else {
+            // Use rows (leaf data) not innerData - innerData can be group rows with pre-aggregated strings
+            const { display, breakdown } = aggregateNonNumeric(col, colType, rows, getCell);
+            summaryRow[col] = display ?? (() => {
+              const firstNonNull = Array.isArray(rows)
+                ? rows.find((row) => !isNil(getDataValue(row, col)))
+                : null;
+              return firstNonNull ? getDataValue(firstNonNull, col) : getDataValue(firstItem, col);
+            })();
+            if (breakdown && breakdown.length > 0) {
+              if (!summaryRow.__stringBreakdown__) summaryRow.__stringBreakdown__ = {};
+              summaryRow.__stringBreakdown__[col] = breakdown;
+            }
+          }
         }
       });
 
-      // Handle percentage columns (skip derived - they use first value from loop above)
+      // Handle percentage columns
       if (hasPercentageColumns) {
         percentageColumns.forEach(pc => {
-          if (pc.columnName && pc.targetField && pc.valueField && !derivedColumnNamesSet.has(pc.columnName)) {
+          if (pc.columnName && pc.targetField && pc.valueField) {
             const sumTarget = sumBy(rows, (row) => {
               const val = getDataValue(row, pc.targetField);
               if (isNil(val)) return 0;
@@ -3633,7 +3678,7 @@ export default function DataProviderNew({
 
       return summaryRow;
     }).filter(Boolean);
-  }, [filteredColumns, columnTypes, hasPercentageColumns, percentageColumns, sortFieldType, sortConfig, getSortComparator, derivedColumnNamesSet]);
+  }, [filteredColumns, columnTypes, hasPercentageColumns, percentageColumns, sortFieldType, sortConfig, getSortComparator]);
 
   // Extract JSON nested tables from data (recursive)
   const extractJsonNestedTablesFromData = useCallback((data, maxDepth = 10) => {
@@ -4171,7 +4216,9 @@ export default function DataProviderNew({
     // Detect variant: if no arguments, use current filteredData (Variant 3)
     if (dataOrFilters === undefined && filters === undefined) {
       // Variant 3: getSums()
-      dataToSum = filteredData;
+      // In report breakdown mode, sortedData has period_metric columns (e.g. 2025-12_qty); filteredData has raw columns (qty).
+      // Footer must sum over sortedData so period columns get correct totals.
+      dataToSum = enableBreakdown && reportData?.tableData?.length ? sortedData : filteredData;
       filtersToApply = null;
     } else if (isArray(dataOrFilters)) {
       // Variant 1: getSums(data, filters)
@@ -4207,7 +4254,7 @@ export default function DataProviderNew({
       }
     });
     return sums;
-  }, [filteredData, applyFiltersToData, columns, columnTypes, isNumericValue, getDataValue]);
+  }, [enableBreakdown, reportData, sortedData, filteredData, applyFiltersToData, columns, columnTypes, isNumericValue, getDataValue]);
 
   // Summation computation
   const calculateSums = useMemo(() => {
@@ -5272,9 +5319,6 @@ export default function DataProviderNew({
         updateMainTableEditingData,
         // Read-only access to original buffer for comparison
         mainTableOriginalData: mainTableOriginalDataRef.current,
-        // Data control: availableQueryKeys and executingQuery for DataTableControls
-        availableQueryKeys,
-        executingQuery,
       };
       return result;
     } catch (error) {
@@ -5292,7 +5336,6 @@ export default function DataProviderNew({
     openDrawer, openDrawerWithData, openDrawerForOuterGroup, openDrawerForInnerGroup, openDrawerWithJsonTables, closeDrawer, addDrawerTab, removeDrawerTab, updateDrawerTab,
     formatHeaderName, isTruthyBoolean, exportToXLSX, isNumericValue, currentQueryDoc, searchTerm, sortConfig, enableReport, enableBreakdown, reportData, isComputingReport, isApplyingFilterSort, columnGroupBy, filteredColumns, allowedColumns, parentColumnName, nestedTableFieldName,
     updateCurrentNestedTableData, getChangedRowsForTab, getAllChangedNestedTableRows, handleDrawerSave, handleMainSave, handleMainCancel, handleDrawerCancel, hasMainTableChanges, hasDrawerChanges, updateMainTableEditingData, forceEnableWrite, parentHandleDrawerSave, addEditingKeysToRows, mainTableEditingData,
-    availableQueryKeys, executingQuery
   ]);
 
   // Memoize field display names to avoid recalculating on every render
@@ -5998,14 +6041,14 @@ export default function DataProviderNew({
                       redFields: redFields, // from main table
                       greenFields: greenFields, // from main table
                       groupFields: (() => {
-                        // Convert tab's outerGroup/innerGroup to groupFields array, or use tab.groupFields if provided
+                        // If tab.groupFields is set use it, else derive from [outerGroup, innerGroup]
                         if (tab.groupFields && Array.isArray(tab.groupFields)) {
                           return tab.groupFields;
                         }
-                        const fields = [];
-                        if (tab.outerGroup) fields.push(tab.outerGroup);
-                        if (tab.innerGroup) fields.push(tab.innerGroup);
-                        return fields.length > 0 ? fields : null;
+                        const derived = [];
+                        if (tab.outerGroup) derived.push(tab.outerGroup);
+                        if (tab.innerGroup) derived.push(tab.innerGroup);
+                        return derived.length > 0 ? derived : null;
                       })(),
                       enableCellEdit: false, // drawer-specific default
                       editableColumns: { main: [], nested: {} }, // drawer-specific default

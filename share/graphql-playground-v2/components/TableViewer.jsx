@@ -45,6 +45,7 @@ export function TableViewer() {
     query,
     response,
     selectedEnvironment,
+    executeTrigger,
     transformerFunction: transformerCode,
     setRawTableData,
     setTransformedTableData,
@@ -180,7 +181,7 @@ export function TableViewer() {
     };
 
     processResponse();
-  }, [response, query, selectedEnvironment]);
+  }, [response, query, selectedEnvironment, executeTrigger]);
 
   // Get query keys from processed data or raw response
   const queryKeys = useMemo(() => {
@@ -226,7 +227,7 @@ export function TableViewer() {
               return (
                 <TabPanel key={queryKey} header={queryKey}>
                   <div className="h-full overflow-auto p-2">
-                    <DataProviderNew dataSource={null} offlineData={tableData} drawerTabs={[]}>
+                    <DataProviderNew dataSource={null} offlineData={tableData} drawerTabs={[]} skipConfirmDialog>
                       <DataTableComponent
                         useOrchestrationLayer={true}
                         enableFullscreenDialog={true}
@@ -239,7 +240,7 @@ export function TableViewer() {
           </TabView>
         ) : (
           <div className="h-full overflow-auto p-2">
-            <DataProviderNew dataSource={null} offlineData={memoizedDataByKey[queryKeys[0]]} drawerTabs={[]}>
+            <DataProviderNew dataSource={null} offlineData={memoizedDataByKey[queryKeys[0]]} drawerTabs={[]} skipConfirmDialog>
               <DataTableComponent
                 useOrchestrationLayer={true}
                 enableFullscreenDialog={true}

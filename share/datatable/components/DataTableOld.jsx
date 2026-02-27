@@ -1025,7 +1025,7 @@ export default function DataTableComponent({
   const columns = useMemo(() => {
     if (isEmpty(safeData)) return [];
     const allKeys = uniq(flatMap(safeData, (item) =>
-      item && typeof item === 'object' ? getDataKeys(item) : []
+      item && typeof item === 'object' ? getDataKeys(item).filter(key => key && typeof key === 'string' && !key.startsWith('__')) : []
     ));
     return allKeys;
   }, [safeData]);
@@ -2825,15 +2825,19 @@ export default function DataTableComponent({
 
   // Check if a row can be expanded
   const allowExpansion = useCallback((rowData) => {
+    // Check for string value count breakdown (inline table, not drawer)
+    const hasStringBreakdown = rowData.__stringBreakdown__ && Object.keys(rowData.__stringBreakdown__).some(
+      (col) => isArray(rowData.__stringBreakdown__[col]) && rowData.__stringBreakdown__[col].length > 0
+    );
     // In report mode with innerGroupField, check nestedTableData
     if (enableBreakdown && reportData && innerGroupField) {
       const outerValue = getDataValue(rowData, outerGroupField);
       const nestedRows = reportData.nestedTableData?.[outerValue];
-      return nestedRows && nestedRows.length > 0;
+      return (nestedRows && nestedRows.length > 0) || hasStringBreakdown;
     }
     
-    // Regular mode: check for group rows
-    return outerGroupField && rowData.__isGroupRow__ && rowData.__groupRows__ && rowData.__groupRows__.length > 0;
+    // Regular mode: check for group rows or string breakdown
+    return (outerGroupField && rowData.__isGroupRow__ && rowData.__groupRows__ && rowData.__groupRows__.length > 0) || hasStringBreakdown;
   }, [outerGroupField, enableBreakdown, reportData, innerGroupField]);
 
   // Nested (expanded) tables: keep independent filter state and debounce timers per group
@@ -2920,8 +2924,55 @@ export default function DataTableComponent({
 
   // Row expansion template - shows nested table with same headers
   const rowExpansionTemplate = useCallback((rowData) => {
-    if (!rowData.__groupRows__ || isEmpty(rowData.__groupRows__)) {
+    const hasGroupRows = rowData.__groupRows__ && !isEmpty(rowData.__groupRows__);
+    const hasStringBreakdown = rowData.__stringBreakdown__ && Object.keys(rowData.__stringBreakdown__).some(
+      (col) => isArray(rowData.__stringBreakdown__[col]) && rowData.__stringBreakdown__[col].length > 0
+    );
+
+    if (!hasGroupRows && !hasStringBreakdown) {
       return null;
+    }
+
+    const rowKey = rowData.__groupKey__ || rowData.id || `row_${Math.random()}`;
+
+    // Render string value count breakdown tables (inline, similar to JSON nested tables)
+    let stringBreakdownContent = null;
+    if (hasStringBreakdown) {
+      const breakdownEntries = Object.entries(rowData.__stringBreakdown__).filter(
+        ([, arr]) => isArray(arr) && arr.length > 0
+      );
+      stringBreakdownContent = (
+        <div className="space-y-4">
+          {breakdownEntries.map(([col, breakdown]) => {
+            const colLabel = col ? startCase(String(col).split('__').join(' ').split('_').join(' ')) : 'Value';
+            return (
+              <div key={`${rowKey}_breakdown_${col}`} className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+                <div className="text-sm font-semibold text-gray-700 mb-2 p-2 bg-gray-100 border-b">
+                  {colLabel} ({breakdown.length} {breakdown.length === 1 ? 'value' : 'values'})
+                </div>
+                <DataTable
+                  value={breakdown}
+                  showGridlines
+                  stripedRows
+                  className="p-datatable-sm"
+                  style={{ minWidth: '100%' }}
+                >
+                  <Column field="value" header="Value" />
+                  <Column field="count" header="Count" align="right" />
+                </DataTable>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    if (!hasGroupRows) {
+      return (
+        <div className="p-3 bg-gray-50 space-y-4">
+          {stringBreakdownContent}
+        </div>
+      );
     }
 
     const nestedData = rowData.__groupRows__;
@@ -3102,48 +3153,51 @@ export default function DataTableComponent({
     };
 
     return (
-      <div className="p-3 bg-gray-50">
-        <div className="text-xs font-semibold text-gray-700 mb-2">
-          {innerGroupField
-            ? `Aggregated by ${formatHeaderName(innerGroupField)}`
-            : `${nestedData.length} row${nestedData.length !== 1 ? 's' : ''}`}
+      <div className="p-3 bg-gray-50 space-y-4">
+        <div>
+          <div className="text-xs font-semibold text-gray-700 mb-2">
+            {innerGroupField
+              ? `Aggregated by ${formatHeaderName(innerGroupField)}`
+              : `${nestedData.length} row${nestedData.length !== 1 ? 's' : ''}`}
+          </div>
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <DataTable
+              resizableColumns
+              columnResizeMode="expand"
+              value={nestedFilteredData}
+              sortMode={enableSort ? 'multiple' : undefined}
+              removableSort={enableSort}
+              filterDisplay={enableFilter ? 'row' : undefined}
+              showGridlines
+              stripedRows
+              className="p-datatable-sm"
+              style={{ minWidth: '100%' }}
+            >
+              {nestedColumns.map((col) => {
+                const colType = get(columnTypes, col);
+                const isNumericCol = get(colType, 'isNumeric', false);
+                return (
+                  <Column
+                    key={col}
+                    field={col}
+                    header={getHeaderTemplate(col) || formatHeaderName(col)}
+                    sortable={enableSort}
+                    filter={enableFilter}
+                    filterElement={enableFilter ? getNestedFilterElement(col) : undefined}
+                    showFilterMenu={false}
+                    showClearButton={false}
+                    body={getBodyTemplate(col)}
+                    align={isNumericCol ? 'right' : 'left'}
+                    style={{
+                      width: `${get(calculateColumnWidths, col, 120)}px`,
+                    }}
+                  />
+                );
+              })}
+            </DataTable>
+          </div>
         </div>
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <DataTable
-            resizableColumns
-            columnResizeMode="expand"
-            value={nestedFilteredData}
-            sortMode={enableSort ? 'multiple' : undefined}
-            removableSort={enableSort}
-            filterDisplay={enableFilter ? 'row' : undefined}
-            showGridlines
-            stripedRows
-            className="p-datatable-sm"
-            style={{ minWidth: '100%' }}
-          >
-            {nestedColumns.map((col) => {
-              const colType = get(columnTypes, col);
-              const isNumericCol = get(colType, 'isNumeric', false);
-              return (
-                <Column
-                  key={col}
-                  field={col}
-                  header={getHeaderTemplate(col) || formatHeaderName(col)}
-                  sortable={enableSort}
-                  filter={enableFilter}
-                  filterElement={enableFilter ? getNestedFilterElement(col) : undefined}
-                  showFilterMenu={false}
-                  showClearButton={false}
-                  body={getBodyTemplate(col)}
-                  align={isNumericCol ? 'right' : 'left'}
-                  style={{
-                    width: `${get(calculateColumnWidths, col, 120)}px`,
-                  }}
-                />
-              );
-            })}
-          </DataTable>
-        </div>
+        {stringBreakdownContent}
       </div>
     );
   }, [outerGroupField, innerGroupField, orderedColumns, columnTypes, formatHeaderName, getBodyTemplate, calculateColumnWidths, getHeaderTemplate, multiselectColumns, nestedFiltersMap, updateNestedFilter, nestedDebouncedUpdateFilter, nestedCancelDebounced]);

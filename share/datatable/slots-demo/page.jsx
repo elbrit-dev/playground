@@ -34,9 +34,21 @@ function SlotsDemoPage() {
       editableColumns: { main: [], nested: {} },
       drawerTabs: [
         // Target rows (rows 1-9) have hq but no customer_name/item_name; use hq for first-level clicks
-        { id: 'salesTeamHq-tab-1', name: 'By HQ', outerGroup: 'hq', innerGroup: null },
+        {
+          id: 'salesTeamHq-tab-1',
+          name: 'By HQ',
+          outerGroup: 'hq',
+          innerGroup: null,
+          allowedColumns: ['hq', 'sales_team', 'target', 'qty', 'SALES_RETURN', 'EXPIRED'],
+        },
         // Transaction rows have customer_name, item_name
-        { id: 'salesTeamHq-tab-2', name: 'By Customer & Item', outerGroup: 'customer_name', innerGroup: 'item_name' },
+        {
+          id: 'salesTeamHq-tab-2',
+          name: 'By Customer & Item',
+          outerGroup: 'customer_name',
+          innerGroup: 'item_name',
+          allowedColumns: ['customer_name', 'item_name',  'amount', 'net_primary', 'fsl_mrp'],
+        },
       ],
     },
     nameHq: {
@@ -53,7 +65,13 @@ function SlotsDemoPage() {
       editableColumns: { main: [], nested: {} },
       drawerTabs: [
         // Transaction rows have item_name
-        { id: 'nameHq-tab-1', name: 'By Item', outerGroup: 'item_name', innerGroup: null },
+        {
+          id: 'nameHq-tab-1',
+          name: 'By Item',
+          outerGroup: 'item_name',
+          innerGroup: null,
+          allowedColumns: ['item_name', 'brand', 'qty', 'amount', 'net_primary', 'fsl_ptr', 'fsl_mrp', 'SALES_RETURN', 'EXPIRED'],
+        },
       ],
     },
   }), []);
@@ -64,7 +82,7 @@ function SlotsDemoPage() {
         <div className="mb-4">
           <h1 className="text-xl font-semibold text-gray-800">Per-Slot Demo</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Single DataProvider, two slots. Left: sales_team + hq + customer_name. Right: customer_name + item_name. Independent filters/sort/pagination. Click group cells to open the drawer.
+            Single DataProvider, two slots. Left: sales_team + hq + customer_name. Right: customer_name + item_name. Independent filters/sort/pagination. Click group cells to open the drawer. Each tab uses per-tab allowedColumns to restrict columns (e.g. numeric: target, qty, amount, net_primary).
           </p>
         </div>
 

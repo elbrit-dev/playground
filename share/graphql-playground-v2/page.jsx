@@ -22,13 +22,15 @@ import { usePlaygroundStore } from './stores/usePlaygroundStore';
 
 function GraphQLPlaygroundV2() {
   const query = usePlaygroundStore((state) => state.query);
-  const variables = usePlaygroundStore((state) => state.variables);
   const selectedEnvironment = usePlaygroundStore((state) => state.selectedEnvironment);
   const setResponse = usePlaygroundStore((state) => state.setResponse);
   const clearTransformerLogs = usePlaygroundStore((state) => state.clearTransformerLogs);
+  const incrementExecuteTrigger = usePlaygroundStore((state) => state.incrementExecuteTrigger);
+  const requestAllEditorsFlush = usePlaygroundStore((state) => state.requestAllEditorsFlush);
   const resetWorkspace = usePlaygroundStore((state) => state.resetWorkspace);
   const isDirty = usePlaygroundStore((state) => state.isDirty);
   const workspaceRevision = usePlaygroundStore((state) => state.workspaceRevision);
+  const executeTrigger = usePlaygroundStore((state) => state.executeTrigger);
   const isTransforming = usePlaygroundStore((state) => state.isTransforming);
   const [isExecuting, setIsExecuting] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
@@ -75,58 +77,59 @@ function GraphQLPlaygroundV2() {
     });
   }, [isDirty, resetWorkspace, setActiveTab, setActiveMiddleTab]);
 
-  // Shared execute handler
+  // Execute handler - flushes all editors on demand, then runs with fresh data
   const handleExecute = useCallback(async () => {
-    if (!query || !query.trim()) {
-      return;
-    }
-
     clearTransformerLogs();
+    requestAllEditorsFlush();
     setIsExecuting(true);
-    try {
-      // Get endpoint configuration
-      const endpointConfig = getEndpointConfigFromUrlKey(selectedEnvironment);
-      const endpointUrl = endpointConfig?.endpointUrl || getInitialEndpoint()?.code;
-      const authToken = endpointConfig?.authToken || null;
 
-      if (!endpointUrl) {
-        throw new Error('GraphQL endpoint URL is not set');
+    // Defer fetch to next tick so flush effects run and store has latest
+    const runFetch = async () => {
+      const { query: queryToRun, variables: variablesToRun } = usePlaygroundStore.getState();
+      if (!queryToRun?.trim()) {
+        setIsExecuting(false);
+        return;
       }
 
-      // Parse variables
-      let parsedVariables = {};
-      if (variables && variables.trim()) {
-        try {
-          parsedVariables = parseJsonc(variables);
-        } catch (e) {
+      try {
+        const endpointConfig = getEndpointConfigFromUrlKey(selectedEnvironment);
+        const endpointUrl = endpointConfig?.endpointUrl || getInitialEndpoint()?.code;
+        const authToken = endpointConfig?.authToken || null;
+        if (!endpointUrl) throw new Error('GraphQL endpoint URL is not set');
+
+        let parsedVariables = {};
+        if (variablesToRun?.trim()) {
           try {
-            const stripped = stripComments(variables);
-            parsedVariables = JSON.parse(stripped);
-          } catch {
-            // Use empty object if parsing fails
+            parsedVariables = parseJsonc(variablesToRun);
+          } catch (e) {
+            try {
+              parsedVariables = JSON.parse(stripComments(variablesToRun));
+            } catch {
+              /* use empty */
+            }
           }
         }
+
+        const response = await fetchGraphQLRequest(queryToRun, parsedVariables, {
+          endpointUrl,
+          authToken
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+
+        const responseData = await response.json();
+        setResponse(JSON.stringify(responseData, null, 2));
+        incrementExecuteTrigger();
+      } catch (error) {
+        console.error('Error executing query:', error);
+        setResponse(JSON.stringify({ errors: [{ message: error.message || 'Failed to execute query' }] }, null, 2));
+        incrementExecuteTrigger();
+      } finally {
+        setIsExecuting(false);
       }
+    };
 
-      // Execute query
-      const response = await fetchGraphQLRequest(query, parsedVariables, {
-        endpointUrl,
-        authToken
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const responseData = await response.json();
-      setResponse(JSON.stringify(responseData, null, 2));
-    } catch (error) {
-      console.error('Error executing query:', error);
-      setResponse(JSON.stringify({ errors: [{ message: error.message || 'Failed to execute query' }] }, null, 2));
-    } finally {
-      setIsExecuting(false);
-    }
-  }, [query, variables, selectedEnvironment, setResponse, clearTransformerLogs]);
+    setTimeout(runFetch, 0);
+  }, [query, selectedEnvironment, setResponse, clearTransformerLogs, incrementExecuteTrigger, requestAllEditorsFlush]);
 
   return (
     <div className="flex flex-col bg-gray-50 graphql-playground-v2" style={{ height: 'calc(100vh - 65px)' }}>
@@ -174,7 +177,10 @@ function GraphQLPlaygroundV2() {
               <TabMenu
                 model={middleTabMenuItems}
                 activeIndex={activeMiddleTab}
-                onTabChange={(e) => setActiveMiddleTab(e.index)}
+                onTabChange={(e) => {
+                  requestAllEditorsFlush();
+                  setActiveMiddleTab(e.index);
+                }}
               />
               <Button
                 label="New"
@@ -249,7 +255,7 @@ function GraphQLPlaygroundV2() {
                         className="h-full overflow-hidden"
                         style={{ display: activeTab === 1 ? 'block' : 'none', height: '100%' }}
                       >
-                        <TableViewer key={`table-${workspaceRevision}`} />
+                        <TableViewer key={`table-${workspaceRevision}-${executeTrigger}`} />
                       </div>
                     </div>
                   </div>
