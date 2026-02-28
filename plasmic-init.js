@@ -207,6 +207,11 @@ PLASMIC.registerComponent(DataProvider, {
       type: "string",
       description: "Column name containing date values for report breakdown",
     },
+    columnsExemptFromBreakdown: {
+      type: "object",
+      defaultValue: [],
+      description: "Array of column names exempt from report breakdown",
+    },
     onDataChange: {
       type: "eventHandler",
       argTypes: [{ name: "notification", type: "object" }],
@@ -246,6 +251,11 @@ PLASMIC.registerComponent(DataProvider, {
       type: "eventHandler",
       argTypes: [{ name: "loading", type: "boolean" }],
       description: "Callback when loading data state changes",
+    },
+    onAvailableQueryKeysChange: {
+      type: "eventHandler",
+      argTypes: [{ name: "keys", type: "object" }],
+      description: "Callback when available query keys change",
     },
     onVisibleColumnsChange: {
       type: "eventHandler",
