@@ -135,11 +135,6 @@ PLASMIC.registerComponent(DataProvider, {
       description: "Override column types (e.g., { fieldName: 'number' })",
       defaultValue: {},
     },
-    useOrchestrationLayer: {
-      type: "boolean",
-      description: "Enable the new orchestration layer for data processing",
-      defaultValue: false,
-    },
     enableSort: {
       type: "boolean",
       defaultValue: true,
@@ -376,7 +371,7 @@ PLASMIC.registerComponent(DataProvider, {
     formInputOverride: {
       type: "object",
       defaultValue: {},
-      description: "Per-column input override for editing. Format: { columnName: 'Calendar'|'Checkbox'|'InputNumber'|'InputText'|'Quill'|{ type:'Select', getOptions:(ctx)=>string[]|Promise<string[]> } } where ctx={ columnName, query }",
+      description: "Per-column input override for editing. Format: { columnName: 'Calendar'|'Checkbox'|'InputNumber'|'InputText'|'Quill'|{ type:'Select', getOptions:(ctx)=>string[]|Promise<string[]>, getOptionsCode:string } } where ctx={ columnName, query }. Use getOptionsCode for Plasmic (code string) instead of getOptions (function).",
     },
     children: {
       type: "slot",
