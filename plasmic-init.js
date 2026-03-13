@@ -179,6 +179,11 @@ PLASMIC.registerComponent(DataProvider, {
       defaultValue: [],
       description: "Array of column names to display in green",
     },
+    rowColumnStyles: {
+      type: "object",
+      defaultValue: [],
+      description: "Array of row/column style configurations",
+    },
     groupFields: {
       type: "object",
       description: "Array of field names for grouping (supports infinite nesting). Main/outer group: 'sales_team', inner group: 'hq'. Example: ['sales_team', 'hq']",
