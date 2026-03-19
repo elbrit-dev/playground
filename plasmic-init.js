@@ -2,7 +2,7 @@ import React from 'react';
 import { initPlasmicLoader, DataProvider as PlasmicDataProvider } from "@plasmicapp/loader-nextjs";
 // import DataTable from "./components/DataTable";
 // import TableDataProvider from "./components/TableDataProvider";
-import DataProvider from "./share/src/app/datatable/components/DataProviderNew";
+import DataProvider from "./share/src/app/datatable/components/DataProvider";
 import DataTableNew from "./share/src/app/datatable/components/DataTableNew";
 import Navigation from "./share/src/app/navigation/components/Navigation";
 import CalendarPage from "@calendar/components/CalendarPage";
