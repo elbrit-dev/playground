@@ -1013,40 +1013,22 @@ function DateRangeFilter({ value, onChange }) {
 }
 
 export default function DataTableNew({
-  rowsPerPageOptions = [10, 25, 50, 100],
-  defaultRows = 10,
-  scrollable = true,
-  scrollHeight,
-  onOuterGroupClick, // Keep for backward compatibility
-  onInnerGroupClick, // Keep for backward compatibility
-  enableCellEdit = false,
+  slotId: slotIdProp = undefined,
+  tableName = 'table',
   onCellEditComplete,
   isCellEditable,
-  editableColumns = { main: [], nested: {}, object: {} },
-  enableFullscreenDialog = true,
-  tableName = 'table',
-  useOrchestrationLayer = false,
-  parentColumnName = undefined,
-  nestedTableFieldName = undefined,
-  slotId: slotIdProp = undefined,
 }) {
-  // Use ref to track current editableColumns to avoid closure issues
-  const editableColumnsRef = useRef(editableColumns);
-  useEffect(() => {
-    editableColumnsRef.current = editableColumns;
-  }, [editableColumns]);
-  
   // Get data and operations from context (slotId prop selects which slot)
   const effectiveSlotId = slotIdProp ?? 'main';
   const tableOps = useTableOperations(effectiveSlotId);
   const {
     rawData,
     filteredData: contextFilteredData,
-    paginatedData, // Final data for display
-    sortedData, // For totalRecords calculation
+    paginatedData,
+    sortedData,
     groupedData,
     columns,
-    columnTypes, // Format: { field_name: "boolean" | "number" | "date" | "string" }
+    columnTypes,
     columnTypesOverride = {},
     sums: calculateSums,
     filterOptions,
@@ -1132,14 +1114,26 @@ export default function DataTableNew({
     formInputOverride = {},
     queryFunction,
     selectOptionsCache,
+    // Display config from context (was previously props)
+    rowsPerPageOptions = [10, 25, 50, 100],
+    defaultRows = 10,
+    tableHeight: scrollHeight,
+    scrollable = true,
+    enableFullscreenDialog = true,
+    enableCellEdit = false,
+    editableColumns = { main: [], nested: {}, object: {} },
   } = tableOps;
-  
-  // Use context values if available, otherwise fall back to props
+
+  // Use ref to track current editableColumns to avoid closure issues
+  const editableColumnsRef = useRef(editableColumns);
+  useEffect(() => {
+    editableColumnsRef.current = editableColumns;
+  }, [editableColumns]);
+
   const allowedColumns = contextAllowedColumns ?? [];
-  const finalParentColumnName = contextParentColumnName !== undefined ? contextParentColumnName : parentColumnName;
-  const finalNestedTableFieldName = contextNestedTableFieldName !== undefined ? contextNestedTableFieldName : nestedTableFieldName;
-  
-  // Helper variables for backward compatibility during migration
+  const finalParentColumnName = contextParentColumnName;
+  const finalNestedTableFieldName = contextNestedTableFieldName;
+
   const outerGroupField = effectiveGroupFields[0] || null;
   const innerGroupField = effectiveGroupFields[1] || null;
 
@@ -2129,13 +2123,6 @@ export default function DataTableNew({
                 ? { drawerTabsOverride: drawerTabs, allowedColumnsOverride: allowedColumns }
                 : undefined;
               openDrawer(dataToUse != null ? dataToUse : filters, dataToUse != null ? filters : undefined, undefined, tableOptions);
-              // Still call parent callbacks if provided (for backward compatibility)
-              if (groupFieldIndex === 0 && onOuterGroupClick) {
-                onOuterGroupClick(rowData, col, value);
-              } else if (groupFieldIndex === 1 && onInnerGroupClick) {
-                const outerValue = getDataValue(rowData, effectiveGroupFields[0]);
-                onInnerGroupClick(rowData, col, value);
-              }
             } : undefined}
           >
             {cellValue}
@@ -2246,7 +2233,7 @@ export default function DataTableNew({
         </div>
       );
     };
-  }, [columnTypesFlags, effectiveGroupFields, onOuterGroupClick, onInnerGroupClick, booleanBodyTemplate, dateBodyTemplate, formatCellValue, isPercentageColumn, getPercentageColumnValue, getColumnColorClass, openDrawer, orderedColumns, enableWrite, openDrawerWithJsonTables, openDrawerForRow, contextFilteredData, drawerTabs, finalParentColumnName, formatHeaderName]);
+  }, [columnTypesFlags, effectiveGroupFields, booleanBodyTemplate, dateBodyTemplate, formatCellValue, isPercentageColumn, getPercentageColumnValue, getColumnColorClass, openDrawer, orderedColumns, enableWrite, openDrawerWithJsonTables, openDrawerForRow, contextFilteredData, drawerTabs, finalParentColumnName, formatHeaderName]);
 
   // Helper to check if a column (top-level key) is in sortFields
 
@@ -4131,7 +4118,7 @@ export default function DataTableNew({
         </DataTable>
       </div>
     );
-  }, [enableBreakdown, reportData, nestedTableColumnStructures, effectiveGroupFields, formatHeaderName, getMetricLabel, getDataValue, formatCellValue, columnTypesFlags, getColumnColorClass, openDrawer, onInnerGroupClick, expandedRows, updateExpandedRows, allowedColumns]);
+  }, [enableBreakdown, reportData, nestedTableColumnStructures, effectiveGroupFields, formatHeaderName, getMetricLabel, getDataValue, formatCellValue, columnTypesFlags, getColumnColorClass, openDrawer, expandedRows, updateExpandedRows, allowedColumns]);
 
   const onPageChange = (event) => {
     updatePagination(event.first, event.rows);
@@ -4219,7 +4206,6 @@ export default function DataTableNew({
     const [calculatedScrollHeight, setCalculatedScrollHeight] = useState(scrollHeight === "flex" ? undefined : scrollHeight);
     const shouldUseEditingKeyForMainRows = (
       tableName === 'main' &&
-      useOrchestrationLayer &&
       enableCellEdit &&
       setSelectedRowData &&
       !enableBreakdown &&
@@ -4236,12 +4222,12 @@ export default function DataTableNew({
           if (tableContainerRef.current) {
             const rect = tableContainerRef.current.getBoundingClientRect();
             if (rect.height > 0) {
-              setCalculatedScrollHeight(`${rect.height}px`);
+              const newHeight = `${rect.height}px`;
+              setCalculatedScrollHeight((prev) => (prev === newHeight ? prev : newHeight));
             }
           }
         };
         
-        // Calculate immediately and on resize
         calculateHeight();
         const resizeObserver = new ResizeObserver(calculateHeight);
         if (tableContainerRef.current) {
@@ -4304,9 +4290,9 @@ export default function DataTableNew({
         dataKey={resolvedMainDataKey}
         headerColumnGroup={enableBreakdown && reportData ? reportHeaderGroup : undefined}
         editMode={effectiveEnableCellEdit ? "cell" : undefined}
-        selectionMode={tableName === 'main' && useOrchestrationLayer && enableCellEdit && setSelectedRowData ? 'single' : undefined}
-        selection={tableName === 'main' && useOrchestrationLayer && enableCellEdit ? (selectedRowData ?? null) : undefined}
-        onSelectionChange={tableName === 'main' && useOrchestrationLayer && enableCellEdit && setSelectedRowData ? (e) => {
+        selectionMode={tableName === 'main' && enableCellEdit && setSelectedRowData ? 'single' : undefined}
+        selection={tableName === 'main' && enableCellEdit ? (selectedRowData ?? null) : undefined}
+        onSelectionChange={tableName === 'main' && enableCellEdit && setSelectedRowData ? (e) => {
           const v = e.value;
           if (v && v.__isGroupRow__) return;
           setSelectedRowData(v ?? null);

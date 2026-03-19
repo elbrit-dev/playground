@@ -151,6 +151,63 @@ export const firestoreService = {
   },
 
   /**
+   * Load presets for a specific query (stored in query doc)
+   * @param {string} queryId - The query document ID
+   * @returns {Promise<Array<{ name: string, config: string }>>}
+   */
+  async loadPresetsForQuery(queryId) {
+    if (!queryId) return [];
+    const docRef = doc(db, DEFAULT_COLLECTION, queryId);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const presets = docSnap.data().presets;
+      return Array.isArray(presets) ? presets : [];
+    }
+    return [];
+  },
+
+  /**
+   * Save a preset for a specific query (append or update by name)
+   * @param {string} queryId - The query document ID
+   * @param {string} name - Preset name
+   * @param {string} config - Serialized config
+   * @returns {Promise<void>}
+   */
+  async savePresetForQuery(queryId, name, config) {
+    if (!queryId || !name) return;
+    const docRef = doc(db, DEFAULT_COLLECTION, queryId);
+    const docSnap = await getDoc(docRef);
+    const existing = docSnap.exists() ? docSnap.data() : {};
+    const presets = Array.isArray(existing.presets) ? [...existing.presets] : [];
+    const idx = presets.findIndex((p) => p.name === name);
+    const entry = { name, config };
+    if (idx >= 0) {
+      presets[idx] = entry;
+    } else {
+      presets.push(entry);
+    }
+    await setDoc(docRef, { ...existing, presets }, { merge: true });
+  },
+
+  /**
+   * Delete a preset from a specific query
+   * @param {string} queryId - The query document ID
+   * @param {string} name - Preset name
+   * @returns {Promise<void>}
+   */
+  async deletePresetForQuery(queryId, name) {
+    if (!queryId || !name) return;
+    const docRef = doc(db, DEFAULT_COLLECTION, queryId);
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) return;
+    const existing = docSnap.data();
+    const presets = Array.isArray(existing.presets)
+      ? existing.presets.filter((p) => p.name !== name)
+      : [];
+    await setDoc(docRef, { ...existing, presets }, { merge: true });
+  },
+
+  /**
    * Export the entire GQL collection as JSON-serializable object
    * @param {string} [collectionName] - Collection to export (default: from env)
    * @returns {Promise<Object>} { collection, documents, exportedAt }

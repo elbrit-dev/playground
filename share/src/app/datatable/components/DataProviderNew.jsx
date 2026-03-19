@@ -59,6 +59,7 @@ import { useReportData } from '../utils/providerUtils';
 import { transformToReportData } from '../utils/reportUtils';
 import { exportReportToXLSX } from '../utils/reportExportUtils';
 import { isDateLike, isNumericValue } from '../utils/typeDetectionUtils';
+import { extractStateFromConfig } from '../config/configService';
 import { firestoreService } from '@/app/graphql-playground/services/firestoreService';
 import { fetchGraphQLRequest } from '@/app/graphql-playground/utils/query-pipeline';
 import { getEndpointAndAuth } from '../utils/queryEndpointUtils';
@@ -374,124 +375,82 @@ function buildBulkUpdateVariables(doctype, changedRows, schemaStructure, skipKey
 }
 
 export default function DataProviderNew({
+  config: configProp,
   offlineData,
   onDataChange,
   onError,
-  onTableDataChange,
-  onRawDataChange, // New callback to pass raw/original data for Auth Control
-  variableOverrides = {},
-  onVariablesChange,
-  // Callbacks for parent
-  onExecutingQueryChange,
-  onAvailableQueryKeysChange,
-  onSelectedQueryKeyChange,
-  onLoadingDataChange,
-  // Auth control props
-  isAdminMode = false,
-  salesTeamColumn = null,
-  salesTeamValues = [],
-  hqColumn = null,
-  hqValues = [],
-  // Data source and query key props
-  dataSource: dataSourceProp = null,
-  selectedQueryKey: selectedQueryKeyProp = null,
-  // Table operation props (for orchestration layer)
-  enableSort = true,
-  enableFilter = true,
-  enableSummation = true,
-  enableGrouping = true,
-  textFilterColumns = [],
-  allowedColumns = [], // Developer-controlled: restricts which columns are available for selection
-  onAllowedColumnsChange,
-  visibleColumns: visibleColumnsProp = null, // User-controlled: actual visible columns (can be passed from parent)
-  onVisibleColumnsChange,
-  percentageColumns = [],
-  derivedColumns = [],
-  derivedRows = null,
-  groupFields = null, // Array for infinite nesting - required for grouping (breaking change: outerGroupField/innerGroupField no longer supported)
-  redFields = [],
-  greenFields = [],
-  rowColumnStyles = [],
-  enableDivideBy1Lakh = false,
-  columnTypesOverride = {}, // Object with column names as keys and type strings as values: {columnName: "date" | "number" | "boolean" | "string" | "object"}
-  enableCellEdit = false,
-  editableColumns = { main: [], nested: {}, object: {} },
-  formInputOverride = {}, // Per-column override: 'Calendar'|'Checkbox'|'InputNumber'|'InputText'|'Quill'|{ type:'Select', getOptions:(ctx)=>string[]|Promise<string[]> } where ctx={ columnName, query }
-  // When true, do not render ConfirmDialog (parent page provides one - avoids duplicate dialogs)
-  skipConfirmDialog = false,
-  // Drawer props
-  drawerTabs = [],
-  onDrawerTabsChange,
-  // Report props
-  enableReport = false,
-  dateColumn = null,
-  columnsExemptFromBreakdown = [],
-  chartColumns = [],
-  chartHeight = 400,
-  reportDataOverride = null,
-  forceBreakdown = null,
-  showProviderHeader = true,
-  parentColumnName = undefined,
-  nestedTableFieldName = undefined,
-  forceEnableWrite = undefined, // Force enableWrite for nested drawer tables
-  derivedColumnsMode = undefined, // Override for derived columns scope: 'main' | 'nested' (for sidebar nested tabs)
-  derivedColumnsFieldName = undefined, // For mode 'nested', the nested table's field name
-  // Parent refs for nested instances (to access parent's tracking data)
-  parentOriginalNestedTableDataRef = undefined,
-  parentNestedTableEditingDataRef = undefined,
-  // Parent handler for nested instances (to use parent's state)
-  parentHandleDrawerSaveProp = undefined,
-  // Tab ID for nested instances (to update parent's editing buffer)
-  nestedTableTabId = undefined,
-  // Fallback columns when data is empty (e.g. from other rows' schema for nested tables)
-  fallbackColumns = undefined,
-  // Callback from parent so nested instance can trigger parent re-render after buffer update
-  onNestedBufferChange = undefined,
-  // Parent handler to add row at index 0 in nested table (for drawer nested table + button)
-  parentHandleAddNestedRowAtZero = undefined,
-  // Slots prop: per-slot config. When not provided, derived from flat props for nested/backward compat.
-  slots: slotsProp,
-  children
+  children,
+  __internal = {},
 }) {
-  // Derive slots from prop or flat props (for nested instances)
+  const {
+    skipConfirmDialog = false,
+    showProviderHeader = true,
+    reportDataOverride = null,
+    forceBreakdown = null,
+    parentColumnName,
+    nestedTableFieldName,
+    forceEnableWrite,
+    derivedColumnsMode,
+    derivedColumnsFieldName,
+    parentOriginalNestedTableDataRef,
+    parentNestedTableEditingDataRef,
+    parentHandleDrawerSaveProp,
+    nestedTableTabId,
+    fallbackColumns,
+    onNestedBufferChange,
+    parentHandleAddNestedRowAtZero,
+    visibleColumns: visibleColumnsProp = null,
+    onTableDataChange,
+    onAllowedColumnsChange,
+    onVisibleColumnsChange,
+  } = __internal;
+  // --- Config: only objects accepted; callers must resolve before passing ---
+  const resolvedConfig = (typeof configProp === 'object' && configProp !== null) ? configProp : {};
+  const configValues = useMemo(() => extractStateFromConfig(resolvedConfig), [resolvedConfig]);
+
+  const {
+    enableSort, enableFilter, enableSummation, enableGrouping,
+    enableCellEdit, enableDivideBy1Lakh, enableReport,
+    textFilterColumns, allowedColumns, percentageColumns,
+    derivedColumns, derivedRows, groupFields,
+    redFields, greenFields, rowColumnStyles,
+    columnTypesOverride, formInputOverride, editableColumns,
+    drawerTabs: configDrawerTabs, dateColumn, columnsExemptFromBreakdown,
+    chartColumns, chartHeight, showChart, breakdownType: configBreakdownType, columnGroupBy: configColumnGroupBy,
+    isAdminMode, salesTeamColumn, salesTeamValues, hqColumn, hqValues,
+    dataSource: configDataSource, selectedQueryKey: selectedQueryKeyProp,
+    variableOverrides,
+    rowsPerPageOptions, defaultRows, tableHeight, scrollable, enableFullscreenDialog,
+    slots: configSlots,
+  } = configValues;
+
+  // Manage drawer tabs internally (initialized from config, modified dynamically)
+  const [internalDrawerTabs, setInternalDrawerTabs] = useState(() => {
+    const tabs = configDrawerTabs;
+    return tabs?.length > 0 ? tabs : [{ id: `tab-${Date.now()}`, name: '', outerGroup: null, innerGroup: null }];
+  });
+  const drawerTabs = internalDrawerTabs;
+  const onDrawerTabsChange = setInternalDrawerTabs;
+
+  // Derive slots from config or build single main slot
   const slots = useMemo(() => {
-    if (slotsProp && typeof slotsProp === 'object' && Object.keys(slotsProp).length > 0) {
-      return slotsProp;
+    if (configSlots && typeof configSlots === 'object' && Object.keys(configSlots).length > 0) {
+      return configSlots;
     }
     return {
       main: {
-        enableSort,
-        enableFilter,
-        enableSummation,
-        enableGrouping,
-        textFilterColumns,
-        allowedColumns,
-        percentageColumns,
-        derivedColumns,
-        derivedRows,
-        groupFields,
-        redFields,
-        greenFields,
-        rowColumnStyles,
-        enableDivideBy1Lakh,
-        columnTypesOverride,
-        enableCellEdit,
-        editableColumns,
-        formInputOverride,
-        drawerTabs,
-        enableReport,
-        dateColumn,
-        chartColumns,
-        chartHeight,
+        enableSort, enableFilter, enableSummation, enableGrouping,
+        textFilterColumns, allowedColumns, percentageColumns,
+        derivedColumns, derivedRows, groupFields,
+        redFields, greenFields, rowColumnStyles,
+        enableDivideBy1Lakh, columnTypesOverride,
+        enableCellEdit, editableColumns, formInputOverride,
+        drawerTabs, enableReport, dateColumn, chartColumns, chartHeight,
       },
     };
-  }, [slotsProp, enableSort, enableFilter, enableSummation, enableGrouping, textFilterColumns, allowedColumns, percentageColumns, derivedColumns, derivedRows, groupFields, redFields, greenFields, rowColumnStyles, enableDivideBy1Lakh, columnTypesOverride, enableCellEdit, editableColumns, formInputOverride, drawerTabs, enableReport, dateColumn, chartColumns, chartHeight]);
+  }, [configSlots, enableSort, enableFilter, enableSummation, enableGrouping, textFilterColumns, allowedColumns, percentageColumns, derivedColumns, derivedRows, groupFields, redFields, greenFields, rowColumnStyles, enableDivideBy1Lakh, columnTypesOverride, enableCellEdit, editableColumns, formInputOverride, drawerTabs, enableReport, dateColumn, chartColumns, chartHeight]);
 
   const slotIds = useMemo(() => Object.keys(slots), [slots]);
-  // Effective config: per-slot props (slot override on flat). Shared props stay flat.
-  // Shared (flat only): columnTypesOverride, dateColumn, chartColumns, chartHeight, enableReport, enableDivideBy1Lakh
-  // Per-slot (slot override): allowedColumns, groupFields, derivedColumns, editableColumns, drawerTabs, redFields, greenFields, rowColumnStyles,
-  //   percentageColumns, textFilterColumns, enableSort, enableFilter, enableSummation, enableCellEdit
   const mainSlotConfig = useMemo(() => slots[slotIds[0]] || {}, [slots, slotIds]);
   const effectiveMainConfig = useMemo(() => ({
     enableSort: mainSlotConfig.enableSort ?? enableSort,
@@ -516,21 +475,16 @@ export default function DataProviderNew({
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState(null);
   const [isApplyingFilterSort, setIsApplyingFilterSort] = useState(false);
-  const [columnGroupBy, setColumnGroupBy] = useState('values');
-  const [breakdownType, setBreakdownType] = useState('month');
+  const [columnGroupBy, setColumnGroupBy] = useState(configColumnGroupBy ?? 'values');
+  const [breakdownType, setBreakdownType] = useState(configBreakdownType ?? 'month');
   const [enableBreakdown, setEnableBreakdown] = useState(forceBreakdown ?? false);
 
   const queryExecution = useQueryExecution({
-    dataSourceProp,
+    dataSourceProp: configDataSource,
     selectedQueryKeyProp,
     offlineData,
     onError,
     onDataChange,
-    onVariablesChange,
-    onExecutingQueryChange,
-    onAvailableQueryKeysChange,
-    onSelectedQueryKeyChange,
-    onLoadingDataChange,
     variableOverrides,
     searchTerm,
     sortConfig,
@@ -894,18 +848,8 @@ export default function DataProviderNew({
     };
   }, []);
 
-  // Notify parent when raw data changes (for Auth Control in DataTableControls)
-  // Only call when data meaningfully changes to avoid parent setState -> re-render -> new ref -> infinite loop
   const prevRawDataLogicalHashRef = useRef(null);
   const prevTableDataLogicalHashRef = useRef(null);
-  useEffect(() => {
-    if (!onRawDataChange) return;
-    const len = rawTableData?.length ?? 0;
-    const logicalHash = len === 0 ? '0_empty' : `${len}_${rawTableData[0]?.id ?? rawTableData[0]?.__editingKey__ ?? 'n'}_${rawTableData[len - 1]?.id ?? rawTableData[len - 1]?.__editingKey__ ?? 'n'}`;
-    if (prevRawDataLogicalHashRef.current === logicalHash) return;
-    prevRawDataLogicalHashRef.current = logicalHash;
-    onRawDataChange(rawTableData);
-  }, [rawTableData, onRawDataChange]);
 
   // Initialize mainTableEditingData with preFilteredData when it first loads (if empty)
   // Skip when sortedData already has data - prevents overwriting buffer with flat data after pipeline produced grouped data
@@ -4179,6 +4123,20 @@ export default function DataProviderNew({
         formInputOverride: effectiveMainConfig.formInputOverride ?? formInputOverride ?? {},
         // selectOptionsCache: pre-fetched options for Select editors (main|col or parentCol|col) - from Zustand store
         selectOptionsCache,
+        // Provider-level state (exposed so children/DataTableControls can read from context)
+        dataSource,
+        selectedQueryKey,
+        executingQuery,
+        availableQueryKeys,
+        resolvedConfig,
+        // DataTable display fields (from config, consumed by DataTableNew via context)
+        rowsPerPageOptions,
+        defaultRows,
+        tableHeight,
+        scrollable,
+        enableFullscreenDialog,
+        enableCellEdit: effectiveMainConfig.enableCellEdit,
+        editableColumns: effectiveMainConfig.editableColumns,
       };
     } catch (error) {
       console.error('DataProviderNew: Error creating slotContextData', error);
@@ -4196,7 +4154,9 @@ export default function DataProviderNew({
     formatHeaderName, isTruthyBoolean, exportToXLSX, isNumericValue, currentQueryDoc, searchTerm, sortConfig, enableBreakdown, reportData, isComputingReport, isApplyingFilterSort, columnGroupBy, filteredColumns, parentColumnName, nestedTableFieldName, nestedTableTabId,
     updateCurrentNestedTableData, getChangedRowsForTab, getAllChangedNestedTableRows, handleDrawerSave, handleMainSave, handleMainCancel, handleDrawerCancel, hasMainTableChanges, hasDrawerChanges, updateMainTableEditingData, forceEnableWrite, parentHandleDrawerSave, parentHandleAddNestedRowAtZero, addEditingKeysToRows, mainTableEditingData,
     queryFunction, effectiveMainConfig, columnTypesOverride, jsonObjectColumns, enableDivideBy1Lakh, enableReport, chartColumns, chartHeight,
-    dataSource, offlineData, offlineDataExecuted, formInputOverride, selectOptionsCache
+    dataSource, offlineData, offlineDataExecuted, formInputOverride, selectOptionsCache,
+    selectedQueryKey, executingQuery, availableQueryKeys, resolvedConfig,
+    rowsPerPageOptions, defaultRows, tableHeight, scrollable, enableFullscreenDialog,
   ]);
 
   // When multi-slot, build per-slot context from pipelinesBySlot with slot-scoped handlers
@@ -4343,6 +4303,18 @@ export default function DataProviderNew({
         queryFunction,
         formInputOverride: effectiveSlotConfig.formInputOverride ?? formInputOverride ?? {},
         selectOptionsCache,
+        dataSource,
+        selectedQueryKey,
+        executingQuery,
+        availableQueryKeys,
+        resolvedConfig,
+        rowsPerPageOptions,
+        defaultRows,
+        tableHeight,
+        scrollable,
+        enableFullscreenDialog,
+        enableCellEdit: effectiveSlotConfig.enableCellEdit,
+        editableColumns: effectiveSlotConfig.editableColumns,
       };
     }
     return map;
@@ -4362,6 +4334,8 @@ export default function DataProviderNew({
     queryFunction, formInputOverride,
     dataSource, offlineData, offlineDataExecuted,
     selectOptionsCache,
+    selectedQueryKey, executingQuery, availableQueryKeys, resolvedConfig,
+    rowsPerPageOptions, defaultRows, tableHeight, scrollable, enableFullscreenDialog,
   ]);
 
   // Build single context as slot map: { main: {...}, salesTeamHq: {...}, ... }
@@ -5325,71 +5299,64 @@ export default function DataProviderNew({
                         <div className="flex-1 overflow-auto">
                           {hasTabData ? (
                             <DataProviderNew
-                              dataSource={null}
+                              config={{
+                                dataSource: null,
+                                drawerTabs: [],
+                                enableSort: mergedTableProps.enableSort,
+                                enableFilter: mergedTableProps.enableFilter,
+                                enableSummation: mergedTableProps.enableSummation,
+                                enableGrouping: mergedTableProps.enableGrouping,
+                                textFilterColumns: mergedTableProps.textFilterColumns || [],
+                                percentageColumns: mergedTableProps.percentageColumns || [],
+                                derivedColumns: mergedTableProps.derivedColumns || [],
+                                groupFields: mergedTableProps.groupFields,
+                                redFields: mergedTableProps.redFields || [],
+                                greenFields: mergedTableProps.greenFields || [],
+                                rowColumnStyles: mergedTableProps.rowColumnStyles || [],
+                                enableDivideBy1Lakh: mergedTableProps.enableDivideBy1Lakh || false,
+                                columnTypesOverride: mergedTableProps.columnTypesOverride || {},
+                                allowedColumns: mergedTableProps.allowedColumns || [],
+                                editableColumns: mergedTableProps.editableColumns || { main: [], nested: {}, object: {} },
+                                enableCellEdit: mergedTableProps.enableCellEdit !== undefined ? mergedTableProps.enableCellEdit : false,
+                                enableReport: mergedTableProps.enableReport,
+                                dateColumn: mergedTableProps.dateColumn,
+                                breakdownType: mergedTableProps.breakdownType,
+                                columnGroupBy: mergedTableProps.columnGroupBy,
+                                chartColumns: mergedTableProps.chartColumns || [],
+                                chartHeight: mergedTableProps.chartHeight,
+                                formInputOverride: mergedTableProps.formInputOverride ?? effectiveMainConfig.formInputOverride ?? { main: {}, nested: {} },
+                                rowsPerPageOptions: mergedTableProps.rowsPerPageOptions,
+                                defaultRows: mergedTableProps.defaultRows,
+                                scrollable: mergedTableProps.scrollable,
+                                enableFullscreenDialog: mergedTableProps.enableFullscreenDialog,
+                              }}
                               offlineData={tabDataSource}
-                              drawerTabs={[]} // Disable drawer in nested instance
-                              enableSort={mergedTableProps.enableSort}
-                              enableFilter={mergedTableProps.enableFilter}
-                              enableSummation={mergedTableProps.enableSummation}
-                              enableGrouping={mergedTableProps.enableGrouping}
-                              textFilterColumns={mergedTableProps.textFilterColumns || []}
-                              percentageColumns={mergedTableProps.percentageColumns || []}
-                              derivedColumns={mergedTableProps.derivedColumns || []}
-                              {...(isJsonTable && {
-                                derivedColumnsMode: 'nested',
-                                derivedColumnsFieldName: nestedTableFieldName ?? undefined,
-                              })}
-                              groupFields={mergedTableProps.groupFields}
-                              redFields={mergedTableProps.redFields || []}
-                              greenFields={mergedTableProps.greenFields || []}
-                              rowColumnStyles={mergedTableProps.rowColumnStyles || []}
-                              enableDivideBy1Lakh={mergedTableProps.enableDivideBy1Lakh || false}
-                              columnTypesOverride={mergedTableProps.columnTypesOverride || {}}
-                              allowedColumns={mergedTableProps.allowedColumns || []}
-                              editableColumns={mergedTableProps.editableColumns || { main: [], nested: {}, object: {} }}
-                              enableCellEdit={mergedTableProps.enableCellEdit !== undefined ? mergedTableProps.enableCellEdit : false}
-                              parentColumnName={isJsonTable ? parentColumnName : undefined}
-                              nestedTableFieldName={isJsonTable ? nestedTableFieldName : undefined}
-                              onAllowedColumnsChange={mergedTableProps.onAllowedColumnsChange}
-                              visibleColumns={isJsonTable ? undefined : mergedTableProps.visibleColumns}
-                              onVisibleColumnsChange={isJsonTable ? undefined : mergedTableProps.onVisibleColumnsChange}
-                              enableReport={mergedTableProps.enableReport}
-                              forceBreakdown={mergedTableProps.forceBreakdown}
-                              reportDataOverride={mergedTableProps.reportDataOverride}
-                              showProviderHeader={mergedTableProps.showProviderHeader}
-                              dateColumn={mergedTableProps.dateColumn}
-                              breakdownType={mergedTableProps.breakdownType}
-                              columnGroupBy={mergedTableProps.columnGroupBy}
-                              chartColumns={mergedTableProps.chartColumns || []}
-                              chartHeight={mergedTableProps.chartHeight}
-                              formInputOverride={mergedTableProps.formInputOverride ?? effectiveMainConfig.formInputOverride ?? { main: {}, nested: {} }}
-                              // Pass enableWrite from parent for nested drawer tables
-                              forceEnableWrite={isJsonTable && currentQueryDoc?.enableWrite ? true : undefined}
-                              // Pass parent refs so nested instance can access tracking data
-                              parentOriginalNestedTableDataRef={isJsonTable ? originalNestedTableDataRef : undefined}
-                              parentNestedTableEditingDataRef={isJsonTable ? nestedTableEditingDataRef : undefined}
-                              // Pass parent handler so nested instance uses parent's state
-                              parentHandleDrawerSaveProp={isJsonTable ? handleDrawerSave : undefined}
-                              // Pass tabId so nested instance can update parent's editing buffer
-                              nestedTableTabId={isJsonTable ? tabId : undefined}
-                              onNestedBufferChange={isJsonTable ? handleNestedBufferChange : undefined}
-                              parentHandleAddNestedRowAtZero={isJsonTable ? (() => handleAddNestedRowAtZero(tabId)) : undefined}
-                              fallbackColumns={isJsonTable && tab.columns && isArray(tab.columns) && tab.columns.length > 0 ? tab.columns : undefined}
-                              onTableDataChange={isJsonTable ? (data) => {
-                                // Update current nested table data for this tab when data changes
-                                updateCurrentNestedTableData(tabId, data);
-                              } : undefined}
+                              __internal={{
+                                ...(isJsonTable && {
+                                  derivedColumnsMode: 'nested',
+                                  derivedColumnsFieldName: nestedTableFieldName ?? undefined,
+                                }),
+                                parentColumnName: isJsonTable ? parentColumnName : undefined,
+                                nestedTableFieldName: isJsonTable ? nestedTableFieldName : undefined,
+                                onAllowedColumnsChange: mergedTableProps.onAllowedColumnsChange,
+                                visibleColumns: isJsonTable ? undefined : mergedTableProps.visibleColumns,
+                                onVisibleColumnsChange: isJsonTable ? undefined : mergedTableProps.onVisibleColumnsChange,
+                                forceBreakdown: mergedTableProps.forceBreakdown,
+                                reportDataOverride: mergedTableProps.reportDataOverride,
+                                showProviderHeader: mergedTableProps.showProviderHeader,
+                                forceEnableWrite: isJsonTable && currentQueryDoc?.enableWrite ? true : undefined,
+                                parentOriginalNestedTableDataRef: isJsonTable ? originalNestedTableDataRef : undefined,
+                                parentNestedTableEditingDataRef: isJsonTable ? nestedTableEditingDataRef : undefined,
+                                parentHandleDrawerSaveProp: isJsonTable ? handleDrawerSave : undefined,
+                                nestedTableTabId: isJsonTable ? tabId : undefined,
+                                onNestedBufferChange: isJsonTable ? handleNestedBufferChange : undefined,
+                                parentHandleAddNestedRowAtZero: isJsonTable ? (() => handleAddNestedRowAtZero(tabId)) : undefined,
+                                fallbackColumns: isJsonTable && tab.columns && isArray(tab.columns) && tab.columns.length > 0 ? tab.columns : undefined,
+                                onTableDataChange: isJsonTable ? (data) => { updateCurrentNestedTableData(tabId, data); } : undefined,
+                              }}
                             >
                               <DataTableComponent
-                                useOrchestrationLayer={true}
-                                enableFullscreenDialog={mergedTableProps.enableFullscreenDialog}
-                                scrollable={mergedTableProps.scrollable}
-                                scrollHeight={mergedTableProps.scrollHeight}
-                                rowsPerPageOptions={mergedTableProps.rowsPerPageOptions}
-                                defaultRows={mergedTableProps.defaultRows}
-                                enableCellEdit={mergedTableProps.enableCellEdit !== undefined ? mergedTableProps.enableCellEdit : false}
                                 tableName={mergedTableProps.tableName || 'table'}
-                                editableColumns={mergedTableProps.editableColumns || { main: [], nested: {}, object: {} }}
                               />
                             </DataProviderNew>
                           ) : (

@@ -227,11 +227,8 @@ export function TableViewer() {
               return (
                 <TabPanel key={queryKey} header={queryKey}>
                   <div className="h-full overflow-auto p-2">
-                    <DataProviderNew dataSource={null} offlineData={tableData} drawerTabs={[]} skipConfirmDialog>
-                      <DataTableComponent
-                        useOrchestrationLayer={true}
-                        enableFullscreenDialog={true}
-                      />
+                    <DataProviderNew config={{ dataSource: null, drawerTabs: [], enableFullscreenDialog: true }} offlineData={tableData} __internal={{ skipConfirmDialog: true }}>
+                      <DataTableComponent />
                     </DataProviderNew>
                   </div>
                 </TabPanel>
@@ -240,11 +237,8 @@ export function TableViewer() {
           </TabView>
         ) : (
           <div className="h-full overflow-auto p-2">
-            <DataProviderNew dataSource={null} offlineData={memoizedDataByKey[queryKeys[0]]} drawerTabs={[]} skipConfirmDialog>
-              <DataTableComponent
-                useOrchestrationLayer={true}
-                enableFullscreenDialog={true}
-              />
+            <DataProviderNew config={{ dataSource: null, drawerTabs: [], enableFullscreenDialog: true }} offlineData={memoizedDataByKey[queryKeys[0]]} __internal={{ skipConfirmDialog: true }}>
+              <DataTableComponent />
             </DataProviderNew>
           </div>
         )}
