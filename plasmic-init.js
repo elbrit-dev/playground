@@ -129,33 +129,18 @@ PLASMIC.registerComponent(DataProvider, {
   providesData: true,
   importPath: "./share/src/app/datatable/components/DataProvider",
 });
-
+ 
 PLASMIC.registerComponent(DataTableNew, {
   name: "DataTableNew",
   props: {
-    rowsPerPageOptions: {
-      type: "object",
-      defaultValue: [10, 25, 50, 100],
-      description: "Array of rows per page options",
-    },
-    defaultRows: {
-      type: "number",
-      defaultValue: 10,
-      description: "Default number of rows per page",
-    },
-    scrollable: {
-      type: "boolean",
-      defaultValue: true,
-      description: "Enable/disable table scrolling",
-    },
-    scrollHeight: {
+    slotId: {
       type: "string",
-      description: "Height of the scrollable area (e.g., '600px', 'flex' for dynamic)",
+      description: "Slot ID to select which slot's data to use (defaults to 'main' if not provided)",
     },
-    enableCellEdit: {
-      type: "boolean",
-      defaultValue: false,
-      description: "Enable cell editing",
+    tableName: {
+      type: "string",
+      defaultValue: "table",
+      description: "Name identifier for the table",
     },
     onCellEditComplete: {
       type: "eventHandler",
@@ -171,59 +156,10 @@ PLASMIC.registerComponent(DataTableNew, {
       type: "function",
       description: "Function to determine if a cell is editable: (rowData, field) => boolean",
     },
-    editableColumns: {
-      type: "object",
-      defaultValue: { main: [], nested: {} },
-      description: "Object defining editable columns. Format: { main: ['col1', 'col2'], nested: { parentCol: { nestedField: ['col1'] } } }. Empty main array means all columns editable. For nested tables, specify parent column and nested field name.",
-    },
-    enableFullscreenDialog: {
-      type: "boolean",
-      defaultValue: true,
-      description: "Enable/disable fullscreen dialog feature",
-    },
-    tableName: {
-      type: "string",
-      defaultValue: "table",
-      description: "Name identifier for the table",
-    },
-    useOrchestrationLayer: {
-      type: "boolean",
-      defaultValue: false,
-      description: "Use orchestration layer (must be child of DataProvider with useOrchestrationLayer=true)",
-    },
-    parentColumnName: {
-      type: "string",
-      description: "Parent column name for nested tables (used with nestedTableFieldName)",
-    },
-    nestedTableFieldName: {
-      type: "string",
-      description: "Nested table field name (used with parentColumnName for nested drawer tables)",
-    },
-    onOuterGroupClick: {
-      type: "eventHandler",
-      argTypes: [
-        { name: "rowData", type: "object" },
-        { name: "column", type: "string" },
-        { name: "value", type: "any" }
-      ],
-      description: "Handler for outer group row clicks (for backward compatibility)",
-    },
-    onInnerGroupClick: {
-      type: "eventHandler",
-      argTypes: [
-        { name: "rowData", type: "object" },
-        { name: "column", type: "string" },
-        { name: "value", type: "any" }
-      ],
-      description: "Handler for inner group row clicks (for backward compatibility)",
-    },
-    slotId: {
-      type: "string",
-      description: "Slot ID to select which slot's data to use (defaults to 'main' if not provided)",
-    },
   },
   importPath: "./share/src/app/datatable/components/DataTableNew",
 });
+ 
 
 PLASMIC.registerComponent(Navigation, {
   name: "Navigation",
