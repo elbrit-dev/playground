@@ -34,7 +34,7 @@ export const firestoreService = {
    */
   async saveQuery(operationName, data) {
     const docRef = doc(db, DEFAULT_COLLECTION, operationName);
-    await setDoc(docRef, data);
+    await setDoc(docRef, data, { merge: true });
   },
 
   /**
@@ -51,6 +51,7 @@ export const firestoreService = {
         ...data,
         searchFields: data.searchFields || {},
         sortFields: data.sortFields || {},
+        queryKeys: Array.isArray(data.queryKeys) ? data.queryKeys : [],
       };
     }
     return null;
@@ -73,32 +74,18 @@ export const firestoreService = {
   async getAllQueries() {
     const querySnapshot = await getDocs(collection(db, DEFAULT_COLLECTION));
     const queries = [];
-    querySnapshot.forEach((doc) => {
-      const body = doc.data().body || '';
+    querySnapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      const body = data.body || '';
       // Only include queries that have a body
       if (body.trim()) {
         queries.push({
-          id: doc.id,
-          name: doc.id,
-          body: body,
-          urlKey: doc.data().urlKey || '',
-          index: doc.data().index || '',
-          clientSave: doc.data().clientSave || false,
-          variables: doc.data().variables || '',
-          month: doc.data().month || false,
-          monthIndex: doc.data().monthIndex || '',
-          transformerCode: doc.data().transformerCode || '', // Include transformerCode (legacy)
-          readTransformerCode: doc.data().readTransformerCode !== undefined ? (doc.data().readTransformerCode || '') : undefined, // New format
-          writeTransformerCode: doc.data().writeTransformerCode !== undefined ? (doc.data().writeTransformerCode || '') : undefined, // New format
-          searchFields: doc.data().searchFields || {},
-          sortFields: doc.data().sortFields || {},
-          queryKeys: Array.isArray(doc.data().queryKeys) ? doc.data().queryKeys : [],
-          bodyUpdatedAt: doc.data().bodyUpdatedAt || null,
-          variablesUpdatedAt: doc.data().variablesUpdatedAt || null,
-          transformerCodeUpdatedAt: doc.data().transformerCodeUpdatedAt || null,
-          readTransformerCodeUpdatedAt: doc.data().readTransformerCodeUpdatedAt || null,
-          writeTransformerCodeUpdatedAt: doc.data().writeTransformerCodeUpdatedAt || null,
-          lastUpdatedBy: doc.data().lastUpdatedBy || null,
+          ...data,
+          id: docSnap.id,
+          name: docSnap.id,
+          searchFields: data.searchFields || {},
+          sortFields: data.sortFields || {},
+          queryKeys: Array.isArray(data.queryKeys) ? data.queryKeys : [],
         });
       }
     });

@@ -9,7 +9,8 @@ import { listLocalConfigs, getLocalConfig } from './providers/localConfigProvide
 import { defaultConfigId } from './configRegistry';
 import { deserializeJsToConfig } from './configSerializer';
 import { firestoreService } from '@/app/graphql-playground/services/firestoreService';
-// Future: import { listFirebaseConfigs, getFirebaseConfig } from './providers/firebaseConfigProvider';
+import { mergeColumnTypesOverride } from '../utils/columnTypesOverrideUtils';
+import { deepMergeWriteForm, normalizeWriteForm } from '../utils/writeFormUtils';
 
 /**
  * List all available configs (sync - from registry)
@@ -25,8 +26,6 @@ export function getConfigList() {
  */
 export async function listConfigs() {
   const local = listLocalConfigs();
-  // const remote = await listFirebaseConfigs?.() ?? [];
-  // return [...local, ...remote].sort((a, b) => a.displayName.localeCompare(b.displayName));
   return local;
 }
 
@@ -38,7 +37,6 @@ export async function listConfigs() {
 export async function getConfig(id) {
   const local = getLocalConfig(id);
   if (local) return local;
-  // return await getFirebaseConfig?.(id) ?? null;
   return null;
 }
 
@@ -52,7 +50,6 @@ export function getDefaultConfigId() {
 
 /**
  * Get default config synchronously (for initial state, default props).
- * Uses defaultConfigId from registry - change it to switch which config loads on page init.
  * @returns {Object|null} - The default config object or null
  */
 export function getDefaultConfig() {
@@ -67,52 +64,46 @@ export function getDefaultConfig() {
  */
 export function mergeConfig(userConfig = {}, baseConfig = getDefaultConfig()) {
   const base = baseConfig ?? {};
+  const mergedSlots = (() => {
+    const bs = base.slots;
+    const us = userConfig.slots;
+    if (!us || typeof us !== 'object') return bs;
+    if (!bs || typeof bs !== 'object') return us;
+    const ids = new Set([...Object.keys(bs), ...Object.keys(us)]);
+    const out = {};
+    for (const id of ids) {
+      const bSlot = bs[id] || {};
+      const uSlot = us[id];
+      if (!uSlot || typeof uSlot !== 'object') {
+        out[id] = bSlot;
+        continue;
+      }
+      out[id] = {
+        ...bSlot,
+        ...uSlot,
+        writeForm: deepMergeWriteForm(
+          bSlot.writeForm && typeof bSlot.writeForm === 'object' ? bSlot.writeForm : {},
+          uSlot.writeForm && typeof uSlot.writeForm === 'object' ? uSlot.writeForm : {},
+        ),
+        columnTypesOverride: mergeColumnTypesOverride(bSlot.columnTypesOverride, uSlot.columnTypesOverride),
+      };
+    }
+    return out;
+  })();
   return {
     ...base,
     ...userConfig,
-    columnTypesOverride: {
-      ...(base.columnTypesOverride || {}),
-      ...(userConfig.columnTypesOverride || {}),
-    },
-    formInputOverride: {
-      main: {
-        ...(base.formInputOverride?.main || {}),
-        ...(userConfig.formInputOverride?.main || {}),
-      },
-      nested: (() => {
-        const defaultNested = base.formInputOverride?.nested || {};
-        const userNested = userConfig.formInputOverride?.nested || {};
-        const tableNames = new Set([...Object.keys(defaultNested), ...Object.keys(userNested)]);
-        const merged = {};
-        for (const tableName of tableNames) {
-          merged[tableName] = {
-            ...(defaultNested[tableName] || {}),
-            ...(userNested[tableName] || {}),
-          };
-        }
-        return merged;
-      })(),
-      object: (() => {
-        const defaultObject = base.formInputOverride?.object || {};
-        const userObject = userConfig.formInputOverride?.object || {};
-        const objectColumns = new Set([...Object.keys(defaultObject), ...Object.keys(userObject)]);
-        const merged = {};
-        for (const columnName of objectColumns) {
-          merged[columnName] = {
-            ...(defaultObject[columnName] || {}),
-            ...(userObject[columnName] || {}),
-          };
-        }
-        return merged;
-      })(),
-    },
+    writeForm: deepMergeWriteForm(
+      base.writeForm && typeof base.writeForm === 'object' ? base.writeForm : {},
+      userConfig.writeForm && typeof userConfig.writeForm === 'object' ? userConfig.writeForm : {},
+    ),
+    columnTypesOverride: mergeColumnTypesOverride(base.columnTypesOverride, userConfig.columnTypesOverride),
     drawerTabs: userConfig.drawerTabs || base.drawerTabs,
-    slots: userConfig.slots || base.slots,
+    slots: mergedSlots,
     percentageColumns: userConfig.percentageColumns ?? base.percentageColumns,
     derivedColumns: userConfig.derivedColumns ?? base.derivedColumns,
     derivedRows: userConfig.derivedRows ?? base.derivedRows ?? null,
     rowColumnStyles: userConfig.rowColumnStyles ?? base.rowColumnStyles,
-    // allowedColumns: array = use as-is; object = deep-merge group key
     allowedColumns: (() => {
       const baseAC = base.allowedColumns;
       const userAC = userConfig.allowedColumns;
@@ -124,7 +115,7 @@ export function mergeConfig(userConfig = {}, baseConfig = getDefaultConfig()) {
           merged.group = { ...(baseAC?.group || {}), ...(userAC.group || {}) };
         }
         if (merged.reportGroup || baseAC?.reportGroup || userAC?.reportGroup) {
-          merged.reportGroup = { ...(baseAC?.reportGroup || {}), ...(userAC?.reportGroup || {}) };
+          merged.reportGroup = { ...(baseAC?.reportGroup || {}), ...(userAC.reportGroup || {}) };
         }
         return merged;
       }
@@ -135,9 +126,6 @@ export function mergeConfig(userConfig = {}, baseConfig = getDefaultConfig()) {
 
 /**
  * Resolve a config prop to a full config object.
- * Accepts a string (preset name looked up from local registry) or an object (used directly).
- * Does NOT merge with defaultConfig (which is a debug/dev config).
- * Safe defaults are applied later by extractStateFromConfig.
  * @param {string|Object} configProp - Preset name string or config object
  * @returns {Object} Resolved config object
  */
@@ -156,9 +144,9 @@ export function resolveConfig(configProp) {
 
 /**
  * Fetch and resolve a Firebase preset by name.
- * @param {string} dataSource - Query document ID (used as Firestore doc key)
+ * @param {string} dataSource - Query document ID
  * @param {string} presetName - Preset name
- * @returns {Promise<Object|null>} Resolved config object or null if not found
+ * @returns {Promise<Object|null>}
  */
 export async function resolveFirebaseConfig(dataSource, presetName) {
   if (!dataSource || !presetName) return null;
@@ -174,11 +162,9 @@ export async function resolveFirebaseConfig(dataSource, presetName) {
 
 /**
  * Extract state values from config (for applying to React state).
- * Each field has a hardcoded safe default as the final fallback so callers
- * never receive undefined for fields the component code calls methods on.
  * @param {Object} config - Configuration object
- * @param {Object} [baseConfig] - Optional base config for fallbacks (defaults to empty -- NOT the debug/dev defaultConfig)
- * @returns {Object} Object with state values extracted from config
+ * @param {Object} [baseConfig] - Optional base config for fallbacks
+ * @returns {Object}
  */
 export function extractStateFromConfig(config, baseConfig = {}) {
   const base = baseConfig ?? {};
@@ -197,7 +183,8 @@ export function extractStateFromConfig(config, baseConfig = {}) {
     textFilterColumns: config.textFilterColumns ?? base.textFilterColumns ?? [],
     allowedColumns: config.allowedColumns ?? base.allowedColumns ?? [],
     nonEditableColumns: config.nonEditableColumns ?? base.nonEditableColumns ?? [],
-    editableColumns: config.editableColumns ?? base.editableColumns ?? { main: [], nested: {}, object: {} },
+    writeForm: normalizeWriteForm(config.writeForm ?? base.writeForm ?? {}),
+    columnTypesOverride: config.columnTypesOverride ?? base.columnTypesOverride ?? {},
     percentageColumns: config.percentageColumns ?? base.percentageColumns ?? [],
     derivedColumns: config.derivedColumns ?? base.derivedColumns ?? [],
     derivedRows: config.derivedRows ?? base.derivedRows ?? null,
@@ -205,8 +192,6 @@ export function extractStateFromConfig(config, baseConfig = {}) {
     greenFields: config.greenFields ?? base.greenFields ?? [],
     rowColumnStyles: config.rowColumnStyles ?? base.rowColumnStyles ?? [],
     groupFields: config.groupFields ?? base.groupFields ?? [],
-    columnTypesOverride: config.columnTypesOverride ?? base.columnTypesOverride ?? {},
-    formInputOverride: config.formInputOverride ?? base.formInputOverride ?? {},
     drawerTabs: config.drawerTabs ?? base.drawerTabs ?? [],
     enableReport: config.enableReport ?? base.enableReport ?? false,
     showChart: config.showChart ?? base.showChart ?? false,
@@ -223,17 +208,16 @@ export function extractStateFromConfig(config, baseConfig = {}) {
     hqValues: config.hqValues ?? base.hqValues ?? [],
     dataSource: config.dataSource ?? base.dataSource ?? null,
     selectedQueryKey: config.selectedQueryKey ?? base.selectedQueryKey ?? null,
-    variableOverrides: config.variableOverrides ?? base.variableOverrides ?? {},
     slots: 'slots' in config ? config.slots : undefined,
+    writePermissions: config.writePermissions ?? base.writePermissions,
   };
 }
 
 /**
- * Check if config is dirty: in-memory preset (parsed from JS) differs from applied config.
- * Config-level check - compares config objects only.
- * @param {string} presetJsValue - Serialized config (JS string from editor or preset)
- * @param {Object|null} appliedConfig - The config object currently applied
- * @returns {boolean} True if dirty (preset differs from applied, or parse error)
+ * Check if config is dirty
+ * @param {string} presetJsValue
+ * @param {Object|null} appliedConfig
+ * @returns {boolean}
  */
 export function isConfigDirty(presetJsValue, appliedConfig) {
   const hasPreset = !!(presetJsValue && presetJsValue.trim());
@@ -243,10 +227,8 @@ export function isConfigDirty(presetJsValue, appliedConfig) {
   try {
     const parsed = deserializeJsToConfig(presetJsValue);
     const applied = appliedConfig ?? {};
-    const equal = isEqual(parsed, applied);
-    const dirty = !equal;
-    return dirty;
-  } catch (err) {
-    return true; // Invalid parse = treat as dirty (user has edits)
+    return !isEqual(parsed, applied);
+  } catch {
+    return true;
   }
 }

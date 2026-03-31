@@ -19,3 +19,19 @@ export function getEndpointAndAuth(queryDocument) {
   }
   return { endpointUrl, authToken };
 }
+
+/**
+ * Same as getEndpointAndAuth, but when graphqlToken is a non-empty string (after trim),
+ * use it as Authorization instead of env/urlKey-derived token.
+ * @param {object|null|undefined} queryDocument
+ * @param {string|null|undefined} graphqlToken
+ * @returns {{ endpointUrl: string|null|undefined, authToken: string|null|undefined }}
+ */
+export function getEndpointAndAuthWithTokenOverride(queryDocument, graphqlToken) {
+  const base = getEndpointAndAuth(queryDocument);
+  const trimmed = graphqlToken != null && typeof graphqlToken === 'string' ? graphqlToken.trim() : '';
+  if (trimmed) {
+    return { ...base, authToken: trimmed };
+  }
+  return base;
+}

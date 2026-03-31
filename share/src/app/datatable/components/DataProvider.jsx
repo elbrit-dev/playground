@@ -12,6 +12,7 @@ export default function DataProvider({
   onDataChange,
   onError,
   children,
+  overrides,
   __internal = {},
 }) {
   const [presetConfig, setPresetConfig] = useState(null);
@@ -60,6 +61,7 @@ export default function DataProvider({
         offlineData={offlineData}
         onDataChange={onDataChange}
         onError={onError}
+        overrides={overrides}
         __internal={__internal}
       >
         {children}
@@ -73,6 +75,7 @@ export default function DataProvider({
       offlineData={offlineData}
       onDataChange={onDataChange}
       onError={onError}
+      overrides={overrides}
       __internal={__internal}
     >
       {children}

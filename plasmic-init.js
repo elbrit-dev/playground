@@ -2,9 +2,7 @@ import React from 'react';
 import { initPlasmicLoader, DataProvider as PlasmicDataProvider } from "@plasmicapp/loader-nextjs";
 // import DataTable from "./components/DataTable";
 // import TableDataProvider from "./components/TableDataProvider";
-import DataProvider from "./share/src/app/datatable/components/DataProvider";
-import DataTableNew from "./share/src/app/datatable/components/DataTableNew";
-import Navigation from "./share/src/app/navigation/components/Navigation";
+import { registerElbritCoreComponents } from './share/src/plasmic-init'
 import CalendarPage from "@calendar/components/CalendarPage";
 // import NovuInbox from "./components/NovuInbox";
 import jmespath_plus from '@metrichor/jmespath-plus';
@@ -87,121 +85,128 @@ PLASMIC.registerComponent(CalendarPage, {
   },
 });
 
-PLASMIC.registerComponent(DataProvider, {
-  name: "DataProvider",
-  props: {
-    config: {
-      type: "object",
-      description: "Main configuration object. Use when passing config directly. When presetDataSource and presetName are set, config is ignored and the preset is loaded from Firebase instead.",
-    },
-    presetDataSource: {
-      type: "string",
-      description: "Firebase data source / query ID (e.g. 'Primary'). When set with presetName, loads config from Firebase instead of using config prop.",
-    },
-    presetName: {
-      type: "string",
-      description: "Name of the preset to load from Firebase. When set with presetDataSource, loads config from Firebase instead of using config prop.",
-    },
-    offlineData: {
-      type: "object",
-      description: "Offline/local data to use when dataSource is 'offline'",
-    },
-    onDataChange: {
-      type: "eventHandler",
-      argTypes: [{ name: "notification", type: "object" }],
-      description: "Callback when data changes",
-    },
-    onError: {
-      type: "eventHandler",
-      argTypes: [{ name: "error", type: "object" }],
-      description: "Callback when an error occurs",
-    },
-    __internal: {
-      type: "object",
-      description: "Internal/plumbing props for nested and drawer table scenarios. Keys: skipConfirmDialog (boolean), showProviderHeader (boolean), reportDataOverride (object), forceBreakdown (boolean), parentColumnName (string), nestedTableFieldName (string), forceEnableWrite (boolean), derivedColumnsMode (string), derivedColumnsFieldName (string), parentOriginalNestedTableDataRef (object), parentNestedTableEditingDataRef (object), parentHandleDrawerSaveProp (function), nestedTableTabId (string), fallbackColumns (object), onNestedBufferChange (function), parentHandleAddNestedRowAtZero (function), visibleColumns (object), onTableDataChange (function), onAllowedColumnsChange (function), onVisibleColumnsChange (function).",
-      defaultValue: {},
-    },
-    children: {
-      type: "slot",
-      description: "Slot to add custom UI components that can access the table data",
-    }
-  },
-  providesData: true,
-  importPath: "./share/src/app/datatable/components/DataProvider",
-});
+registerElbritCoreComponents(PLASMIC)
+
+// PLASMIC.registerComponent(DataProvider, {
+//   name: "DataProvider",
+//   props: {
+//     config: {
+//       type: "object",
+//       description: "Main configuration object. Use when passing config directly. When presetDataSource and presetName are set, config is ignored and the preset is loaded from Firebase instead.",
+//     },
+//     presetDataSource: {
+//       type: "string",
+//       description: "Firebase data source / query ID (e.g. 'Primary'). When set with presetName, loads config from Firebase instead of using config prop.",
+//     },
+//     presetName: {
+//       type: "string",
+//       description: "Name of the preset to load from Firebase. When set with presetDataSource, loads config from Firebase instead of using config prop.",
+//     },
+//     offlineData: {
+//       type: "object",
+//       description: "Offline/local data to use when dataSource is 'offline'",
+//     },
+//     onDataChange: {
+//       type: "eventHandler",
+//       argTypes: [{ name: "notification", type: "object" }],
+//       description: "Callback when data changes",
+//     },
+//     onError: {
+//       type: "eventHandler",
+//       argTypes: [{ name: "error", type: "object" }],
+//       description: "Callback when an error occurs",
+//     },
+//     overrides: {
+//       type: 'object',
+//       displayName: 'overrides',
+//       description: 'Optional { variables, token } for GraphQL variables and Authorization override.',
+//     },
+//     __internal: {
+//       type: "object",
+//       description: "Internal/plumbing props for nested and drawer table scenarios. Keys: skipConfirmDialog (boolean), showProviderHeader (boolean), reportDataOverride (object), forceBreakdown (boolean), parentColumnName (string), nestedTableFieldName (string), forceEnableWrite (boolean), derivedColumnsMode (string), derivedColumnsFieldName (string), parentOriginalNestedTableDataRef (object), parentNestedTableEditingDataRef (object), parentHandleDrawerSaveProp (function), nestedTableTabId (string), fallbackColumns (object), onNestedBufferChange (function), parentHandleAddNestedRowAtZero (function), visibleColumns (object), onTableDataChange (function), onAllowedColumnsChange (function), onVisibleColumnsChange (function).",
+//       defaultValue: {},
+//     },
+//     children: {
+//       type: "slot",
+//       description: "Slot to add custom UI components that can access the table data",
+//     }
+//   },
+//   providesData: true,
+//   importPath: "./share/src/app/datatable/components/DataProvider",
+// });
  
-PLASMIC.registerComponent(DataTableNew, {
-  name: "DataTableNew",
-  props: {
-    slotId: {
-      type: "string",
-      description: "Slot ID to select which slot's data to use (defaults to 'main' if not provided)",
-    },
-    tableName: {
-      type: "string",
-      defaultValue: "table",
-      description: "Name identifier for the table",
-    },
-    onCellEditComplete: {
-      type: "eventHandler",
-      argTypes: [
-        { name: "rowData", type: "object" },
-        { name: "field", type: "string" },
-        { name: "newValue", type: "any" },
-        { name: "oldValue", type: "any" }
-      ],
-      description: "Callback when cell edit is completed",
-    },
-    isCellEditable: {
-      type: "function",
-      description: "Function to determine if a cell is editable: (rowData, field) => boolean",
-    },
-  },
-  importPath: "./share/src/app/datatable/components/DataTableNew",
-});
+// PLASMIC.registerComponent(DataTableNew, {
+//   name: "DataTableNew",
+//   props: {
+//     slotId: {
+//       type: "string",
+//       description: "Slot ID to select which slot's data to use (defaults to 'main' if not provided)",
+//     },
+//     tableName: {
+//       type: "string",
+//       defaultValue: "table",
+//       description: "Name identifier for the table",
+//     },
+//     onCellEditComplete: {
+//       type: "eventHandler",
+//       argTypes: [
+//         { name: "rowData", type: "object" },
+//         { name: "field", type: "string" },
+//         { name: "newValue", type: "any" },
+//         { name: "oldValue", type: "any" }
+//       ],
+//       description: "Callback when cell edit is completed",
+//     },
+//     isCellEditable: {
+//       type: "function",
+//       description: "Function to determine if a cell is editable: (rowData, field) => boolean",
+//     },
+//   },
+//   importPath: "./share/src/app/datatable/components/DataTableNew",
+// });
  
 
-PLASMIC.registerComponent(Navigation, {
-  name: "Navigation",
-  props: {
-    items: {
-      type: "object",
-      description: "JSON array of navigation items. Each item should have: label (string), path (string), iconActive (JSX element), iconInactive (JSX element), mobileFullscreen (boolean), mobileOnly (boolean), isDefault (boolean), isDisabled (boolean). Icons must be JSX elements, not strings.",
-      defaultValue: [],
-    },
-    defaultIndex: {
-      type: "number",
-      defaultValue: 0,
-      description: "Fallback index if no URL path matches and no item has isDefault: true",
-    },
-    desktopWidth: {
-      type: "string",
-      defaultValue: "16rem",
-      description: "Width of the desktop sidebar navigation",
-    },
-    desktopHeight: {
-      type: "string",
-      defaultValue: "93dvh",
-      description: "Height of the desktop sidebar navigation",
-    },
-    mobileWidth: {
-      type: "string",
-      defaultValue: "100%",
-      description: "Width of the mobile bottom navigation",
-    },
-    mobileHeight: {
-      type: "string",
-      defaultValue: "4rem",
-      description: "Height of the mobile bottom navigation",
-    },
-    showCollapse: {
-      type: "boolean",
-      defaultValue: true,
-      description: "Show/hide the collapse button in desktop sidebar",
-    },
-  },
-  importPath: "./share/src/app/navigation/components/Navigation",
-});
+// PLASMIC.registerComponent(Navigation, {
+//   name: "Navigation",
+//   props: {
+//     items: {
+//       type: "object",
+//       description: "JSON array of navigation items. Each item should have: label (string), path (string), iconActive (JSX element), iconInactive (JSX element), mobileFullscreen (boolean), mobileOnly (boolean), isDefault (boolean), isDisabled (boolean). Icons must be JSX elements, not strings.",
+//       defaultValue: [],
+//     },
+//     defaultIndex: {
+//       type: "number",
+//       defaultValue: 0,
+//       description: "Fallback index if no URL path matches and no item has isDefault: true",
+//     },
+//     desktopWidth: {
+//       type: "string",
+//       defaultValue: "16rem",
+//       description: "Width of the desktop sidebar navigation",
+//     },
+//     desktopHeight: {
+//       type: "string",
+//       defaultValue: "93dvh",
+//       description: "Height of the desktop sidebar navigation",
+//     },
+//     mobileWidth: {
+//       type: "string",
+//       defaultValue: "100%",
+//       description: "Width of the mobile bottom navigation",
+//     },
+//     mobileHeight: {
+//       type: "string",
+//       defaultValue: "4rem",
+//       description: "Height of the mobile bottom navigation",
+//     },
+//     showCollapse: {
+//       type: "boolean",
+//       defaultValue: true,
+//       description: "Show/hide the collapse button in desktop sidebar",
+//     },
+//   },
+//   importPath: "./share/src/app/navigation/components/Navigation",
+// });
 
 // PLASMIC.registerComponent(NovuInbox, {
 //   name: "NovuInbox",

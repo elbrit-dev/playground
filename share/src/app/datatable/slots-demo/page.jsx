@@ -22,7 +22,7 @@ function SlotsDemoPage() {
         redFields: [],
         greenFields: [],
         enableCellEdit: false,
-        editableColumns: { main: [], nested: {} },
+        writeForm: { layout: {}, fields: {} },
         drawerTabs: [
           {
             id: 'salesTeamHq-tab-1',
@@ -51,7 +51,7 @@ function SlotsDemoPage() {
         redFields: [],
         greenFields: [],
         enableCellEdit: false,
-        editableColumns: { main: [], nested: {} },
+        writeForm: { layout: {}, fields: {} },
         drawerTabs: [
           {
             id: 'nameHq-tab-1',

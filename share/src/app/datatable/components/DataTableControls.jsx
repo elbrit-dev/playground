@@ -10,6 +10,7 @@ import { useTableOperations } from '../contexts/TableOperationsContext';
 import { deserializeJsToConfig } from '../config/configSerializer';
 import { getOrderedConfigEntries, isEmptyValue } from '../config/configReadableView';
 import { getDataKeys } from '../utils/dataAccessUtils';
+import DatatableDocsPanel from './DatatableDocsPanel';
 
 function ConfigReadableView({ presetJsValue }) {
   const { config, error } = useMemo(() => {
@@ -240,6 +241,7 @@ function ColumnNamesList({ columns = [] }) {
 const TAB_READ = 'read';
 const TAB_EDIT = 'edit';
 const TAB_INFO = 'info';
+const TAB_DOCS = 'docs';
 
 export default function DataTableControls({
   config,
@@ -303,7 +305,7 @@ export default function DataTableControls({
 
   return (
     <div className="@container h-full flex flex-col bg-white border-l border-gray-200">
-      <div className="border-b border-gray-200 bg-white hidden @[200px]:flex flex-1 flex-col min-h-0">
+      <div className="border-b border-gray-200 bg-white hidden @[200px]:flex flex-1 flex-col min-h-0 overflow-hidden">
         <div className="px-2 @3xs:px-4 py-2 @3xs:py-3 bg-gray-50 border-b border-gray-200 space-y-2">
           <div className="flex items-center gap-2">
             <i className="pi pi-database text-base @3xs:text-lg text-primary"></i>
@@ -375,7 +377,7 @@ export default function DataTableControls({
           </div>
         </div>
 
-        <div className="flex gap-4 px-2 @3xs:px-4 py-2 border-b border-gray-200 bg-gray-50/50">
+        <div className="flex flex-wrap gap-2 px-2 @3xs:px-4 py-2 border-b border-gray-200 bg-gray-50/50">
           <button
             type="button"
             onClick={() => setActiveTab(TAB_READ)}
@@ -396,6 +398,13 @@ export default function DataTableControls({
             className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${activeTab === TAB_INFO ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-200'}`}
           >
             Info
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab(TAB_DOCS)}
+            className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${activeTab === TAB_DOCS ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-200'}`}
+          >
+            Docs
           </button>
         </div>
 
@@ -432,6 +441,12 @@ export default function DataTableControls({
         {activeTab === TAB_INFO && (
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             <ColumnNamesList columns={allColumnNames} />
+          </div>
+        )}
+
+        {activeTab === TAB_DOCS && (
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <DatatableDocsPanel />
           </div>
         )}
       </div>
