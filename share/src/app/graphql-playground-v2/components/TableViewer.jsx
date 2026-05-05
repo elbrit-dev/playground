@@ -2,7 +2,7 @@
 
 import DataProviderNew from '@/app/datatable/components/DataProviderNew';
 import DataTableComponent from '@/app/datatable/components/DataTableNew';
-import { getEndpointConfigFromUrlKey, getInitialEndpoint } from '@/app/graphql-playground/constants';
+import { getEndpointConfigFromUrlKeyAsync, getInitialEndpointAsync } from '@/app/graphql-playground/constants';
 import { extractDataFromResponse } from '@/app/graphql-playground/utils/data-extractor';
 import {
   createExecutionContext,
@@ -104,8 +104,8 @@ export function TableViewer() {
                 throw new Error('Query key is required');
               }
 
-              const endpointConfig = getEndpointConfigFromUrlKey(selectedEnvironment);
-              const endpointUrl = endpointConfig?.endpointUrl || getInitialEndpoint()?.code;
+              const endpointConfig = await getEndpointConfigFromUrlKeyAsync(selectedEnvironment);
+              const endpointUrl = endpointConfig?.endpointUrl || (await getInitialEndpointAsync())?.code;
               const authToken = endpointConfig?.authToken || null;
 
               if (!endpointUrl) {

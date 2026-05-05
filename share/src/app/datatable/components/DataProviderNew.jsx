@@ -3296,7 +3296,7 @@ export default function DataProviderNew({
         return;
       }
 
-      const { endpointUrl, authToken } = getEndpointAndAuthWithTokenOverride(currentQueryDoc, graphqlToken);
+      const { endpointUrl, authToken } = await getEndpointAndAuthWithTokenOverride(currentQueryDoc, graphqlToken);
       if (!endpointUrl) {
         if (onDataChange) {
           onDataChange({ severity: 'error', summary: 'Save Failed', detail: 'GraphQL endpoint URL is not set.', life: 5000 });

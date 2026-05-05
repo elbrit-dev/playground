@@ -1,8 +1,36 @@
 import { doc, setDoc, getDoc, deleteDoc, updateDoc, deleteField, collection, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { DEFAULT_GQL_COLLECTION } from '../constants';
+const DEFAULT_COLLECTION = process.env.NEXT_PUBLIC_GQL_COLLECTION || 'gql';
+const GLOBAL_DOC_ID = '#__GLOBAL__#';
 
-const DEFAULT_COLLECTION = DEFAULT_GQL_COLLECTION;
+function sanitizeTokenRows(rows) {
+  if (!Array.isArray(rows)) return [];
+  const cleaned = rows
+    .map((row) => ({
+      name: String(row?.name || '').trim().toUpperCase(),
+      endpoint: String(row?.endpoint || '').trim(),
+      token: String(row?.token || '').trim(),
+      isDefault: Boolean(row?.isDefault),
+    }))
+    .filter((row) => row.name && row.endpoint);
+
+  if (cleaned.length === 0) return [];
+
+  let hasDefault = false;
+  const normalized = cleaned.map((row) => {
+    if (row.isDefault && !hasDefault) {
+      hasDefault = true;
+      return row;
+    }
+    return { ...row, isDefault: false };
+  });
+
+  if (!hasDefault) {
+    normalized[0] = { ...normalized[0], isDefault: true };
+  }
+
+  return normalized;
+}
 
 /**
  * Recursively convert Firestore Timestamps and other non-JSON-serializable values to JSON-safe format
@@ -100,7 +128,7 @@ export const firestoreService = {
    * @returns {Promise<void>}
    */
   async saveGlobalFunctions(functions) {
-    const docRef = doc(db, DEFAULT_COLLECTION, '#__GLOBAL__#');
+    const docRef = doc(db, DEFAULT_COLLECTION, GLOBAL_DOC_ID);
     await setDoc(docRef, { functions: functions || '' }, { merge: true });
   },
 
@@ -109,7 +137,7 @@ export const firestoreService = {
    * @returns {Promise<string>} The functions code as a string, or empty string if not found
    */
   async loadGlobalFunctions() {
-    const docRef = doc(db, DEFAULT_COLLECTION, '#__GLOBAL__#');
+    const docRef = doc(db, DEFAULT_COLLECTION, GLOBAL_DOC_ID);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
       const data = docSnap.data();
@@ -119,7 +147,7 @@ export const firestoreService = {
   },
 
   async loadPresets() {
-    const docRef = doc(db, DEFAULT_COLLECTION, '#__GLOBAL__#');
+    const docRef = doc(db, DEFAULT_COLLECTION, GLOBAL_DOC_ID);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
       return docSnap.data().presets || {};
@@ -128,13 +156,28 @@ export const firestoreService = {
   },
 
   async savePreset(name, jsonString) {
-    const docRef = doc(db, DEFAULT_COLLECTION, '#__GLOBAL__#');
+    const docRef = doc(db, DEFAULT_COLLECTION, GLOBAL_DOC_ID);
     await setDoc(docRef, { presets: { [name]: jsonString } }, { merge: true });
   },
 
   async deletePreset(name) {
-    const docRef = doc(db, DEFAULT_COLLECTION, '#__GLOBAL__#');
+    const docRef = doc(db, DEFAULT_COLLECTION, GLOBAL_DOC_ID);
     await updateDoc(docRef, { [`presets.${name}`]: deleteField() });
+  },
+
+  async loadGlobalTokens() {
+    const docRef = doc(db, DEFAULT_COLLECTION, GLOBAL_DOC_ID);
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) return [];
+    const data = docSnap.data();
+    return sanitizeTokenRows(data?.tokens);
+  },
+
+  async saveGlobalTokens(tokens) {
+    const docRef = doc(db, DEFAULT_COLLECTION, GLOBAL_DOC_ID);
+    const sanitized = sanitizeTokenRows(tokens);
+    await setDoc(docRef, { tokens: sanitized }, { merge: true });
+    return sanitized;
   },
 
   /**

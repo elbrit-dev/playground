@@ -1103,7 +1103,7 @@ Optional prop on **`DataProviderNew`** or **`DataProvider`** (not on `config`):
 ```
 
 - **`overrides.token`**: When it is a non-empty string (after trim), it is sent as the **`Authorization`** header for all datatable GraphQL traffic for that provider: main query pipeline (worker), index checks, month fetches, write-schema introspection, and save (`bulkCreate` / `bulkUpdate`) mutations.
-- When **`overrides`** is omitted or **`token`** is omitted or empty, auth continues to come from the query’s **`urlKey`** and **`NEXT_PUBLIC_GRAPHQL_AUTH_TOKEN_*`** env defaults (existing behavior in `getEndpointAndAuthWithTokenOverride`).
+- When **`overrides`** is omitted or **`token`** is omitted or empty, auth comes from the query’s **`urlKey`** resolved against global tokens stored in **`#__GLOBAL__#.tokens`** (managed in the **`/tokens`** UI). If `urlKey` is missing/invalid, the configured **default** token row is used.
 - **`overrides.variables`**: Merged over variables from the query document (and over legacy **`config.variableOverrides`** if still present on the config object for older presets). Prop values win on key conflicts.
 - Nested drawer **`DataProviderNew`** instances receive the same **`overrides`** object from the parent, so token and variable overrides stay aligned.
 

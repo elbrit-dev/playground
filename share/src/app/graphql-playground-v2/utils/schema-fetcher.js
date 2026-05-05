@@ -1,5 +1,5 @@
 import { buildClientSchema, parse } from 'graphql';
-import { GRAPHQL_ENDPOINTS, ENDPOINT_TOKENS } from '@/app/graphql-playground/constants';
+import { getEndpointConfigFromUrlKeyAsync } from '@/app/graphql-playground/constants';
 
 /**
  * GraphQL introspection query to fetch schema
@@ -125,7 +125,7 @@ function getSchemaCacheKey(environment, authTokenOverride) {
 /**
  * Fetches GraphQL schema via introspection query
  * @param {string} environment - Environment name ('UAT' or 'ERP')
- * @param {{ authToken?: string|null }} [options] - When authToken is non-empty, use for Authorization instead of ENDPOINT_TOKENS
+ * @param {{ authToken?: string|null }} [options] - When authToken is non-empty, use for Authorization instead of configured global token
  * @returns {Promise<GraphQLSchema>} GraphQL schema object
  */
 export async function fetchGraphQLSchema(environment, options = {}) {
@@ -136,8 +136,9 @@ export async function fetchGraphQLSchema(environment, options = {}) {
     return schemaCache.get(cacheKey);
   }
 
-  const endpointUrl = GRAPHQL_ENDPOINTS[environment];
-  const authToken = override || ENDPOINT_TOKENS[environment] || '';
+  const endpointConfig = await getEndpointConfigFromUrlKeyAsync(environment);
+  const endpointUrl = endpointConfig?.endpointUrl || '';
+  const authToken = override || endpointConfig?.authToken || '';
 
   if (!endpointUrl) {
     throw new Error(`GraphQL endpoint URL is not set for environment: ${environment}`);

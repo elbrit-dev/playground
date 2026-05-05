@@ -57,6 +57,14 @@ export default function AppHeader() {
       command: () => {
         router.push('/timeline');
       }
+    },
+    {
+      label: 'Global Tokens',
+      icon: 'pi pi-key',
+      url: '/tokens',
+      command: () => {
+        router.push('/tokens');
+      }
     }
   ].map(item => ({
     ...item,
