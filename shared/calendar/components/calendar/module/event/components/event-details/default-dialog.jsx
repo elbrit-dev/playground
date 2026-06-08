@@ -7,15 +7,14 @@ import { useCalendar } from "@calendar/components/calendar/contexts/calendar-con
 import { AddEditEventDialog } from "@calendar/components/calendar/dialogs/add-edit-event-dialog";
 import { buildParticipantsWithDetails } from "@calendar/lib/helper";
 import { resolveDisplayValueFromEvent } from "@calendar/lib/calendar/resolveDisplay";
-import { ICONS } from "../event-details-dialog";
-import { useDeleteEvent } from "../../hooks";
 import TiptapViewer from "@calendar/components/ui/TiptapViewer";
-import DeleteEventDialog from "../delete-event-dialog";
+import { ICONS } from "@calendar/components/calendar/dialogs/event-details-dialog";
+import DeleteEventDialog from "@calendar/components/calendar/dialogs/delete-event-dialog";
+import { useDeleteEvent } from "@calendar/components/calendar/hooks";
 
 export function EventDefaultDialog({
   event, setOpen
 }) {
-  console.log("EVENT", event)
   const { use24HourFormat, removeEvent, employeeOptions, doctorOptions } = useCalendar();
   const { handleDelete } = useDeleteEvent({
     removeEvent,

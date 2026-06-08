@@ -8,15 +8,15 @@ import { useCalendar } from "@calendar/components/calendar/contexts/calendar-con
 import { AddEditEventDialog } from "@calendar/components/calendar/dialogs/add-edit-event-dialog";
 import { buildParticipantsWithDetails } from "@calendar/lib/helper";
 import { resolveDisplayValueFromEvent } from "@calendar/lib/calendar/resolveDisplay";
-import { useDeleteEvent } from "../../hooks";
-import { ICONS } from "../event-details-dialog";
+import { useDeleteEvent } from "@calendar/components/calendar/hooks";
+import { ICONS } from "@calendar/components/calendar/dialogs/event-details-dialog";
 import { useEmployeeResolvers } from "@calendar/lib/employeeResolver";
-import { fetchEmployeeLeaveBalance, updateLeaveStatus } from "@calendar/services/event.service";
 import { LOGGED_IN_USER } from "@calendar/components/auth/calendar-users";
 import { resolveLeavePermissions } from "@calendar/lib/leavePermissions";
 import { toast } from "sonner";
 import TiptapViewer from "@calendar/components/ui/TiptapViewer";
-import DeleteEventDialog from "../delete-event-dialog";
+import DeleteEventDialog from "@calendar/components/calendar/dialogs/delete-event-dialog";
+import { fetchEmployeeLeaveBalance, updateLeaveStatus } from "@calendar/components/calendar/module/leave/services/leave.service";
 
 export function EventLeaveDialog({
 	event, setOpen,
@@ -83,6 +83,7 @@ export function EventLeaveDialog({
 	const permissions = useMemo(() => {
 		return resolveLeavePermissions({ event });
 	}, [event]);
+	console.log("events",permissions,event)
 	const handleStatusChange = async (newStatus) => {
 		try {
 			await updateLeaveStatus(event.erpName, newStatus);

@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchTodoComments, saveTodoComment } from "@calendar/services/event.service";
+import { fetchTodoComments, saveTodoComment } from "@calendar/components/calendar/module/todo/services/todo.service";
 import { getInitials } from "@calendar/lib/helper";
-import { LOGGED_IN_USER } from "../auth/calendar-users";
+import { LOGGED_IN_USER } from "@calendar/components/auth/calendar-users";
 
 export default function TodoComments({ todoName }) {
     const [comments, setComments] = useState([]);

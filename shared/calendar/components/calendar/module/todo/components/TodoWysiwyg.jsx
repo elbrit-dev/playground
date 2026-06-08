@@ -4,7 +4,6 @@
 import {
   useEditor,
   EditorContent,
-  Editor,
   useEditorState,
 } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -28,7 +27,7 @@ import {
 import { Button } from "@calendar/components/ui/button";
 import { Input } from "@calendar/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@calendar/components/ui/popover";
-import { ReactNode, useState } from "react";
+import {  useState } from "react";
 import {
   Select,
   SelectContent,
@@ -36,8 +35,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@calendar/components/ui/select";
-import { BubbleMenu as TiptapBubbleMenu } from "@tiptap/react";
-import { FloatingMenu as TiptapFloatingMenu } from "@tiptap/react";
+import { BubbleMenu as TiptapBubbleMenu } from "@tiptap/react/menus";
+import { FloatingMenu as TiptapFloatingMenu } from "@tiptap/react/menus";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import BulletList from "@tiptap/extension-bullet-list";

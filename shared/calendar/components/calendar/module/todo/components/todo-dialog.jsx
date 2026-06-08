@@ -8,11 +8,11 @@ import { useCalendar } from "@calendar/components/calendar/contexts/calendar-con
 import { useEmployeeResolvers } from "@calendar/lib/employeeResolver";
 import { TAG_FORM_CONFIG } from "@calendar/lib/calendar/form-config";
 import { AddEditEventDialog } from "@calendar/components/calendar/dialogs/add-edit-event-dialog";
-import { useDeleteEvent } from "../../hooks";
-import { getPriorityClass, getStatusBadgeClass } from "../../helpers";
+import { getPriorityClass, getStatusBadgeClass } from "@calendar/components/calendar/helpers";
 import TiptapViewer from "@calendar/components/ui/TiptapViewer";
-import TodoComments from "@calendar/components/ui/TodoCommentsSection";
-import DeleteEventDialog from "../delete-event-dialog";
+import TodoComments from "@calendar/components/calendar/module/todo/components/TodoCommentsSection";
+import { useDeleteEvent } from "@calendar/components/calendar/hooks";
+import DeleteEventDialog from "@calendar/components/calendar/dialogs/delete-event-dialog";
 
 /* =====================================================
    PURE HELPERS

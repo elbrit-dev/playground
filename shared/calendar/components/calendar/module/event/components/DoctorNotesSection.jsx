@@ -4,11 +4,11 @@ import { useState } from "react";
 import { Button } from "@calendar/components/ui/button";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
-import Tiptap from "@calendar/components/ui/TodoWysiwyg";
+import Tiptap from "@calendar/components/calendar/module/todo/components/TodoWysiwyg";
 
-import { addLeadNote, deleteLeadNote } from "@calendar/services/event.service";
-import { clearParticipantCache } from "@calendar/lib/participants-cache";
-import { fetchDoctors } from "@calendar/services/participants.service";
+import { addLeadNote, deleteLeadNote } from "@calendar/components/calendar/module/event/services/event.service";
+import { clearParticipantCache } from "@calendar/lib/data-cache";
+import { fetchDoctors } from "@calendar/components/calendar/module/event/services/master-data.service";
 
 export function DoctorNotesSection({
   doctorId,
@@ -46,7 +46,6 @@ export function DoctorNotesSection({
 
   const handleDeleteNote = async (noteName) => {
     try {
-      console.log("NOTE",doctorId,noteName)
       await deleteLeadNote(doctorId, noteName);
   
       toast.success("Note deleted");
@@ -76,7 +75,6 @@ export function DoctorNotesSection({
         const formattedDate = noteObj.creation
           ? new Date(noteObj.creation).toLocaleDateString("en-GB")
           : "";
-console.log("NOTE OBJ",noteObj)
         return (
           <div
             key={index}
