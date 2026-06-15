@@ -83,6 +83,14 @@ PLASMIC.registerComponent(CalendarPage, {
       type: "object",
       helpText: "Result of GraphQL `me` query",
     },
+    googleClientId:{
+      type: "string",
+      helpText: "Google Client ID",
+    },
+    googleRedirectUri:{
+      type: "string",
+      helpText: "Google Redirect URI",
+    },
   },
 });
 
