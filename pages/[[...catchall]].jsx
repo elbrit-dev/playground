@@ -5,6 +5,16 @@ import Error from "next/error";
 
 export default function PlasmicPage(props) {
   const { plasmicData, queryParams } = props;
+
+  // Render the Plasmic tree client-side only. Some page data bindings read
+  // `localStorage` (e.g. the auth token) during render; on the server that
+  // throws "localStorage is not defined" and Next falls back to client
+  // rendering. Gating on mount skips the server render of the tree entirely.
+  // First client render also returns null (matches the server) so there is no
+  // hydration mismatch, then the effect flips `mounted` and the page renders.
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
+
   if (!plasmicData || plasmicData.entryCompMetas.length === 0) {
     return <Error statusCode={404} />;
   }
@@ -14,7 +24,9 @@ export default function PlasmicPage(props) {
       prefetchedData={plasmicData}
       prefetchedQueryData={queryParams}
     >
-      <PlasmicComponent component={plasmicData.entryCompMetas[0].displayName} />
+      {mounted && (
+        <PlasmicComponent component={plasmicData.entryCompMetas[0].displayName} />
+      )}
     </PlasmicRootProvider>
   );
 }
