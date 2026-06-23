@@ -40,6 +40,10 @@ export default function GoogleCallbackPage() {
             email,
             authToken,
             erpUrl,
+            // Send the exact redirect_uri used to land here. It equals the one
+            // used in the authorization request (same origin + /google-callback),
+            // so the token exchange can never drift from it.
+            redirectUri: `${window.location.origin}/google-callback`,
           }),
         });
 
@@ -51,7 +55,7 @@ export default function GoogleCallbackPage() {
           throw new Error(data?.message || "Google connection failed");
         }
 
-        router.push("/");
+        router.push("/planner");
       } catch (error) {
         console.error("Google connect error", error);
       }
