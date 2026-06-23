@@ -7,7 +7,7 @@ import { Button } from "@calendar/components/ui/button";
 
 
 export default function GoogleCalendarConnect() {
-  const { me, googleClientId, googleRedirectUri, } = useAuth();
+  const { me, googleClientId, erpUrl, authToken } = useAuth();
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   useEffect(() => {
@@ -35,15 +35,21 @@ export default function GoogleCalendarConnect() {
       console.error("User email not found");
       return;
     }
-  
+
     localStorage.setItem(
       "google_calendar_email",
       me.email
     );
-  
+
     const redirectUri =
       `${window.location.origin}/google-callback`;
-  
+    const state = encodeURIComponent(
+      JSON.stringify({
+        email: me.email,
+        erpUrl,
+        authToken,
+      })
+    );
     const params = new URLSearchParams({
       client_id: googleClientId,
       redirect_uri: redirectUri,
@@ -52,22 +58,22 @@ export default function GoogleCalendarConnect() {
       prompt: "consent",
       scope:
         "https://www.googleapis.com/auth/calendar",
-        state: me.email,
+      state,
     });
-  
+
     window.location.href =
       `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
   };
   if (loading) return null;
 
-  // if (connected) {
-  //   return (
-  //    null
-  //   );
-  // }
+  if (connected) {
+    return (
+      null
+    );
+  }
 
   return (
-    <Button  onClick={handleGoogleConnect}>
+    <Button onClick={handleGoogleConnect}>
       Connect Google Calendar
     </Button>
   );
