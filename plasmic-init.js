@@ -98,13 +98,13 @@ PLASMIC.registerComponent(NetworkBanner, {
   name: "NetworkBanner",
   displayName: "Network Banner",
   description:
-    "Auto-showing banner that appears when the network is slow or offline, and hides itself when the connection is good. Drop it once near the top of a page (or in a layout).",
+    "Auto-showing toast that floats in a corner when the network is slow or offline, and hides itself (taking no layout space) when the connection is good. Because it is position:fixed, it can be dropped anywhere on the page/layout.",
   props: {
     position: {
       type: "choice",
       options: ["top", "bottom"],
       defaultValue: "top",
-      description: "Stick the banner to the top or bottom of the viewport.",
+      description: "Pin the toast to the top-right or bottom-right corner of the viewport.",
     },
     showWhenFast: {
       type: "boolean",
