@@ -8,21 +8,15 @@ import { useCalendar } from "@calendar/components/calendar/contexts/calendar-con
 import { AddEditEventDialog } from "@calendar/components/calendar/dialogs/add-edit-event-dialog";
 import { buildParticipantsWithDetails } from "@calendar/lib/helper";
 import { resolveDisplayValueFromEvent } from "@calendar/lib/calendar/resolveDisplay";
-import { useDeleteEvent } from "@calendar/components/calendar/hooks";
-import { ICONS } from "@calendar/components/calendar/dialogs/event-details-dialog";
+import { useDeleteEvent } from "../../hooks";
+import { ICONS } from "../event-details-dialog";
 import { useEmployeeResolvers } from "@calendar/lib/employeeResolver";
+import { fetchEmployeeLeaveBalance, updateLeaveStatus } from "@calendar/services/event.service";
 import { LOGGED_IN_USER } from "@calendar/components/auth/calendar-users";
 import { resolveLeavePermissions } from "@calendar/lib/leavePermissions";
 import { toast } from "sonner";
 import TiptapViewer from "@calendar/components/ui/TiptapViewer";
-import DeleteEventDialog from "@calendar/components/calendar/dialogs/delete-event-dialog";
-import { fetchEmployeeLeaveBalance, updateLeaveStatus } from "@calendar/components/calendar/module/leave/services/leave.service";
-import {
-	DetailSummary,
-	DetailItem,
-	DetailGrid,
-	DetailFooter,
-} from "@calendar/components/calendar/dialogs/event-details/detail-ui";
+import DeleteEventDialog from "../delete-event-dialog";
 
 export function EventLeaveDialog({
 	event, setOpen,
@@ -34,6 +28,7 @@ export function EventLeaveDialog({
 		onClose: () => setOpen(false),
 	});
 	const [leaveBalance, setLeaveBalance] = useState(null);
+
 	useEffect(() => {
 		let alive = true;
 
@@ -86,14 +81,7 @@ export function EventLeaveDialog({
 	const available =
 		leaveBalance?.[leaveType]?.available ?? null;
 	const permissions = useMemo(() => {
-		const resolved = resolveLeavePermissions({ event });
-		if (event?.__syncStatus === "failed") {
-			return {
-				...resolved,
-				canEditDelete: true,
-			};
-		}
-		return resolved;
+		return resolveLeavePermissions({ event });
 	}, [event]);
 	const handleStatusChange = async (newStatus) => {
 		try {
@@ -118,20 +106,28 @@ export function EventLeaveDialog({
 	};
 	return (
 		<>
-			<ScrollArea className="max-h-[68vh]">
-				<div className="space-y-5 p-1">
-					<DetailSummary
-						title={leaveType ? `${leaveType}` : "Leave"}
-						subtitle={
-							formattedRange
-								? available !== null
-									? `${formattedRange} · ${String(available).padStart(2, "0")} days available`
-									: formattedRange
-								: null
-						}
-						status={status}
-						accentClassName="bg-rose-500"
-					/>
+			<ScrollArea className="max-h-[80vh]">
+				<div className="p-2">
+					{/* 🔷 HEADER ROW */}
+					<div className="flex items-start justify-between">
+						<div className="space-y-1">
+							<p className="text-base font-medium">
+								{formattedRange}
+							</p>
+
+							{available !== null && (
+								<p className="text-sm text-muted-foreground">
+									{String(available).padStart(2, "0")} Days Available
+								</p>
+							)}
+						</div>
+
+						<div>
+							<span className="text-sm font-medium text-orange-500">
+								{status}
+							</span>
+						</div>
+					</div>
 					<EventDetailsFields
 						event={eventWithOptions}
 						config={tagConfig}
@@ -139,8 +135,8 @@ export function EventLeaveDialog({
 					/>
 				</div>
 			</ScrollArea>
+			<div className="flex justify-end gap-2">
 
-			<DetailFooter>
 				{/* OWNER */}
 				{permissions.canEditDelete && (
 					<>
@@ -148,13 +144,12 @@ export function EventLeaveDialog({
 							event={event}
 							forceValues={editAction?.setOnEdit}
 						>
-							<Button variant="outline" className="w-full sm:w-auto">
+							<Button variant="outline">
 								{editAction?.label ?? "Edit"}
 							</Button>
 						</AddEditEventDialog>
 
 						<DeleteEventDialog
-							className="w-full sm:w-auto"
 							onConfirm={() => handleDelete(event.erpName, "Leave Application", event)}
 						/>
 					</>
@@ -163,23 +158,21 @@ export function EventLeaveDialog({
 				{/* MANAGER */}
 				{permissions.canApproveReject && (
 					<>
-						<Button
-							className="w-full sm:w-auto"
-							onClick={() => handleStatusChange("Approved")}
-						>
+						<Button onClick={() => handleStatusChange("Approved")}>
 							Approve
 						</Button>
 
 						<Button
 							variant="destructive"
-							className="w-full sm:w-auto"
 							onClick={() => handleStatusChange("Rejected")}
 						>
 							Reject
 						</Button>
+
 					</>
 				)}
-			</DetailFooter>
+			</div>
+
 		</>
 	);
 }
@@ -189,40 +182,48 @@ export function EventDetailsFields({ event, config, use24HourFormat }) {
 	if (!config?.details?.layout) return null;
 
 	const { layout, fields } = config.details;
-	const flatFields = layout
-		.flatMap((row) => row.fields)
-		.map((key) => ({ key, ...fields[key] }))
-		.filter((field) => field?.label);
-
-	const descriptionField = flatFields.find((field) => field.key === "description");
-	const gridFields = flatFields.filter((field) => field.key !== "description");
 
 	return (
-		<div className="space-y-5">
-			<DetailGrid>
-				{gridFields.map((field) => {
-					const Icon = ICONS[field.type] ?? ICONS["text"];
-					const value = resolveDisplayValueFromEvent({
-						event,
-						field,
-						use24HourFormat,
-					});
-					if (!value) return null;
-					return (
-						<DetailItem key={field.key} icon={Icon} label={field.label}>
-							{value}
-						</DetailItem>
-					);
-				})}
-			</DetailGrid>
+		<div className="space-y-6">
+			{layout.map((row, rowIndex) => (
+				<div
+					key={rowIndex}
+					className={`grid gap-6 ${row.columns === 2 ? "grid-cols-2" : "grid-cols-1"
+						}`}
+				>
+					{row.fields.map((fieldKey) => {
+						const field = fields[fieldKey];
+						if (!field) return null;
 
-			{descriptionField && event.description ? (
-				<DetailItem icon={ICONS["text"]} label={descriptionField.label}>
-					<div className="prose prose-sm dark:prose-invert max-w-none">
-						<TiptapViewer content={event.description} />
-					</div>
-				</DetailItem>
-			) : null}
+						const Icon = ICONS[field.type] ?? ICONS["text"];
+
+						const value = resolveDisplayValueFromEvent({
+							event,
+							field: { ...field, key: fieldKey },
+							use24HourFormat,
+						});
+
+						if (!value) return null;
+
+						return (
+							<div key={fieldKey} className="space-y-1">
+								<p className="text-sm font-medium text-muted-foreground">
+									{field.label}
+								</p>
+
+								{/* Description HTML */}
+								{fieldKey === "description" ? (
+									<div className="prose prose-sm dark:prose-invert max-w-none">
+										<TiptapViewer content={event.description} />
+									</div>
+								) : (
+									<p className="text-sm">{value}</p>
+								)}
+							</div>
+						);
+					})}
+				</div>
+			))}
 		</div>
 	);
 }

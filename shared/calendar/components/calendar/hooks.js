@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { TAG_IDS } from "@calendar/components/calendar/constants";
 import { useRef } from "react";
 import { toast } from "sonner";
-import { deleteEventFromErp } from "@calendar/components/calendar/module/event/services/event.service";
+import {
+  discardQueuedSubmission,
+  enqueueDeletion,
+} from "@calendar/lib/calendar/submission-queue";
 export function useDisclosure({
 	defaultIsOpen = false
 } = {}) {
@@ -88,17 +91,44 @@ export const useSubmissionRouter = ({
 export function useDeleteEvent({ removeEvent, onClose }) {
   const deleteLockRef = useRef(false);
 
-  const handleDelete = async (erpName,docname) => {
+  const handleDelete = async (erpName, docname, event) => {
     if (deleteLockRef.current) return;
     deleteLockRef.current = true;
 
     try {
-      await deleteEventFromErp(erpName,docname);
-      removeEvent(erpName);
+      if (event?.__pendingDelete) {
+        toast.info("Delete is already queued for sync.");
+        return;
+      }
+
+      const queueId = event?.__localQueueId;
+      const isLocalOnly =
+        !!queueId || String(erpName ?? "").startsWith("local-");
+
+      if (isLocalOnly) {
+        discardQueuedSubmission({
+          queueId,
+          erpName,
+        });
+        removeEvent(erpName);
+        onClose?.();
+        toast.success("Queued event removed.");
+        return;
+      }
+
+      await enqueueDeletion({
+        event,
+        docname,
+      });
       onClose?.();
-      toast.success("Event deleted successfully.");
+      toast.info("Delete queued for sync.");
     } catch (e) {
-      toast.error("Error deleting event.");
+      const message =
+        e?.response?.errors?.[0]?.message ||
+        e?.graphQLErrors?.[0]?.message ||
+        e?.message ||
+        "Error deleting event.";
+      toast.error(message);
     } finally {
       deleteLockRef.current = false;
     }

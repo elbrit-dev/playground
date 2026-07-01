@@ -18,9 +18,9 @@ const pobItemSchema = z
       ])
       .transform((v) => (typeof v === "string" ? v : v.value)),
 
-    qty: z.number().min(1),
-    rate: z.number().min(0),
-    amount: z.number(),
+    qty: z.coerce.number().min(1),
+    rate: z.coerce.number().min(0),
+    amount: z.coerce.number(),
   })
   .superRefine((row, ctx) => {
     const expected = row.qty * row.rate;
@@ -48,19 +48,21 @@ export const eventSchema = z
     description: z.string().optional(),
     color: z.string().optional(),
     forceVisit: z.boolean().optional(),
-    distanceKm: z.number().nullable().optional(),
+    distanceKm: z.coerce.number().nullable().optional(),
     employees: z.any().optional(),
     doctor: z.any().optional(),
     allocated_to:z.any().optional(),
     hqTerritory: z.string().optional(),
     customer: z.string().optional(),
     allDay: z.boolean().optional(),
+    enableGoogleMeet: z.boolean().optional(),
 
     /* ---------- Leave ---------- */
     leaveType: z.string().optional(),
     leavePeriod: z.enum(["Full", "Half"]).optional(),
     medicalAttachment: z.any().optional(),
     halfDayDate: z.date().optional(),
+    halfDayPosition: z.enum(["FIRST_DAY", "LAST_DAY"]).optional(),
     approvedBy: z.string().optional(),
     assignedTo:z.any().optional(),
     /* ---------- Todo ---------- */
@@ -73,8 +75,8 @@ export const eventSchema = z
     roleId: z.string().optional(),
     leave_approver:z.string().optional(),
     attending: z.enum(["Yes", "No","Maybe",""]).optional(),
-    custom_latitude: z.number().optional(),
-    custom_longitude: z.number().optional(),
+    custom_latitude: z.coerce.number().nullable().optional(),
+    custom_longitude: z.coerce.number().nullable().optional(),
   })
   .superRefine((data, ctx) => {
     const config = TAG_FORM_CONFIG[data.tags] ?? TAG_FORM_CONFIG.DEFAULT;
@@ -130,11 +132,11 @@ export const eventSchema = z
     if (
       data.tags === TAG_IDS.LEAVE &&
       data.leavePeriod === "Half" &&
-      !data.halfDayDate
+      !data.halfDayPosition
     ) {
       ctx.addIssue({
-        path: ["halfDayDate"],
-        message: "Half Day Date is required",
+        path: ["halfDayPosition"],
+        message: "Select which day is the half day",
         code: z.ZodIssueCode.custom,
       });
     }

@@ -36,6 +36,7 @@ query EventsByRange(
         }
         reference_doctype__name
         reference_docname__name
+        google_meet_link
         custom_hq__name:${ERP_EVENT_FIELDS.hqRead}
         event_participants {
           reference_doctype__name
@@ -66,6 +67,7 @@ query RoleProfiles($first: Int) {
     edges {
       node {
       role_id:${ERP_ROLE_PROFILE_FIELDS.roleId}
+      is_group
       custom_department {
         department_name
         lft
@@ -93,8 +95,7 @@ export function normalizeRoleProfiles(data) {
 							node?.custom_department?.department_name ?? null,
 						parent_elbrit_role_id__name:
 							node?.parent_role_id?.name ?? null,
-						is_group:
-							node?.parent_role_id?.is_group ?? false,
+						is_group: node?.is_group ?? false,
 					},
 				})) ?? [],
 		},
@@ -211,11 +212,12 @@ query Quotations(
 }
 `;
 export const CUSTOMER_QUERY = `
-query Customers($first: Int) {
-  Customers(first: $first) {
+query Customers($first: Int, $filters: [DBFilterInput!]) {
+  Customers(first: $first, filter: $filters) {
     edges {
       node {
        name
+       territory__name
       }
     }
   }

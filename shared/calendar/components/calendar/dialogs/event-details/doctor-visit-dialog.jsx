@@ -7,30 +7,31 @@ import { TAG_FORM_CONFIG } from "@calendar/lib/calendar/form-config";
 import { ScrollArea } from "@calendar/components/ui/scroll-area";
 import { useCalendar } from "@calendar/components/calendar/contexts/calendar-context";
 import { AddEditEventDialog } from "@calendar/components/calendar/dialogs/add-edit-event-dialog";
+import { addLeadNote, saveEvent } from "@calendar/services/event.service";
 import { TAG_IDS } from "@calendar/components/calendar/constants";
 import { LOGGED_IN_USER } from "@calendar/components/auth/calendar-users";
+// import { resolveDoctorVisitState, submitDoctorVisitLocation } from "@calendar/lib/doctorVisitState";
 import { buildParticipantsWithDetails } from "@calendar/lib/helper";
-import { useDeleteEvent } from "@calendar/components/calendar/hooks";
+import { useDeleteEvent } from "../../hooks";
 import { useDoctorResolvers } from "@calendar/lib/doctorResolver";
 import { useEmployeeResolvers } from "@calendar/lib/employeeResolver";
 import { joinDoctorVisit, leaveDoctorVisit } from "@calendar/lib/helper";
+import { clearParticipantCache } from "@calendar/lib/participants-cache";
+import { fetchDoctors } from "@calendar/services/participants.service";
 import { CircleCheck, Copy } from "lucide-react"
 import { useCallback } from "react";
-import DeleteEventDialog from "@calendar/components/calendar/dialogs/delete-event-dialog";
-import { DoctorNotesSection } from "@calendar/components/calendar/module/event/components/DoctorNotesSection";
-import { format, parseISO, isValid } from "date-fns";
-import {
-  DetailSummary,
-  DetailFooter,
-} from "@calendar/components/calendar/dialogs/event-details/detail-ui";
+import { DoctorNotesSection } from "../../doctor/DoctorNotesSection";
+import DeleteEventDialog from "../delete-event-dialog";
 /* =====================================================
    PURE HELPERS (NO LOGIC CHANGE)
 ===================================================== */
 
 function resolveDoctorDetails(event, doctorResolvers) {
-  const doctorId = Array.isArray(event.doctor)
-    ? event.doctor[0]
-    : event.doctor;
+  const doctorRef = event.participants?.find(
+    (p) => p.type === "Lead"
+  );
+
+  const doctorId = doctorRef?.id;
   if (!doctorId) return null;
 
   return {
@@ -75,11 +76,17 @@ export function EventDoctorVisitDialog({
     doctorOptions,
     addEvent, setDoctorOptions
   } = useCalendar();
+  const [showEditor, setShowEditor] = useState(false);
+  const [newNote, setNewNote] = useState("");
 
   const { handleDelete } = useDeleteEvent({
     removeEvent,
     onClose: () => setOpen(false),
   });
+  const handleCancelNote = useCallback(() => {
+    setShowEditor(false);
+    setNewNote("");
+  }, []);
   const doctorResolvers = useDoctorResolvers(doctorOptions);
   const employeeResolvers = useEmployeeResolvers(employeeOptions);
   const employeeMap = useMemo(() => {
@@ -117,7 +124,7 @@ export function EventDoctorVisitDialog({
 
   const employeeParticipants = useMemo(
     () => resolveEmployeeParticipants(event, employeeMap),
-    [event, employeeMap]
+    [event.participants, employeeMap]
   );
   const tagConfig =
     TAG_FORM_CONFIG[event.tags] ?? TAG_FORM_CONFIG.DEFAULT;
@@ -157,16 +164,45 @@ export function EventDoctorVisitDialog({
     isDoctorVisit,
     isEmployeeParticipant,
     tagConfig,
-    event,
+    event.erpName,
+    event.tags,
+    event.participants,
   ]);
+
 
   /* ================= Doctor Info ================= */
 
   const doctorDetails = useMemo(
     () => resolveDoctorDetails(event, doctorResolvers),
-    [event, doctorResolvers]
+    [event.participants, doctorResolvers]
   );
 
+  /* ================= Participants ================= */
+
+  const handleSaveNote = async () => {
+    try {
+      await addLeadNote(
+        doctorDetails.doctorId,
+        newNote
+      );
+
+      toast.success("Note added");
+
+      // 🔥 Invalidate cache
+      clearParticipantCache("DOCTOR");
+
+      // 🔄 Refetch doctors
+      const doctors = await fetchDoctors();
+      setDoctorOptions(doctors);
+
+      setShowEditor(false);
+      setNewNote("");
+
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to save note");
+    }
+  };
   /* ================= Join Logic ================= */
 
   const handleJoin = async () => {
@@ -254,14 +290,9 @@ export function EventDoctorVisitDialog({
   /* =====================================================
    RENDER
 ===================================================== */
-  const lat = Number(currentEmployeeParticipant?.custom_latitude);
-  const lng = Number(currentEmployeeParticipant?.custom_longitude);
 
   const hasLocation =
-    lat !== 0 &&
-    lng !== 0 &&
-    !isNaN(lat) &&
-    !isNaN(lng);
+    !!currentEmployeeParticipant?.kly_lat_long;
 
   const isAttending =
     currentEmployeeParticipant?.attending?.toLowerCase() === "yes";
@@ -290,18 +321,8 @@ export function EventDoctorVisitDialog({
 
   return (
     <>
-      <ScrollArea className="max-h-[68vh]">
-        <div className="p-1 space-y-4">
-          <DetailSummary
-            title={doctorDetails?.doctorName || "Doctor Visit"}
-            subtitle={
-              event.startDate && isValid(parseISO(event.startDate))
-                ? format(parseISO(event.startDate), "EEE, d MMM yyyy")
-                : null
-            }
-            status={isVisitCompleted ? "Completed" : event.status}
-            accentClassName="bg-emerald-500"
-          />
+      <ScrollArea className="max-h-[80vh]">
+        <div className="p-2 space-y-4">
           {/* Doctor Section */}
           {doctorDetails?.doctorId && (
             <div className="space-y-1">
@@ -344,47 +365,6 @@ export function EventDoctorVisitDialog({
                   {doctorDetails.doctorCity}
                 </p>
               )}
-            </div>
-          )}
-          {(event.hqTerritory ||
-            (event.distanceKm != null && Number(event.distanceKm) > 0)) && (
-            <div className="flex flex-wrap gap-x-6 gap-y-2">
-              {event.hqTerritory && (
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground/80">
-                    HQ Territory
-                  </p>
-                  <p className="text-[13px]">{event.hqTerritory}</p>
-                </div>
-              )}
-              {event.distanceKm != null && Number(event.distanceKm) > 0 && (
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground/80">
-                    Distance from doctor
-                  </p>
-                  <p className="text-[13px]">
-                    {Number(event.distanceKm).toFixed(2)} km
-                    {event.forceVisit ? (
-                      <span className="ml-1.5 rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-700">
-                        Force visit
-                      </span>
-                    ) : null}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-          {event.owner && (
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground/80">
-                Created By
-              </p>
-              <p className="text-[13px] text-muted-foreground">
-                {event.ownerFullName} • {event.ownerEmployeeId}
-                {event.ownerEmail ? (
-                  <span className="block text-[11px]">{event.ownerEmail}</span>
-                ) : null}
-              </p>
             </div>
           )}
           <p className="text-sm font-medium mb-[4px]">Participants</p>
@@ -489,7 +469,7 @@ export function EventDoctorVisitDialog({
       </ScrollArea>
 
       {/* Footer */}
-      <DetailFooter>
+      <div className="flex justify-end gap-2">
         {permissions.canEdit && (!isVisitCompleted || isFailedSync) && (
           <>
             {isFailedSync ? (
@@ -500,7 +480,7 @@ export function EventDoctorVisitDialog({
                     ?.setOnEdit
                 }
               >
-                <Button className="w-full sm:w-auto">
+                <Button>
                   Edit
                 </Button>
               </AddEditEventDialog>
@@ -509,7 +489,6 @@ export function EventDoctorVisitDialog({
             {permissions.canJoin && (
               <Button
                 variant="success"
-                className="w-full sm:w-auto"
                 onClick={handleJoin}
               >
                 Join
@@ -520,7 +499,6 @@ export function EventDoctorVisitDialog({
               <>
                 <Button
                   variant="destructive"
-                  className="w-full sm:w-auto"
                   onClick={handleLeaveVisit}
                 >
                   Remove
@@ -532,7 +510,7 @@ export function EventDoctorVisitDialog({
                       ?.setOnEdit
                   }
                 >
-                  <Button className="w-full sm:w-auto">
+                  <Button>
                     {tagConfig.ui?.primaryEditAction
                       ?.label ?? "Visit"}
                   </Button>
@@ -544,12 +522,12 @@ export function EventDoctorVisitDialog({
         )}
 
         {permissions.canDelete && (!hasParticipants || isFailedSync) && (
-          <DeleteEventDialog
-            className="w-full sm:w-auto"
+            <DeleteEventDialog
             onConfirm={() => handleDelete(event.erpName, undefined, event)}
           />
         )}
-      </DetailFooter>
+      </div>
     </>
   );
 }
+

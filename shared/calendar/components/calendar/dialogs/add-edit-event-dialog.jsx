@@ -6,7 +6,10 @@ import { toast } from "sonner";
 import { LOGGED_IN_USER } from "@calendar/components/auth/calendar-users";
 import { buildEventDefaultValues, TAG_IDS, TAGS } from "@calendar/components/calendar/constants";
 import { mapFormToErpEvent } from "@calendar/components/calendar/module/event/mappers/event-to-erp";
-import { saveEvent, saveDocToQuotation, fetchGoogleCalendarStatus } from "@calendar/components/calendar/module/event/services/event.service";
+import {
+	fetchCustomersByTerritory,
+	fetchGoogleCalendarStatus,
+} from "@calendar/components/calendar/module/event/services/event.service";
 import { useWatch } from "react-hook-form";
 import { LeaveTypeCards } from "@calendar/components/calendar/leave/LeaveTypeCards";
 import { Form, FormControl, FormField, } from "@calendar/components/ui/form";
@@ -24,7 +27,6 @@ import { TimePicker } from "@calendar/components/ui/TimePicker";
 import { enrichTodoOwner, mapErpTodoToCalendar, mapFormToErpTodo } from "@calendar/components/calendar/module/todo/mappers/todo.mapper";
 import { mapErpLeaveToCalendar, mapFormToErpLeave } from "@calendar/components/calendar/module/leave/mappers/leave.mapper";
 import { useEmployeeResolvers } from "@calendar/lib/employeeResolver";
-import { uploadLeaveMedicalCertificate } from "@calendar/lib/file.service";
 import {
 	fetchDoctorsByTerritory,
 	fetchItems,
@@ -34,27 +36,41 @@ import {
 import { buildParticipantsWithDetails, getAvailableItems, normalizeMeetingTimes, normalizeNonMeetingDates, resolveLatLong, showFirstFormErrorAsToast, syncPobItemRates, updatePobRow } from "@calendar/lib/helper";
 import { Button } from "@calendar/components/ui/button";
 import { resolveDisplayValueFromEvent } from "@calendar/lib/calendar/resolveDisplay";
-import { useAuth } from "@calendar/components/auth/auth-context";
 import Tiptap from "@calendar/components/calendar/module/todo/components/TodoWysiwyg";
 import { mapDoctorVisitToQuotation } from "@calendar/components/calendar/module/event/mappers/quotation-to-erp";
 import { calculateDistanceKm, findOverlappingHqEvent, getDisabledHqDates } from "@calendar/components/calendar/helpers";
 import { useDoctorResolvers } from "@calendar/lib/doctorResolver";
 import { DoctorNotesSection } from "../module/event/components/DoctorNotesSection";
 import TodoComments from "@calendar/components/calendar/module/todo/components/TodoCommentsSection";
+import { ErrorBoundary } from "@calendar/components/ui/error-boundary";
 import { Textarea } from "@calendar/components/ui/textarea";
-import { fetchEmployeeLeaveBalance, saveLeaveApplication, updateLeaveAttachment } from "@calendar/components/calendar/module/leave/services/leave.service";
-import { saveDocToErp } from "@calendar/components/calendar/module/todo/services/todo.service";
-import { resolveSuperiorShareUserIds } from "@calendar/lib/employeeHeirachy";
+import { fetchEmployeeLeaveBalance } from "@calendar/components/calendar/module/leave/services/leave.service";
+import { resolveDepartmentRoleIds, resolveLoggedInRoleId, resolveSuperiorShareUserIds } from "@calendar/lib/employeeHeirachy";
+import { enqueueSubmission } from "@calendar/lib/calendar/submission-queue";
+
+// Head-office teams that are allowed to apply for Half Day leave. Field-sales
+// users (BE/ABM/RBM/SM role profiles) do not get Half Day. Matched as a whole
+// segment of the role profile name (e.g. "IT-...", "...-HR-..."), so update this
+// list if the HO role-profile naming differs.
+const HEAD_OFFICE_ROLE_KEYWORDS = ["IT", "MIS", "HR", "PMT", "DESIGN"];
+
+function isHeadOfficeRole(roleId) {
+	if (!roleId) return false;
+	const segments = String(roleId)
+		.toUpperCase()
+		.split(/[^A-Z0-9]+/)
+		.filter(Boolean);
+	return segments.some((segment) => HEAD_OFFICE_ROLE_KEYWORDS.includes(segment));
+}
 
 export function AddEditEventDialog({ children, event, defaultTag, forceValues, startDate: initialStartDate }) {
 	const { isOpen, onClose, onOpen } = useDisclosure();
-	const { erpUrl, authToken } = useAuth();
-	const { addEvent, updateEvent, removeEvent, employeeOptions,
+	const { employeeOptions,
 		allEmployeeOptions,
 		doctorOptions, events,
 		hqTerritoryOptions,
 		setEmployeeOptions, territoryDoctors, setTerritoryDoctors,
-		setDoctorOptions, customerOptions, selectedDate, allowedEmployeeIds,
+		setDoctorOptions, customerOptions, setCustomerOptions, selectedDate, allowedEmployeeIds,
 		setHqTerritoryOptions, users, elbritRoleEdges } = useCalendar();
 	const isEditing = !!event;
 	const [leaveBalance, setLeaveBalance] = useState(null);
@@ -71,7 +87,6 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 	const [doctorSearchLoading, setDoctorSearchLoading] = useState(false);
 	const lastEmployeeSearchRef = useRef("");
 	const lastDoctorSearchRef = useRef("");
-	const employeePickerOptions = allEmployeeOptions;
 	const form = useForm({
 		resolver: zodResolver(eventSchema),
 		mode: "onChange",
@@ -212,6 +227,7 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 		reset({
 			employees: undefined, doctor: isDoctorMulti ? [] : undefined,
 			status: "Open", priority: "Medium", title: "",
+			enableGoogleMeet: false,
 		});
 		// ❌ HQ is REQUIRED for this tag — never reset it
 		if (selectedTag !== TAG_IDS.HQ_TOUR_PLAN) {
@@ -370,6 +386,49 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 			null
 		);
 	}, [allEmployeeOptions, users]);
+	// Half Day leave is only for head-office teams (IT/MIS/HR/PMT/Design).
+	// Use the reliable role (custom_role_profile via the employee list), not the
+	// host-supplied me.roleId which can be stale.
+	const isHeadOfficeUser = useMemo(
+		() => isHeadOfficeRole(resolveLoggedInRoleId(users)),
+		[users]
+	);
+	// Event form picker: all employees under the user's department (not the role hierarchy).
+	const employeePickerOptions = useMemo(() => {
+		const deptOptions =
+			!currentUserRoleId || currentUserRoleId === "Admin"
+				? allEmployeeOptions
+				: (() => {
+						const departmentRoleIds = resolveDepartmentRoleIds(
+							elbritRoleEdges,
+							currentUserRoleId
+						);
+						if (!departmentRoleIds.length) return allEmployeeOptions;
+						const allowedRoleIds = new Set(departmentRoleIds);
+						return allEmployeeOptions.filter(
+							(option) =>
+								option.value === LOGGED_IN_USER.id ||
+								(option.roleId && allowedRoleIds.has(option.roleId))
+						);
+				  })();
+
+		// On edit, keep already-attached participants selectable/visible even if
+		// they fall outside the user's department (older or cross-team events) —
+		// otherwise a required `employees`/`allocated_to` empties out and silently
+		// blocks the Update.
+		if (!isEditing || deptOptions === allEmployeeOptions) return deptOptions;
+
+		const present = new Set(deptOptions.map((option) => option.value));
+		const existingIds = new Set(
+			(event?.participants ?? [])
+				.filter((participant) => participant?.type === "Employee" && participant?.id)
+				.map((participant) => String(participant.id))
+		);
+		const extras = allEmployeeOptions.filter(
+			(option) => existingIds.has(option.value) && !present.has(option.value)
+		);
+		return extras.length ? [...deptOptions, ...extras] : deptOptions;
+	}, [allEmployeeOptions, currentUserRoleId, elbritRoleEdges, isEditing, event?.participants]);
 	const shareUsers = useMemo(() => {
 		if (users.length) {
 			return users;
@@ -390,6 +449,29 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 			currentUserRoleId
 		).filter((userId) => userId !== LOGGED_IN_USER.email);
 	}, [currentUserRoleId, elbritRoleEdges, isEditing, shareUsers]);
+	// Share basis by tag:
+	// - HQ Tour Plan / Doctor Visit Plan -> hierarchy (share up to superiors).
+	// - Meeting / Todo / Other -> team-based (share with the selected participants).
+	const collectParticipantShareEmails = (values) => {
+		const emails = new Set();
+		["employees", "allocated_to", "assignedTo"].forEach((field) => {
+			const value = values[field];
+			if (!value) return;
+			(Array.isArray(value) ? value : [value]).forEach((emp) => {
+				if (!emp) return;
+				const email =
+					typeof emp === "object"
+						? emp.email
+						: allEmployeeOptions.find((opt) => opt.value === emp)?.email;
+				if (email && email !== LOGGED_IN_USER.email) emails.add(email);
+			});
+		});
+		return [...emails];
+	};
+	const getShareUserIds = (values) =>
+		[TAG_IDS.HQ_TOUR_PLAN, TAG_IDS.DOCTOR_VISIT_PLAN].includes(values.tags)
+			? superiorUserIds
+			: collectParticipantShareEmails(values);
 	useEffect(() => {
 		if (!startDate || !endDate) return;
 
@@ -466,6 +548,10 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 				shouldDirty: false,
 				shouldValidate: false,
 			});
+			form.setValue("halfDayPosition", "FIRST_DAY", {
+				shouldDirty: false,
+				shouldValidate: false,
+			});
 		}
 	}, [leavePeriod]); // 🔧 LEAVE HALF DAY FIX
 	/* ---------------------------------------------
@@ -474,6 +560,10 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 
 	useEffect(() => {
 		if (!isEditing) return;
+		// Only act when the edit form is actually open — this dialog also mounts
+		// (closed) behind the event-details popup, and we must not fetch device
+		// location then or it spams a geolocation toast on every detail open.
+		if (!isOpen) return;
 		endDateTouchedRef.current = true;
 
 		// 📍 Doctor Visit Plan: capture endDate ONCE
@@ -490,9 +580,11 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 			endDateTouchedRef.current = true;
 		}
 
-		// existing geo logic (unchanged)
-		resolveLatLong(form, isEditing, toast);
-	}, [isEditing]);
+		// Location is only relevant to Doctor Visit Plans (force-visit distance).
+		if (selectedTag === TAG_IDS.DOCTOR_VISIT_PLAN) {
+			resolveLatLong(form, isEditing, toast);
+		}
+	}, [isEditing, isOpen, selectedTag]);
 	/* ---------------------------------------------
 	  Load Calendar Google Calendar 
 	--------------------------------------------- */
@@ -753,6 +845,8 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 
 		return `${doctorName}-Visit-${ownerName}`;
 	};
+	const createLocalEventId = (prefix = "local-event") =>
+		`${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 	const resetAndCloseDialog = () => {
 		endDateTouchedRef.current = false;
 		reset({
@@ -765,6 +859,7 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 			custom_force_visit_reason: "", leaveType: undefined,
 			leavePeriod: "Full",
 			halfDayDate: undefined,
+			halfDayPosition: "FIRST_DAY",
 			medicalAttachment: undefined, allocated_to: undefined,
 			assignedTo: [], custom_latitude: undefined, custom_longitude: undefined,
 			hqTerritory: "",
@@ -774,6 +869,10 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 	};
 	const finalize = (message) => {
 		toast.success(message);
+		resetAndCloseDialog();
+	};
+	const finalizeQueued = (message) => {
+		toast.info(message);
 		resetAndCloseDialog();
 	};
 	function normalizePobItemsForUI(items = []) {
@@ -789,9 +888,6 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 	}
 
 
-	const upsertCalendarEvent = (calendarEvent) => {
-		event ? updateEvent(calendarEvent) : addEvent(calendarEvent);
-	};
 	const normalizeDoctorValueForEvent = (doctorValue, tagConfig) => {
 		if (!doctorValue) return undefined;
 
@@ -1009,6 +1105,51 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 			form.setValue("fsl_doctor_item", [], { shouldDirty: true });
 		}
 	}, [customer]);
+	useEffect(() => {
+		if (
+			!isEditing ||
+			selectedTag !== TAG_IDS.DOCTOR_VISIT_PLAN ||
+			pobGiven !== "Yes"
+		) {
+			return;
+		}
+
+		const territoryName = hqTerritory || event?.hqTerritory;
+		if (!territoryName) {
+			setCustomerOptions([]);
+			return;
+		}
+
+		let cancelled = false;
+
+		fetchCustomersByTerritory(territoryName)
+			.then((customers) => {
+				if (cancelled) return;
+				setCustomerOptions(
+					customers.map((name) => ({
+						label: name,
+						value: name,
+					}))
+				);
+			})
+			.catch((error) => {
+				console.error("Failed to fetch territory customers", error);
+				if (!cancelled) {
+					setCustomerOptions([]);
+				}
+			});
+
+		return () => {
+			cancelled = true;
+		};
+	}, [
+		event?.hqTerritory,
+		hqTerritory,
+		isEditing,
+		pobGiven,
+		selectedTag,
+		setCustomerOptions,
+	]);
 	const isMutationPending = form.formState.isSubmitting;
 	useEffect(() => {
 		if (typeof window === "undefined" || !isMutationPending) return;
@@ -1035,8 +1176,7 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 	const handleDefaultEvent = async (values) => {
 		let quotationName =
 			event?.reference_docname || null;
-		let savedQuotation = null;
-		let quotationSavePromise = null;
+		let quotationDoc = null;
 
 		// Only for Doctor Visit Plan
 		if (
@@ -1051,21 +1191,14 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 					? selectedDoctor?.value
 					: selectedDoctor;
 
-			const quotationDoc =
+			quotationDoc =
 				mapDoctorVisitToQuotation({
 					values,
 					doctorId,
 					existingName: quotationName,
+					eventName: event?.erpName,
 				});
-
-			if (quotationName) {
-				quotationSavePromise =
-					saveDocToQuotation(quotationDoc);
-			} else {
-				savedQuotation =
-					await saveDocToQuotation(quotationDoc);
-				quotationName = savedQuotation.name;
-			}
+			quotationName = quotationDoc.name ?? quotationName;
 		}
 		const erpDoc = mapFormToErpEvent(values, {
 			erpName: event?.erpName,
@@ -1081,30 +1214,11 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 			erpDoc.reference_doctype = "Quotation";
 			erpDoc.reference_docname = quotationName;
 		}
-
-		const eventSavePromise = saveEvent(erpDoc, {
-			shareWithUserIds: superiorUserIds,
-			deferShareSync: false,
-			skipExistingShareCheck: !event?.erpName,
-		});
-		let savedEvent;
-		if (quotationSavePromise) {
-			[savedQuotation, savedEvent] = await Promise.all([
-				quotationSavePromise,
-				eventSavePromise,
-			]);
-		} else {
-			savedEvent = await eventSavePromise;
-		}
-
-		if (savedQuotation?.name && !quotationName) {
-			quotationName = savedQuotation.name;
-		}
-			const calendarEvent = buildCalendarEvent({
+		const calendarEvent = buildCalendarEvent({
 				event,
 				values,
 				erpDoc,
-				savedName: savedEvent.name,
+				savedName: event?.erpName ?? createLocalEventId("local-event"),
 				tagConfig,
 				employeeOptions: employeePickerOptions,
 				doctorOptions,
@@ -1116,9 +1230,27 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 				event?.ownerFullName || LOGGED_IN_USER.name,
 		});
 		ensureDoctorOptionsAvailable(values.doctor);
-		upsertCalendarEvent(calendarEvent);
+		await enqueueSubmission({
+			kind: "event",
+			replaceQueueId: event?.__localQueueId ?? null,
+			targetErpName: event?.erpName ?? null,
+			optimisticEvent: calendarEvent,
+			payload: {
+				erpDoc,
+				quotationDoc,
+				saveOptions: {
+					shareWithUserIds: getShareUserIds(values),
+					deferShareSync: false,
+					skipExistingShareCheck: !event?.erpName,
+				},
+			},
+		});
 
-		finalize("Event updated");
+		finalizeQueued(
+			isEditing
+				? "Event queued for sync"
+				: "Event queued for sync"
+		);
 	};
 	const handleDoctorVisitPlan = async (values) => {
 		const normalizedDoctors = (Array.isArray(values.doctor)
@@ -1152,7 +1284,9 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 							: "IT Elbrit"
 				});
 
-				const optimisticEventId = `temp-${Date.now()}-${doctorId}`;
+				const optimisticEventId = createLocalEventId(
+					`local-doctor-visit-${doctorId}`
+				);
 				const optimisticEvent = buildCalendarEvent({
 					values: enrichedValues,
 					erpDoc,
@@ -1164,33 +1298,21 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 					ownerEmailOverride: LOGGED_IN_USER.email,
 					ownerFullNameOverride: LOGGED_IN_USER.name,
 				});
-				addEvent(optimisticEvent);
-
-				try {
-					const savedEvent = await saveEvent(erpDoc, {
+				await enqueueSubmission({
+					kind: "event",
+					targetErpName: null,
+					optimisticEvent,
+					payload: {
+						erpDoc,
+						quotationDoc: null,
+						saveOptions: {
 						shareWithUserIds: superiorUserIds,
 						deferShareSync: false,
 						skipExistingShareCheck: true,
-					});
-
-					const calendarEvent = buildCalendarEvent({
-						values: enrichedValues,
-						erpDoc,
-						savedName: savedEvent.name,
-						tagConfig,
-						employeeOptions: employeePickerOptions,
-						doctorOptions,
-						ownerEmployeeIdOverride: LOGGED_IN_USER.id,
-						ownerEmailOverride: LOGGED_IN_USER.email,
-						ownerFullNameOverride: LOGGED_IN_USER.name,
-					});
-					removeEvent(optimisticEventId);
-					addEvent(calendarEvent);
-					return savedEvent;
-				} catch (error) {
-					removeEvent(optimisticEventId);
-					throw error;
-				}
+						},
+					},
+				});
+				return optimisticEventId;
 			})
 		);
 
@@ -1200,7 +1322,9 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 		const failedCount = totalDoctors - successCount;
 
 		if (failedCount === 0) {
-			finalize(`Created ${successCount} Doctor Visit events`);
+			finalizeQueued(
+				`${successCount} Doctor Visit event${successCount > 1 ? "s" : ""} queued for sync`
+			);
 			return;
 		}
 
@@ -1226,44 +1350,34 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 			});
 			delete leaveDoc.custom_attachement;
 
-			const savedLeave = await saveLeaveApplication(leaveDoc, {
-				erpName: event?.erpName,
-				shareWithUserIds: superiorUserIds,
-				deferShareSync: false,
-				skipExistingShareCheck: !event?.erpName,
-			});
-
-			// 🚨 If backend returned null (GraphQL validation error case)
-			if (!savedLeave) {
-				toast.error("Failed to apply leave. Please try again.");
-				return;
-			}
-
-			if (requiresMedical && values.medicalAttachment) {
-				const uploadResult = await uploadLeaveMedicalCertificate(
-					values,
-					savedLeave.name,
-					erpUrl,
-					authToken
-				);
-
-				if (uploadResult?.fileUrl) {
-					await updateLeaveAttachment(
-						savedLeave.name,
-						uploadResult.fileUrl
-					);
-				}
-			}
-
+			// No DocShare for leave — the approval workflow already routes the
+			// application to the leave approver, so sharing is redundant (and the
+			// approver may lack "Share" permission, which would fail the save).
 			const calendarLeave = mapErpLeaveToCalendar({
 				...leaveDoc,
-				name: savedLeave.name,
+				name: event?.erpName ?? createLocalEventId("local-leave"),
 				employee_name: LOGGED_IN_USER.name,
 				color: "#DC2626",
 			});
 
-			upsertCalendarEvent(calendarLeave);
-			finalize("Leave applied successfully");
+			await enqueueSubmission({
+				kind: "leave",
+				replaceQueueId: event?.__localQueueId ?? null,
+				targetErpName: event?.erpName ?? null,
+				optimisticEvent: calendarLeave,
+				payload: {
+					leaveDoc,
+					saveOptions: {
+						erpName: event?.erpName,
+					},
+					medicalAttachment: values.medicalAttachment,
+				},
+			});
+			finalizeQueued(
+				isEditing
+					? "Leave queued for sync"
+					: "Leave queued for sync"
+			);
 
 		} catch (error) {
 			console.error("Leave submission error:", error);
@@ -1282,26 +1396,40 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 			erpName: event?.erpName,
 		});
 
-		const savedTodo = await saveDocToErp(todoDoc, {
-			shareWithUserIds: superiorUserIds,
-			deferShareSync: false,
-			skipExistingShareCheck: !event?.erpName,
-		});
-
 		const calendarTodo = enrichTodoOwner(
 			mapErpTodoToCalendar({
 				...todoDoc,
-				name: savedTodo.name,
+				name: event?.erpName ?? createLocalEventId("local-todo"),
 			}),
 			employeeResolvers
 		);
 
-		upsertCalendarEvent(calendarTodo);
+		await enqueueSubmission({
+			kind: "todo",
+			replaceQueueId: event?.__localQueueId ?? null,
+			targetErpName: event?.erpName ?? null,
+			optimisticEvent: calendarTodo,
+			payload: {
+				todoDoc,
+				saveOptions: {
+					shareWithUserIds: getShareUserIds(values),
+					deferShareSync: false,
+					skipExistingShareCheck: !event?.erpName,
+				},
+			},
+		});
 
-		finalize("Todo saved");
+		finalizeQueued(
+			isEditing
+				? "Todo queued for sync"
+				: "Todo queued for sync"
+		);
 	};
 	const onInvalid = (errors) => {
-		showFirstFormErrorAsToast(errors);
+		const shown = showFirstFormErrorAsToast(errors);
+		if (!shown) {
+			toast.error("Please fill in all required fields before submitting.");
+		}
 	};
 	const submitHandlers = useSubmissionRouter({
 		isEditing,
@@ -1331,16 +1459,49 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 						allowedEmployeeIds,
 						currentEventId:
 							event?.erpName,
+						hqTerritory: values.hqTerritory,
 					});
 
 				if (conflict) {
 					toast.error(
-						"HQ Tour Plan already exists for the selected date range."
+						`An HQ Tour Plan for ${values.hqTerritory || "this HQ"} already exists on the selected date.`
 					);
 
 					return;
 				}
 			}
+
+			// A doctor can't be visited twice on the same day. Different doctors
+			// on the same day, or the same doctor on different days, are fine.
+			if (values.tags === TAG_IDS.DOCTOR_VISIT_PLAN) {
+				const selectedDay = startOfDay(new Date(values.startDate)).getTime();
+				const selectedDoctorIds = (
+					Array.isArray(values.doctor) ? values.doctor : [values.doctor]
+				)
+					.map((d) => (typeof d === "object" ? d?.value : d))
+					.filter(Boolean);
+
+				const clash = events.find((ev) => {
+					if (ev.tags !== TAG_IDS.DOCTOR_VISIT_PLAN) return false;
+					if (event?.erpName && ev.erpName === event.erpName) return false;
+					if (
+						startOfDay(new Date(ev.startDate)).getTime() !== selectedDay
+					)
+						return false;
+					const evDoctorIds = (
+						Array.isArray(ev.doctor) ? ev.doctor : [ev.doctor]
+					).filter(Boolean);
+					return selectedDoctorIds.some((id) => evDoctorIds.includes(id));
+				});
+
+				if (clash) {
+					toast.error(
+						"A visit for this doctor is already planned on the selected day."
+					);
+					return;
+				}
+			}
+
 			await handler(values);
 		} catch (error) {
 			console.error("Submit error:", error);
@@ -1458,8 +1619,14 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 										/>
 										{field.value && leaveBalance?.[field.value] && (
 											<div className="mt-2 text-sm text-muted-foreground">
-												Balance: {leaveBalance[field.value].available} /{" "}
-												{leaveBalance[field.value].allocated}
+												{leaveBalance[field.value].isLeaveWithoutPay ? (
+													"Leave Without Pay is always selectable."
+												) : (
+													<>
+														Balance: {leaveBalance[field.value].available} /{" "}
+														{leaveBalance[field.value].allocated}
+													</>
+												)}
 											</div>
 										)}
 									</RHFFieldWrapper>
@@ -1502,6 +1669,18 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 										<InlineCheckboxField
 											label="All day"
 											checked={field.value}
+											onChange={field.onChange}
+										/>
+									)}
+								/>
+
+								<FormField
+									control={form.control}
+									name="enableGoogleMeet"
+									render={({ field }) => (
+										<InlineCheckboxField
+											label="Enable Google Meet"
+											checked={Boolean(field.value)}
 											onChange={field.onChange}
 										/>
 									)}
@@ -1747,7 +1926,7 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 							/>
 						)}
 						{/* ================= HALF DAY ================= */}
-						{selectedTag === TAG_IDS.LEAVE && (
+						{selectedTag === TAG_IDS.LEAVE && isHeadOfficeUser && (
 							<FormField
 								control={form.control}
 								name="leavePeriod"
@@ -1763,17 +1942,33 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 							/>
 						)}
 
-						{selectedTag === TAG_IDS.LEAVE && leavePeriod === "Half" && (
-							<RHFDateTimeField control={form.control} form={form} name="halfDayDate" label="Half Day Date" hideTime minDate={startDate} maxDate={endDate}
-								onChange={(date) => {
-									if (date < startDate || date > endDate) {
-										toast.error(
-											"Half Day date must be between From and To dates"
-										);
-										return;
-									}
-									form.setValue("halfDayDate", date);
-								}}
+						{selectedTag === TAG_IDS.LEAVE && isHeadOfficeUser && leavePeriod === "Half" && (
+							<FormField
+								control={form.control}
+								name="halfDayPosition"
+								render={({ field, fieldState }) => (
+									<RHFFieldWrapper
+										label="Which half day"
+										error={fieldState.error?.message}
+									>
+										<Select
+											value={field.value ?? "FIRST_DAY"}
+											onValueChange={field.onChange}
+										>
+											<SelectTrigger>
+												<SelectValue placeholder="Select half day" />
+											</SelectTrigger>
+											<SelectContent>
+												<SelectItem value="FIRST_DAY">
+													First day — second half
+												</SelectItem>
+												<SelectItem value="LAST_DAY">
+													Last day — first half
+												</SelectItem>
+											</SelectContent>
+										</Select>
+									</RHFFieldWrapper>
+								)}
 							/>
 						)}
 
@@ -2023,7 +2218,9 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 							/>
 						)}
 						{selectedTag === TAG_IDS.TODO_LIST && event?.erpName && (
-							<TodoComments todoName={event.erpName} />
+							<ErrorBoundary>
+								<TodoComments todoName={event.erpName} />
+							</ErrorBoundary>
 						)}
 					</form>
 				</Form>
@@ -2035,6 +2232,7 @@ export function AddEditEventDialog({ children, event, defaultTag, forceValues, s
 						showCaptureLocation={shouldShowRequestLocation}
 						onCaptureLocation={handleRequestLocation}
 						isResolvingLocation={isResolvingLocation}
+						onSubmit={form.handleSubmit(onSubmit, onInvalid)}
 					/>
 				</div>
 			</ModalContent>

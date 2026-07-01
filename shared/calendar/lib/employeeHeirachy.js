@@ -1,10 +1,36 @@
 import { LOGGED_IN_USER } from "@calendar/components/auth/calendar-users";
-export function resolveVisibleRoleIds(elbritEdges = []) {
 
-  if (!LOGGED_IN_USER?.roleId) return [];
+// The host passes LOGGED_IN_USER.roleId from the Employee `role_id` field, which
+// can be stale and differs from `custom_role_profile` — the field the role
+// hierarchy (and users[].roleId) is actually keyed on. Resolve the logged-in
+// user's role from the loaded employee data so the walk root matches the edges;
+// fall back to the host value only when no employee match is found.
+export function resolveLoggedInRoleId(users = []) {
+  const matchById = users.find(
+    (user) => user.id && user.id === LOGGED_IN_USER.id
+  );
+  if (matchById?.roleId) return matchById.roleId;
+
+  const matchByEmail = users.find(
+    (user) =>
+      user.email &&
+      LOGGED_IN_USER.email &&
+      user.email.toLowerCase() === LOGGED_IN_USER.email.toLowerCase()
+  );
+  if (matchByEmail?.roleId) return matchByEmail.roleId;
+
+  return LOGGED_IN_USER.roleId ?? null;
+}
+
+export function resolveVisibleRoleIds(
+  elbritEdges = [],
+  roleId = LOGGED_IN_USER?.roleId
+) {
+
+  if (!roleId) return [];
 
   const { roleMap, childrenMap } = buildRoleIndex(elbritEdges);
-  const myRoleId = LOGGED_IN_USER.roleId;
+  const myRoleId = roleId;
   const myNode = roleMap.get(myRoleId);
 
 
@@ -59,6 +85,30 @@ function buildRoleIndex(elbritEdges = []) {
   });
 
   return { roleMap, childrenMap };
+}
+
+// All role_ids whose department falls under the given role's department
+// (department nested set: lft/rgt). Used by the event form employee picker.
+export function resolveDepartmentRoleIds(elbritEdges = [], roleId) {
+  if (!roleId) return [];
+
+  const nodes = elbritEdges.map((edge) => edge.node);
+  const myNode = nodes.find((node) => node.role_id === roleId);
+  if (!myNode || myNode.lft == null || myNode.rgt == null) return [];
+
+  const myLft = Number(myNode.lft);
+  const myRgt = Number(myNode.rgt);
+  if (Number.isNaN(myLft) || Number.isNaN(myRgt)) return [];
+
+  return nodes
+    .filter((node) => {
+      if (node.lft == null || node.rgt == null) return false;
+      const lft = Number(node.lft);
+      const rgt = Number(node.rgt);
+      if (Number.isNaN(lft) || Number.isNaN(rgt)) return false;
+      return lft >= myLft && rgt <= myRgt;
+    })
+    .map((node) => node.role_id);
 }
 
 export function resolveSuperiorRoleIds(
@@ -139,7 +189,10 @@ export function resolveVisibleEmployeeIds(elbritEdges, users) {
     return users.map(u => u.id);
   }
 
-  const visibleRoleIds = resolveVisibleRoleIds(elbritEdges);
+  const visibleRoleIds = resolveVisibleRoleIds(
+    elbritEdges,
+    resolveLoggedInRoleId(users)
+  );
   if (!visibleRoleIds.length) {
     return users.map((user) => user.id);
   }

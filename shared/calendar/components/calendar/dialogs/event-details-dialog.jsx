@@ -15,6 +15,11 @@ import { Calendar, Clock, Text, User } from "lucide-react";
 import { EventDefaultDialog } from "@calendar/components/calendar/module/event/components/event-details/default-dialog";
 import { EventDoctorVisitDialog } from "@calendar/components/calendar/module/event/components/event-details/doctor-visit-dialog";
 import { EventTodoDialog } from "@calendar/components/calendar/module/todo/components/todo-dialog";
+import { ErrorBoundary } from "@calendar/components/ui/error-boundary";
+import {
+  SyncErrorMessage,
+  SyncStatusBadge,
+} from "@calendar/components/calendar/sync/sync-status-badge";
 
 export const ICONS = {
 	owner: User,
@@ -61,16 +66,25 @@ export function EventDetailsDialog({ event, children }) {
           : children}
       </DialogTrigger>
 
-      <DialogContent>
+      <DialogContent className="max-h-[88vh] overflow-y-auto w-[calc(100vw-1.5rem)] sm:w-full">
         <DialogHeader>
-          <DialogTitle>{event.tags == TAG_IDS.TODO_LIST ? event.title:event.tags}</DialogTitle>
+          <DialogTitle className="pr-6 break-words">
+            {event.tags == TAG_IDS.TODO_LIST ? event.title:event.tags}
+          </DialogTitle>
         </DialogHeader>
 
-        <LayoutComponent
-          event={eventWithOptions}
-          open={open}
-          setOpen={setOpen}
-        />
+        <div className="space-y-2">
+          <SyncStatusBadge event={eventWithOptions} />
+          <SyncErrorMessage event={eventWithOptions} />
+        </div>
+
+        <ErrorBoundary>
+          <LayoutComponent
+            event={eventWithOptions}
+            open={open}
+            setOpen={setOpen}
+          />
+        </ErrorBoundary>
       </DialogContent>
     </Dialog>
   );
