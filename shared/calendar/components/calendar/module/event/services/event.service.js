@@ -19,7 +19,7 @@ import {
   enqueueDocShareSync,
   syncEventDocShares,
 } from "@calendar/components/calendar/module/event/services/docshare.service";
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 200;
 const QUOTATION_BATCH_SIZE = 25;
 const pendingEventRequests = new Map();
 
@@ -313,112 +313,44 @@ export async function fetchEventsByRange(startDate, endDate, view) {
   return request;
 }
 
-// Collect a page's nodes into `acc`, skipping any name already in `seen`.
-// Returns the raw edge count so callers can tell a full (possibly truncated)
-// page from a final one.
-function collectEventEdges(data, seen, acc) {
-  const edges = data?.Events?.edges ?? [];
-  for (const edge of edges) {
-    const node = edge?.node;
-    if (node?.name && !seen.has(node.name)) {
-      seen.add(node.name);
-      acc.push(node);
-    }
-  }
-  return edges.length;
-}
-
-// Backstop for the recursion below. The real termination condition is a window
-// collapsing to <=1ms; this only bounds the request count in pathological cases
-// (many events at nearly the same instant). 2^14 sub-windows is far finer than
-// any realistic event density.
-const MAX_WINDOW_SPLIT_DEPTH = 14;
-
-// Fetch every Event whose starts_on falls in [loISO, hiISO]. Whenever a page
-// comes back full — and therefore possibly truncated — we split the time
-// window in half and recurse into each half. Pagination is driven entirely
-// through the `filter` argument: we never send an `after` cursor, because this
-// backend rejects a cursor combined with a filter ("Filter must be a tuple or
-// list (in a list)"). This also means we don't depend on any server-side sort
-// order, which keyset pagination would require.
-async function fetchEventsByStartsOnWindow(loISO, hiISO, seen, acc, depth = 0) {
-  const data = await graphqlRequest(EVENTS_BY_RANGE_QUERY, {
-    first: PAGE_SIZE,
-    after: null,
-    filters: [
-      { fieldname: "starts_on", operator: "GTE", value: loISO },
-      { fieldname: "starts_on", operator: "LTE", value: hiISO },
-    ],
-  });
-
-  // A non-full page means this window held everything it could — we're done.
-  if (collectEventEdges(data, seen, acc) < PAGE_SIZE) return;
-
-  const loMs = new Date(loISO).getTime();
-  const hiMs = new Date(hiISO).getTime();
-
-  if (hiMs - loMs <= 1 || depth >= MAX_WINDOW_SPLIT_DEPTH) {
-    console.warn(
-      `[events] more than ${PAGE_SIZE} events within an unsplittable window ` +
-      `(${loISO} … ${hiISO}); some events may be omitted.`
-    );
-    return;
-  }
-
-  // Both halves include midISO; dedupe-by-name (via `seen`) absorbs the
-  // boundary duplicate, so no event can slip through a gap.
-  const midISO = new Date(loMs + Math.floor((hiMs - loMs) / 2)).toISOString();
-  await fetchEventsByStartsOnWindow(loISO, midISO, seen, acc, depth + 1);
-  await fetchEventsByStartsOnWindow(midISO, hiISO, seen, acc, depth + 1);
-}
-
-// Events that began before the window but are still ongoing when it starts
-// (multi-day leaves, long events). Their starts_on is unbounded below, so they
-// can't be range-bisected — but only a handful of events can be in progress at
-// any single instant, so one page suffices in practice.
-async function fetchEventsStartingBeforeWindow(rangeStartISO, seen, acc) {
-  const data = await graphqlRequest(EVENTS_BY_RANGE_QUERY, {
-    first: PAGE_SIZE,
-    after: null,
-    filters: [
-      { fieldname: "starts_on", operator: "LT", value: rangeStartISO },
-      { fieldname: "ends_on", operator: "GTE", value: rangeStartISO },
-    ],
-  });
-
-  if (collectEventEdges(data, seen, acc) >= PAGE_SIZE) {
-    console.warn(
-      `[events] ${PAGE_SIZE}+ events already in progress at ${rangeStartISO}; ` +
-      `some long-running events may be omitted.`
-    );
-  }
-}
-
 async function fetchEventsByRangeUncached(
   cacheKey,
   startDate,
   endDate
 ) {
-  const startISO = startDate.toISOString();
-  const endISO = endDate.toISOString();
+  let after = null;
+  let rawEventNodes = [];
+
+  const filter = [
+    {
+      fieldname: "starts_on",
+      operator: "LTE",
+      value: endDate.toISOString(),
+    },
+  ];
 
   // --------------------------------------------
   // 1️⃣ FETCH RAW EVENT NODES (NO MAPPING YET)
   // --------------------------------------------
-  // Overlap semantics mirror doesEventOverlapRange: an event is in range when
-  // starts_on <= endDate AND ends_on >= startDate. We fetch that as two groups
-  // — starts-within-window (bisectable) and started-earlier-still-ongoing —
-  // paginating purely through filters. See the helpers above for why.
-  const seen = new Set();
-  let rawEventNodes = [];
+  while (true) {
+    const data = await graphqlRequest(EVENTS_BY_RANGE_QUERY, {
+      first: PAGE_SIZE,
+      after,
+      filters: filter,
+    });
+    const connection = data?.Events;
+    if (!connection) break;
 
-  await fetchEventsByStartsOnWindow(startISO, endISO, seen, rawEventNodes);
-  await fetchEventsStartingBeforeWindow(startISO, seen, rawEventNodes);
+    rawEventNodes.push(
+      ...connection.edges.map((edge) => edge.node)
+    );
 
+    if (!connection.pageInfo?.hasNextPage) break;
+    after = connection.pageInfo.endCursor;
+  }
   rawEventNodes = rawEventNodes.filter((node) =>
     doesEventOverlapRange(node, startDate, endDate)
   );
-
   // --------------------------------------------
   // 2️⃣ COLLECT QUOTATION REFERENCES
   // --------------------------------------------
@@ -495,12 +427,12 @@ async function fetchEventsByRangeUncached(
           rate: Number(row.rate) || 0,
           amount: Number(row.amount) || 0,
         })) || [];
-        node.pob_given =
+      node.pob_given =
         quotation.items?.length > 0
-          ? "Yes"
-          : "No";
+          ? 1
+          : 0;
     }
-   
+
     return node;
   });
 
@@ -512,12 +444,10 @@ async function fetchEventsByRangeUncached(
       mapErpGraphqlEventToCalendar(node)
     )
     .filter(Boolean);
-
   // --------------------------------------------
   // 6️⃣ MERGE LEAVES + TODOS
   // --------------------------------------------
   const merged = [...events, ...leaves, ...todolist];
-
   setCachedEvents(cacheKey, merged);
 
   return merged;
