@@ -22,8 +22,9 @@ query EventsByRange(
         color
         all_day
         status
+        event_type
         event_category
-        pob_given
+        pob_given:${ERP_EVENT_FIELDS.pobGivenRead}
         role_profile:${ERP_EVENT_FIELDS.roleProfileRead}
         custom_doctor__name:${ERP_EVENT_FIELDS.doctorRead}
         doctor_latitude:${ERP_EVENT_FIELDS.doctorLatitudeRead}
@@ -31,6 +32,7 @@ query EventsByRange(
         custom_employee_id:${ERP_EVENT_FIELDS.ownerEmployeeRead} {
           name
           company_email
+          user_id:user_id__name
           first_name
           middle_name
           last_name
@@ -114,6 +116,7 @@ query GetEmployees($first: Int!, $filters: [DBFilterInput!]) {
         name
         employee_name
         company_email
+        user_id:user_id__name
         idx
         leave_approver {
           name
@@ -188,6 +191,18 @@ query DocSharesByEvent($first: Int!, $filters: [DBFilterInput!]) {
         user {
           name
         }
+      }
+    }
+  }
+}
+`;
+export const DOC_SHARES_BY_USER_QUERY = `
+query DocSharesByUser($first: Int!, $filters: [DBFilterInput!]) {
+  DocShares(first: $first, filter: $filters) {
+    edges {
+      node {
+        name
+        share_name:share_name__name
       }
     }
   }
