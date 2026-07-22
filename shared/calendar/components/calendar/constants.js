@@ -149,6 +149,7 @@ export function buildEventDefaultValues({ event, defaultTag }) {
     endDate,
     tags: event?.tags ?? defaultTag ?? "Leave",
     hqTerritory: event?.hqTerritory ?? "",
+    meetingLocation: event?.meetingLocation ?? "",
     employees: event?.employees,
     doctor: event?.doctor,
     assignedTo: event?.assignedTo,
@@ -165,6 +166,13 @@ export function buildEventDefaultValues({ event, defaultTag }) {
     enableGoogleMeet:
       event?.enableGoogleMeet ??
       Boolean(event?.googleMeetLink),
+    meetingAttendance:
+      event?.participants
+        ?.filter((participant) => participant.type === "Employee")
+        .map((participant) => ({
+          employeeId: String(participant.id),
+          attending: normalizeAttendingChoice(participant.attending),
+        })) ?? [],
     status: event?.status,
     priority: event?.priority,
     leavePeriod:
@@ -194,6 +202,10 @@ export function buildEventDefaultValues({ event, defaultTag }) {
     leave_approver:
       event?.leave_approver ??
       LOGGED_IN_USER.leave_approver ??
+      "",
+    escalation_approver:
+      event?.escalation_approver ??
+      LOGGED_IN_USER.escalation_approver ??
       "",
     fsl_doctor_item: event?.fsl_doctor_item ?? [],
   };

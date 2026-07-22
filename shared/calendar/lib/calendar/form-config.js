@@ -45,6 +45,10 @@ export const TAG_FORM_CONFIG = {
         },
         {
           columns: 1,
+          fields: ["escalation_approver"],
+        },
+        {
+          columns: 1,
           fields: ["postingDate"],
         },
         {
@@ -61,7 +65,18 @@ export const TAG_FORM_CONFIG = {
         // startDate: { label: "Start Date", type: "date" },
         // status: { label: "Status", type: "text" },
         owner: { label: "Request By", type: "owner" },
-        leave_approver: { label: "Approved By", type: "leave_approver" },
+        // Label reflects state: "Approved By" only once actually approved,
+        // "Rejected By" once rejected, otherwise "Approver" (still pending).
+        leave_approver: {
+          label: (event) =>
+            event?.status === "Approved"
+              ? "Approved By"
+              : event?.status === "Rejected"
+              ? "Rejected By"
+              : "Approver",
+          type: "leave_approver",
+        },
+        escalation_approver: { label: "Escalation Approver", type: "escalation_approver" },
         postingDate: { label: "Applied On", type: "date" },
         description: { label: "Reason", type: "text" },
         attachment: { label: "Attached File", type: "file" },
@@ -149,7 +164,7 @@ export const TAG_FORM_CONFIG = {
 
   [TAG_IDS.MEETING]: {
     hide: ["color", "doctor", "allocated_to"],
-    show: ["title", "startDate", "endDate", "employees", "allDay", "description"],
+    show: ["title", "startDate", "endDate", "employees", "allDay", "meetingLocation", "description"],
     required: ["title", "startDate", "endDate", "employees"],
     dateRange: true,
 
@@ -170,12 +185,13 @@ export const TAG_FORM_CONFIG = {
         { key: "endDate", label: "End Date", type: "date" },
         { key: "owner", label: "Created by", type: "owner" },
         { key: "employee", label: "Employee", type: "employee" },
+        { key: "meetingLocation", label: "Location / venue", type: "text" },
         { key: "description", label: "Description", type: "text" },
       ],
     },
     employee: {
       multiselect: true,
-      autoSelectLoggedIn: false,
+      autoSelectLoggedIn: true,
     },
   },
 
@@ -345,6 +361,7 @@ export const TAG_FORM_CONFIG = {
     },
     employee: {
       multiselect: true,
+      autoSelectLoggedIn: true,
     },
   },
 
@@ -362,6 +379,10 @@ export const TAG_FORM_CONFIG = {
       showTags: false,
       allowEdit: () => true,
       allowDelete: () => true,
+    },
+    employee: {
+      multiselect: true,
+      autoSelectLoggedIn: true,
     },
     required: ["title", "startDate"],
 

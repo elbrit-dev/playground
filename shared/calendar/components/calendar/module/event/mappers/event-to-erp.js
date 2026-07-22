@@ -27,6 +27,11 @@ export function mapFormToErpEvent(values, options = {}) {
     isDoctorVisitPlan && values.attending === "Yes"
       ? format(new Date(), "yyyy-MM-dd HH:mm:ss")
       : null;
+  const meetingAttendanceMap = new Map(
+    (Array.isArray(values.meetingAttendance) ? values.meetingAttendance : [])
+      .filter((entry) => entry?.employeeId)
+      .map((entry) => [String(entry.employeeId), entry.attending ?? ""])
+  );
   function buildParticipants(values) {
     const existingEmployeeParticipants = existingEventParticipants.filter(
       (participant) =>
@@ -58,13 +63,31 @@ export function mapFormToErpEvent(values, options = {}) {
     const requestedEmployeeIds = requestedEmployees
       .map(resolveRequestedEmployeeId)
       .filter(Boolean);
+    const creatorEmployeeId = LOGGED_IN_USER.id
+      ? String(LOGGED_IN_USER.id)
+      : null;
     const existingEmployeeIds = existingEmployeeParticipants
       .map((participant) => participant.reference_docname)
       .filter(Boolean);
 
     const employeeIdsToPersist = isUpdate
-      ? [...new Set([...existingEmployeeIds, ...requestedEmployeeIds])]
-      : requestedEmployeeIds;
+      ? [
+          ...new Set(
+            [
+              ...existingEmployeeIds,
+              ...requestedEmployeeIds,
+              ...(creatorEmployeeId ? [creatorEmployeeId] : []),
+            ].filter(Boolean)
+          ),
+        ]
+      : [
+          ...new Set(
+            [
+              ...requestedEmployeeIds,
+              ...(creatorEmployeeId ? [creatorEmployeeId] : []),
+            ].filter(Boolean)
+          ),
+        ];
 
     const employeeSource = employeeIdsToPersist.map((empId) => {
       const requestedEmployee =
@@ -186,6 +209,15 @@ export function mapFormToErpEvent(values, options = {}) {
           }
         }
 
+        if (values.tags === TAG_IDS.MEETING) {
+          const meetingAttending = meetingAttendanceMap.get(String(empId));
+          if (meetingAttending === "Yes" || meetingAttending === "No" || meetingAttending === "Maybe") {
+            participant.attending = meetingAttending;
+          } else if (existingParticipant?.attending) {
+            participant.attending = existingParticipant.attending;
+          }
+        }
+
         participants.push(participant);
       });
     }
@@ -268,10 +300,20 @@ export function mapFormToErpEvent(values, options = {}) {
     existingEndDate != null
       ? new Date(existingEndDate)
       : values.endDate;
-  const resolvedEndDate =
+  const computedEndDate =
     isDoctorVisitPlan && allEmployeeParticipantsVisited && currentVisitTimestamp
       ? new Date(currentVisitTimestamp.replace(" ", "T"))
       : fallbackEndDate;
+  // ERP rejects an Event whose ends_on is before starts_on ("Ends on must be
+  // after Starts on"). When a doctor visit is force-completed before its planned
+  // date, the visit timestamp used as ends_on can fall before starts_on — clamp
+  // it so the event never ends before it begins. Mirrors the calendar-state
+  // clamp in buildCalendarEvent (add-edit-event-dialog).
+  const startDate = values.startDate ? new Date(values.startDate) : null;
+  const resolvedEndDate =
+    startDate && computedEndDate && computedEndDate < startDate
+      ? startDate
+      : computedEndDate;
 
   const isBirthday = values.tags === "Birthday";
   const doctorId = resolveDoctorLinkId(values.doctor);
@@ -305,6 +347,10 @@ export function mapFormToErpEvent(values, options = {}) {
     docstatus: 0,
     event_participants: eventParticipants,
     [ERP_EVENT_FIELDS.hqWrite]: values.hqTerritory || "",
+    [ERP_EVENT_FIELDS.meetingLocationWrite]:
+      values.tags === TAG_IDS.MEETING
+        ? values.meetingLocation || ""
+        : "",
     [ERP_EVENT_FIELDS.doctorWrite]: doctorId,
     [ERP_EVENT_FIELDS.doctorLatitudeWrite]: doctorLatitude,
     [ERP_EVENT_FIELDS.doctorLongitudeWrite]: doctorLongitude,
@@ -317,7 +363,8 @@ export function mapFormToErpEvent(values, options = {}) {
     google_calendar: googleCalendar || "IT Elbrit",
     add_video_conferencing:
       values.tags === TAG_IDS.MEETING &&
-      values.enableGoogleMeet
+      values.enableGoogleMeet &&
+      !values.allDay
         ? 1
         : 0,
   };

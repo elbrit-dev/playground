@@ -12,17 +12,63 @@ import {
   syncDocShares,
 } from "@calendar/components/calendar/module/event/services/docshare.service";
 
+// ERP's Leave Application `status` field is a Select whose only valid values are
+// the Title-Case options "Open" | "Approved" | "Rejected" | "Cancelled". Sending
+// an upper-cased value (e.g. "REJECTED") is refused by ERP with a ValidationError
+// ("Status cannot be 'REJECTED'. It should be one of ..."), which is exactly why
+// leave rejection was failing. Keep these Title-Case to match the field options.
 const ERP_LEAVE_STATUS_MAP = {
-  open: "OPEN",
-  approved: "APPROVED",
-  rejected: "REJECTED",
-  cancelled: "CANCELLED",
-  canceled: "CANCELLED",
+  open: "Open",
+  approved: "Approved",
+  rejected: "Rejected",
+  cancelled: "Cancelled",
+  canceled: "Cancelled",
 };
 
 function normalizeLeaveStatusValue(status) {
   const normalized = String(status ?? "").trim().toLowerCase();
-  return ERP_LEAVE_STATUS_MAP[normalized] ?? String(status ?? "").trim().toUpperCase();
+  return ERP_LEAVE_STATUS_MAP[normalized] ?? String(status ?? "").trim();
+}
+
+// Frappe returns validation failures as HTTP 417 with the human-readable reason
+// buried in `_server_messages` (a JSON string whose items are themselves JSON
+// strings like {"message": "...", "title": "..."}) or in `exception`. Surfacing
+// only `HTTP 417` hides *why* a leave write was refused (e.g. "Insufficient
+// leave balance for Leave Type Casual Leave"), so pull out the real text.
+function extractErpError(json) {
+  if (!json) return null;
+
+  const stripHtml = (value) =>
+    String(value).replace(/<[^>]*>/g, "").trim();
+
+  const serverMessages = json._server_messages;
+  if (serverMessages) {
+    try {
+      const parsed = JSON.parse(serverMessages);
+      const messages = (Array.isArray(parsed) ? parsed : [parsed])
+        .map((item) => {
+          try {
+            const obj = typeof item === "string" ? JSON.parse(item) : item;
+            return obj?.message ?? (typeof obj === "string" ? obj : null);
+          } catch {
+            return typeof item === "string" ? item : null;
+          }
+        })
+        .map((message) => (message ? stripHtml(message) : null))
+        .filter(Boolean);
+
+      if (messages.length) return messages.join(" ");
+    } catch {
+      /* fall through to other fields */
+    }
+  }
+
+  if (json.exception || json.exc_type) {
+    // e.g. "frappe.exceptions.ValidationError: <reason>"
+    return stripHtml(json.exception || json.exc_type).split("\n")[0];
+  }
+
+  return json.message ? stripHtml(json.message) : null;
 }
 
 function getErpBaseUrl() {
@@ -61,11 +107,13 @@ async function erpJsonRequest(path, { method = "GET", body } = {}) {
   }
 
   if (!response.ok) {
-    throw new Error(json?.message || `HTTP ${response.status}`);
+    throw new Error(
+      extractErpError(json) || `HTTP ${response.status}`
+    );
   }
 
   if (json?.exc || json?.exception) {
-    throw new Error(json?.message || "ERP request failed");
+    throw new Error(extractErpError(json) || "ERP request failed");
   }
 
   return json;
@@ -106,6 +154,29 @@ async function submitLeaveApplication(doc) {
     },
   });
 }
+
+// Applies a "Leave Approval" workflow transition action (e.g. "Reject"). Unlike
+// a direct status write — which the workflow silently reverts — this is the
+// sanctioned way to move `status`, exactly what the desk does when the approver
+// clicks the action button.
+async function applyLeaveWorkflowAction(snapshot, action) {
+  await erpJsonRequest(
+    "/api/method/frappe.model.workflow.apply_workflow",
+    {
+      method: "POST",
+      body: {
+        doc: JSON.stringify(snapshot),
+        action,
+      },
+    }
+  );
+}
+
+// In the active "Leave Approval" workflow both "Approved" and "Rejected" are
+// SUBMITTED states (docstatus 1). So both are finalised the same, proven way the
+// approval has always worked: set the status, then submit. Rejection used to fail
+// only because it skipped this submit step.
+const STATUSES_REQUIRING_SUBMIT = new Set(["Approved", "Rejected"]);
 
 async function readVerifiedLeaveStatus(leaveName) {
   const snapshot = await fetchLeaveApplicationSnapshot(leaveName);
@@ -202,13 +273,46 @@ export async function saveLeaveApplication(doc, options = {}) {
     }
 
     const targetStatus = normalizeLeaveStatusValue(newStatus);
+
+    // Rejection can't be done by writing the status field: the "Leave Approval"
+    // workflow reverts a direct "Rejected" write (even followed by submit) back
+    // to "Open". It only accepts the move via the workflow's "Reject" ACTION —
+    // exactly what the desk fires. Approval, by contrast, works fine via the
+    // setValue + submit flow below, so it's left untouched.
+    if (targetStatus === "Rejected") {
+      const { snapshot } = await readVerifiedLeaveStatus(leaveName);
+      if (!snapshot) {
+        throw new Error("Leave Application not found");
+      }
+
+      await applyLeaveWorkflowAction(snapshot, "Reject");
+
+      const verification = await readVerifiedLeaveStatus(leaveName);
+      if (verification.currentStatus === "Rejected") {
+        clearEventCache();
+        clearCached(["LEAVE_APPLICATIONS"]);
+        clearLeaveCache();
+        return normalizeStatus(verification.currentStatus);
+      }
+
+      throw new Error('Leave status was not updated to "Rejected".');
+    }
+
+    // Approved is finalised by "set status, then submit" — the proven approval
+    // flow, unchanged.
+    const needsSubmit = STATUSES_REQUIRING_SUBMIT.has(targetStatus);
     let lastError = null;
 
     try {
       await attemptGraphqlLeaveStatusUpdate(leaveName, targetStatus);
       const verification = await readVerifiedLeaveStatus(leaveName);
 
-      if (verification.currentStatus === targetStatus) {
+      // Approved/Rejected aren't final until the doc is submitted (docstatus 1).
+      const stillNeedsSubmit =
+        needsSubmit &&
+        Number(verification.snapshot?.docstatus ?? 0) !== 1;
+
+      if (verification.currentStatus === targetStatus && !stillNeedsSubmit) {
         clearEventCache();
         clearCached(["LEAVE_APPLICATIONS"]);
         clearLeaveCache();
@@ -221,13 +325,12 @@ export async function saveLeaveApplication(doc, options = {}) {
     const verification = await readVerifiedLeaveStatus(leaveName);
     let snapshot = verification.snapshot;
 
-    if (
-      targetStatus === "APPROVED" &&
-      snapshot &&
-      Number(snapshot.docstatus ?? 0) !== 1
-    ) {
+    if (needsSubmit && snapshot && Number(snapshot.docstatus ?? 0) !== 1) {
       try {
-        await submitLeaveApplication(snapshot);
+        // Submit with the target status forced onto the doc so the submit both
+        // moves the workflow state and finalises it (docstatus 1) — identical to
+        // how an approval lands at Approved + docstatus 1.
+        await submitLeaveApplication({ ...snapshot, status: targetStatus });
         const postSubmitVerification =
           await readVerifiedLeaveStatus(leaveName);
 
@@ -284,11 +387,6 @@ export async function saveLeaveApplication(doc, options = {}) {
     }
 
     throw lastError ?? new Error("Failed to update leave status");
-
-    // Clear all relevant caches
-    clearEventCache();
-    clearCached(["LEAVE_APPLICATIONS"]);
-    clearLeaveCache();
   }
 // ---------------------------------------------
 // Leave Filters
@@ -375,26 +473,70 @@ export async function fetchLeaveTypes() {
       };
     });
   
+    // An employee is re-allocated leave each period, so ERP returns BOTH the
+    // expired allocation and the current one for the same leave type (e.g.
+    // Privilege Leave: 8 for 2025-11..2026-03, then 6 for 2026-04..2027-03).
+    // Only the allocation whose window covers TODAY is valid — otherwise the UI
+    // shows last period's number (8 instead of 6). ERP dates are date-only, so
+    // ISO "YYYY-MM-DD" strings compare correctly with plain <=.
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(
+      now.getMonth() + 1
+    ).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+    const isCurrentAllocation = (node) =>
+      node?.from_date &&
+      node?.to_date &&
+      node.from_date <= todayStr &&
+      todayStr <= node.to_date;
+
+    // Current-period window per leave type (summed if several current
+    // allocations overlap), used to both set `allocated` and to scope which
+    // used/pending leaves count toward it.
+    const currentPeriodByType = {};
     allocationEdges.forEach(({ node }) => {
-      balance[node.leave_type__name] = {
-        allocated: node.total_leaves_allocated,
-        used: 0,
-        pending: 0,
-        available: 0,
-        isLeaveWithoutPay:
-          LEAVE_WITHOUT_PAY_NAMES.has(node.leave_type__name),
+      const type = node.leave_type__name;
+      if (!type || !isCurrentAllocation(node)) return;
+
+      const existing = currentPeriodByType[type];
+      currentPeriodByType[type] = {
+        allocated:
+          (existing?.allocated ?? 0) + (node.total_leaves_allocated ?? 0),
+        from:
+          existing && existing.from < node.from_date
+            ? existing.from
+            : node.from_date,
+        to:
+          existing && existing.to > node.to_date ? existing.to : node.to_date,
       };
     });
-  
+
+    Object.entries(currentPeriodByType).forEach(([type, info]) => {
+      if (balance[type]) balance[type].allocated = info.allocated;
+    });
+
+    // A used/pending leave only counts if it falls inside its type's current
+    // allocation window — otherwise last period's approved leaves would be
+    // subtracted from this period's allocation.
+    const fallsInCurrentPeriod = (node) => {
+      const info = currentPeriodByType[node.leave_type__name];
+      return (
+        info &&
+        node.from_date &&
+        node.from_date >= info.from &&
+        node.from_date <= info.to
+      );
+    };
+
     usedEdges.forEach(({ node }) => {
-      if (balance[node.leave_type__name]) {
-        balance[node.leave_type__name].used += node.total_leave_days;
+      if (balance[node.leave_type__name] && fallsInCurrentPeriod(node)) {
+        balance[node.leave_type__name].used += node.total_leave_days ?? 0;
       }
     });
-  
+
     pendingEdges.forEach(({ node }) => {
-      if (balance[node.leave_type__name]) {
-        balance[node.leave_type__name].pending += node.total_leave_days;
+      if (balance[node.leave_type__name] && fallsInCurrentPeriod(node)) {
+        balance[node.leave_type__name].pending += node.total_leave_days ?? 0;
       }
     });
   

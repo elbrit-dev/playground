@@ -111,19 +111,28 @@ export function UserSelect({ mode = "popover" }) {
   const shouldForceSingleFallback = mode === "inline";
 
   useEffect(() => {
-    if (shouldForceSingleFallback && (!Array.isArray(selectedUserId) || selectedUserId.length === 0)) {
+    if (!Array.isArray(selectedUserId) || selectedUserId.length === 0) {
+      if (shouldForceSingleFallback) {
+        filterEventsBySelectedUser([LOGGED_IN_USER.id]);
+      }
+      setCheckedIds([]);
+      return;
+    }
+
+    if (shouldForceSingleFallback && !selectedUserId.includes(LOGGED_IN_USER.id)) {
       filterEventsBySelectedUser([LOGGED_IN_USER.id]);
       return;
     }
 
-    setCheckedIds(Array.isArray(selectedUserId) ? selectedUserId : []);
+    setCheckedIds(selectedUserId);
   }, [filterEventsBySelectedUser, selectedUserId, shouldForceSingleFallback]);
 
   const isAllChecked = checkedIds.length === 0;
 
   const toggleAll = () => {
-    setCheckedIds([]);
-    filterEventsBySelectedUser([]);
+    const next = isAllChecked ? [LOGGED_IN_USER.id] : [];
+    setCheckedIds(next);
+    filterEventsBySelectedUser(next);
   };
 
   const toggleUser = (id) => {
@@ -136,7 +145,7 @@ export function UserSelect({ mode = "popover" }) {
         next = [...prev, id];
       }
 
-      if (shouldForceSingleFallback && next.length === 0) {
+      if (next.length === 0) {
         next = [LOGGED_IN_USER.id];
       }
 
@@ -191,6 +200,27 @@ export function UserSelect({ mode = "popover" }) {
     return [...new Set(enrichedVisibleUsers.map((user) => user.department).filter(Boolean))]
       .sort((left, right) => left.localeCompare(right));
   }, [enrichedVisibleUsers]);
+
+  // Picking a department drives the calendar, not just the list: select a
+  // department → show that whole team's events (auto-select all its employees).
+  // "All departments" clears back to everyone (or self, in single-select mode).
+  const handleDepartmentChange = (dept) => {
+    setDepartmentFilter(dept);
+
+    if (dept === "all") {
+      const next = shouldForceSingleFallback ? [LOGGED_IN_USER.id] : [];
+      setCheckedIds(next);
+      filterEventsBySelectedUser(next);
+      return;
+    }
+
+    const deptUserIds = enrichedVisibleUsers
+      .filter((user) => user.department === dept)
+      .map((user) => user.id);
+
+    setCheckedIds(deptUserIds);
+    filterEventsBySelectedUser(deptUserIds);
+  };
   
   
   // 🔍 Filtered users for popover
@@ -236,6 +266,7 @@ export function UserSelect({ mode = "popover" }) {
     const selectedIds = new Set(checkedIds);
     return enrichedVisibleUsers.filter((user) => selectedIds.has(user.id));
   }, [checkedIds, enrichedVisibleUsers]);
+  const shouldShowAllOption = enrichedVisibleUsers.length > 1;
 
   const effectiveViewedCount = checkedIds.length || enrichedVisibleUsers.length;
   const isViewerMode = mode === "mobile-viewer";
@@ -270,7 +301,7 @@ export function UserSelect({ mode = "popover" }) {
 
         <Select
           value={departmentFilter}
-          onValueChange={setDepartmentFilter}
+          onValueChange={handleDepartmentChange}
         >
           <SelectTrigger className="h-9">
             <SelectValue placeholder="Filter by department" />
@@ -306,7 +337,7 @@ export function UserSelect({ mode = "popover" }) {
             checkedIds={checkedIds}
             onToggleUser={toggleUser}
             showEmail
-            showAllOption={false}
+            showAllOption={shouldShowAllOption}
           />
 
           {filteredUsers.length === 0 && (
@@ -383,12 +414,19 @@ export function UserSelect({ mode = "popover" }) {
     );
   }
 
-  const triggerUsers = visibleUsers.slice(0, 4);
+  const triggerUsers = (selectedUsers.length ? selectedUsers : visibleUsers).slice(0, 4);
+  const triggerLabel =
+    checkedIds.length === 0
+      ? "All"
+      : checkedIds.length === 1
+      ? selectedUsers[0]?.name ?? "1 selected"
+      : `${checkedIds.length} selected`;
   return (
     <Popover>
       {/* 🔒 Trigger */}
       <PopoverTrigger asChild>
         <div className="w-full inline-flex items-center justify-between rounded-md border border-input bg-background bg-white px-3 py-1 text-sm shadow-sm cursor-pointer">
+          <div className="flex min-w-0 items-center gap-2">
           <AvatarGroup className="flex items-center" max={4}>
             {triggerUsers.map((user) => (
               <Avatar key={user.id} className="size-5 text-xxs">
@@ -402,6 +440,8 @@ export function UserSelect({ mode = "popover" }) {
               </Avatar>
             ))}
           </AvatarGroup>
+            <span className="min-w-0 truncate">{triggerLabel}</span>
+          </div>
 
           {/* caret */}
           <svg
@@ -426,8 +466,8 @@ export function UserSelect({ mode = "popover" }) {
         portalled={false}
         className="p-2 w-[var(--radix-popover-trigger-width)] md:w-[250px]"
       >
-        {/* 🔍 Search (sticky) */}
-        <div className="sticky top-0 z-10 bg-background bg-white pb-2">
+        {/* 🔍 Search + Department filter (sticky) */}
+        <div className="sticky top-0 z-10 space-y-2 bg-background bg-white pb-2">
           <input
             type="text"
             value={search}
@@ -435,6 +475,42 @@ export function UserSelect({ mode = "popover" }) {
             placeholder="Search employees…"
             className="w-full rounded-md border border-input px-2 py-1 text-sm"
           />
+          {designationOptions.length > 0 && (
+            <Select
+              value={designationFilter}
+              onValueChange={setDesignationFilter}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Filter by designation" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All designations</SelectItem>
+                {designationOptions.map((designation) => (
+                  <SelectItem key={designation} value={designation}>
+                    {designation}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {departmentOptions.length > 0 && (
+            <Select
+              value={departmentFilter}
+              onValueChange={handleDepartmentChange}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Filter by department" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All departments</SelectItem>
+                {departmentOptions.map((department) => (
+                  <SelectItem key={department} value={department}>
+                    {department}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         {/* 🔽 Scrollable area */}
@@ -446,7 +522,7 @@ export function UserSelect({ mode = "popover" }) {
             onToggleAll={toggleAll}
             onToggleUser={toggleUser}
             showAvatar
-            showAllOption
+            showAllOption={shouldShowAllOption}
           />
 
           {filteredUsers.length === 0 && (

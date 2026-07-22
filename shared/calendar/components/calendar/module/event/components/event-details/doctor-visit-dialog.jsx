@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@calendar/components/ui/button";
 import { TAG_FORM_CONFIG } from "@calendar/lib/calendar/form-config";
@@ -12,18 +12,22 @@ import { LOGGED_IN_USER } from "@calendar/components/auth/calendar-users";
 import { buildParticipantsWithDetails } from "@calendar/lib/helper";
 import { useDeleteEvent } from "@calendar/components/calendar/hooks";
 import { useDoctorResolvers } from "@calendar/lib/doctorResolver";
-import { useEmployeeResolvers } from "@calendar/lib/employeeResolver";
 import { joinDoctorVisit, leaveDoctorVisit } from "@calendar/lib/helper";
 import { CircleCheck, Copy } from "lucide-react"
 import { useCallback } from "react";
 import DeleteEventDialog from "@calendar/components/calendar/dialogs/delete-event-dialog";
 import { DoctorNotesSection } from "@calendar/components/calendar/module/event/components/DoctorNotesSection";
+import { fetchDoctorById } from "@calendar/components/calendar/module/event/services/master-data.service";
 import { format, parseISO, isValid } from "date-fns";
 import {
   DetailSummary,
   DetailFooter,
 } from "@calendar/components/calendar/dialogs/event-details/detail-ui";
 import { SharedToBlock } from "@calendar/components/calendar/dialogs/share-event-dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@calendar/components/ui/avatar";
+import { EventParticipantAvatars } from "@calendar/components/calendar/views/shared/event-participant-avatars";
+import { getAvatarColorBySeed, getFirstLetters } from "@calendar/components/calendar/helpers";
+import { cn } from "@calendar/lib/utils";
 /* =====================================================
    PURE HELPERS (NO LOGIC CHANGE)
 ===================================================== */
@@ -60,6 +64,29 @@ function resolveDoctorDetails(event, doctorResolvers) {
   };
 }
 
+function hasValidLocation(latitude, longitude) {
+  const lat = Number(latitude);
+  const lng = Number(longitude);
+  return lat !== 0 && lng !== 0 && !Number.isNaN(lat) && !Number.isNaN(lng);
+}
+
+/**
+ * A participant has completed the visit when ERP marks them attending AND a
+ * visit location was captured. This lives per-participant on the shared event,
+ * so it evaluates the same for every role that opens the visit — unlike a check
+ * derived from the logged-in viewer.
+ */
+function isParticipantVisited(participant) {
+  if (!participant) return false;
+  return (
+    String(participant.attending ?? "").toLowerCase() === "yes" &&
+    hasValidLocation(
+      participant.custom_latitude,
+      participant.custom_longitude
+    )
+  );
+}
+
 
 /* =====================================================
    COMPONENT
@@ -74,6 +101,7 @@ export function EventDoctorVisitDialog({
     removeEvent,
     updateEvent,
     employeeOptions,
+    allEmployeeOptions,
     doctorOptions,
     addEvent, setDoctorOptions
   } = useCalendar();
@@ -83,14 +111,18 @@ export function EventDoctorVisitDialog({
     onClose: () => setOpen(false),
   });
   const doctorResolvers = useDoctorResolvers(doctorOptions);
-  const employeeResolvers = useEmployeeResolvers(employeeOptions);
+  // Resolve participants against the FULL employee list, not the role-scoped
+  // `employeeOptions`. A viewer only sees their own slice of the hierarchy in
+  // `employeeOptions` (e.g. a BE has no ABM in scope), which previously dropped
+  // out-of-scope participants from the roster — making the same visit show a
+  // different participant list across BE / ABM / RBM views.
   const employeeMap = useMemo(() => {
     const map = new Map();
-    employeeOptions.forEach(emp => {
+    (allEmployeeOptions ?? employeeOptions).forEach(emp => {
       map.set(String(emp.value), emp);
     });
     return map;
-  }, [employeeOptions]);
+  }, [allEmployeeOptions, employeeOptions]);
 
   function resolveEmployeeParticipants(event, employeeMap) {
     const allowedPrefixes = ["SM", "ABM", "RBM", "BE", "Admin"];
@@ -100,17 +132,29 @@ export function EventDoctorVisitDialog({
         ?.filter(p => p.type === "Employee")
         .map(p => {
           const emp = employeeMap.get(String(p.id));
-          if (!emp?.roleId) return null;
 
-          const rolePrefix = emp.roleId.split("-")[0];
-          const cleanPrefix = rolePrefix.replace(/[0-9]/g, "");
+          // Role prefix from ERP truth: prefer the resolved employee's roleId,
+          // fall back to the participant's own role so a participant is never
+          // dropped just because the current viewer can't see that employee.
+          const roleId =
+            emp?.roleId ?? p.role_profile ?? p.kly_role_id ?? null;
+          if (!roleId) return null;
+
+          const cleanPrefix = String(roleId)
+            .split("-")[0]
+            .replace(/[0-9]/g, "");
 
           if (!allowedPrefixes.includes(cleanPrefix))
             return null;
 
           return {
-            name: emp.label ?? p.id,
+            id: p.id,
+            name: emp?.label ?? p.name ?? p.id,
             role: cleanPrefix,
+            // Per-participant completion, read from that participant's own ERP
+            // attendance — identical for every role that opens this visit.
+            visited: isParticipantVisited(p),
+            forceVisit: Boolean(p.custom_is_force_visit),
           };
         })
         .filter(Boolean) ?? []
@@ -168,6 +212,43 @@ export function EventDoctorVisitDialog({
     () => resolveDoctorDetails(event, doctorResolvers),
     [event, doctorResolvers]
   );
+
+  // Doctor name + notes are resolved from the loaded `doctorOptions`, which is
+  // capped (MAX_ROWS) and may not include this visit's doctor — leaving both
+  // blank ("sometimes the name is visible, sometimes not"). When it's missing,
+  // fetch just this doctor by id and merge it in so name and notes render.
+  useEffect(() => {
+    if (!open) return;
+
+    const doctorId = Array.isArray(event.doctor)
+      ? event.doctor[0]
+      : event.doctor;
+    if (!doctorId) return;
+    // Guard on PRESENCE in the options (not on the resolved name) so a doctor
+    // with a blank name doesn't re-fetch every render.
+    if (doctorOptions.some((o) => String(o.value) === String(doctorId))) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const doctors = await fetchDoctorById(doctorId);
+        if (cancelled || !doctors.length) return;
+        setDoctorOptions((current) => {
+          const optionMap = new Map();
+          [...(current ?? []), ...doctors].forEach((option) => {
+            if (option?.value) optionMap.set(option.value, option);
+          });
+          return Array.from(optionMap.values());
+        });
+      } catch (err) {
+        console.error("Failed to load doctor for visit", err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, event.doctor, doctorOptions, setDoctorOptions]);
 
   /* ================= Join Logic ================= */
 
@@ -252,18 +333,17 @@ export function EventDoctorVisitDialog({
   /* =====================================================
    RENDER
 ===================================================== */
-  const lat = Number(currentEmployeeParticipant?.custom_latitude);
-  const lng = Number(currentEmployeeParticipant?.custom_longitude);
+  // Whether the CURRENT VIEWER has personally completed their own visit. This
+  // drives the footer actions (Join / Visit / Remove) only — it must never
+  // decide the displayed status, or the same visit reads differently per role.
+  const viewerHasVisited = isParticipantVisited(currentEmployeeParticipant);
 
-  const hasLocation =
-    lat !== 0 &&
-    lng !== 0 &&
-    !isNaN(lat) &&
-    !isNaN(lng);
-
-  const isAttending =
-    currentEmployeeParticipant?.attending?.toLowerCase() === "yes";
-  const isVisitCompleted = isAttending && hasLocation;
+  // Whether the VISIT ITSELF is complete, derived from the participant data on
+  // the shared event. Identical across BE / ABM / RBM views.
+  const visitCompleted = useMemo(
+    () => employeeParticipants.some((p) => p.visited),
+    [employeeParticipants]
+  );
   const isFailedSync = event?.__syncStatus === "failed";
   const hasPobItems =
     Array.isArray(event.fsl_doctor_item) &&
@@ -272,7 +352,7 @@ export function EventDoctorVisitDialog({
     (p) => p.type === "Employee"
   ) ?? false;
   const shouldShowPob =
-    hasPobItems || isVisitCompleted;
+    hasPobItems || visitCompleted;
   const pobTotals = useMemo(() => {
     if (!hasPobItems) return { qty: 0, amount: 0 };
 
@@ -305,7 +385,7 @@ export function EventDoctorVisitDialog({
                 ? format(parseISO(event.startDate), "EEE, d MMM yyyy")
                 : null
             }
-            status={isVisitCompleted ? "Completed" : event.status}
+            status={visitCompleted ? "Completed" : event.status}
             accentClassName="bg-emerald-500"
           />
           {/* Doctor Section */}
@@ -393,38 +473,57 @@ export function EventDoctorVisitDialog({
               </p>
             </div>
           )}
-          <p className="text-sm font-medium mb-[4px]">Participants</p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-medium mb-[2px]">Participants</p>
+            <EventParticipantAvatars
+              event={event}
+              max={3}
+              className="mb-[2px]"
+              avatarClassName="size-5 text-[10px]"
+            />
+          </div>
           {/* Participants */}
-          {employeeParticipants.map((p, index) => {
-            const isCurrentUser =
-              String(p.name) ===
-              employeeResolvers.getEmployeeNameById(
-                LOGGED_IN_USER.id
-              );
-
-            return (
-              <div
-                key={index}
-                className="flex justify-start gap-3 text-sm items-center sm:gap-4"
-              >
-                <span className="text-muted-foreground">
-                  {p.name}
-                </span>
-
-                <span className="text-muted-foreground">
-                  {p.role}
-                </span>
-
-                {isCurrentUser &&
-                  isAttending &&
-                  hasLocation && (
-                    <span className="text-green-600 font-medium">
-                      <CircleCheck />
-                    </span>
+          {employeeParticipants.map((p, index) => (
+            <div
+              key={p.id ?? index}
+              className="flex flex-wrap items-center gap-2 text-sm"
+            >
+              <Avatar className="size-6 shrink-0">
+                <AvatarImage alt={p.name} />
+                <AvatarFallback
+                  className={cn(
+                    "text-[10px] font-semibold text-white",
+                    getAvatarColorBySeed(p.name || p.id)
                   )}
-              </div>
-            );
-          })}
+                >
+                  {getFirstLetters(p.name)}
+                </AvatarFallback>
+              </Avatar>
+              <span className="text-muted-foreground leading-none">
+                {p.name}
+              </span>
+
+              <span className="text-muted-foreground leading-none">
+                {p.role}
+              </span>
+
+              {p.visited && (
+                <span
+                  className={cn(
+                    "font-medium leading-none",
+                    p.forceVisit ? "text-rose-600" : "text-green-600"
+                  )}
+                >
+                  <CircleCheck />
+                </span>
+              )}
+              {p.forceVisit && (
+                <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-700 leading-none">
+                  Force visit
+                </span>
+              )}
+            </div>
+          ))}
 
           {/* ================= Notes Section ================= */}
           <DoctorNotesSection
@@ -507,7 +606,7 @@ export function EventDoctorVisitDialog({
           />
         </div>
         <DetailFooter className="mt-3 border-t-0 pt-0 sm:mt-0 sm:justify-self-end sm:justify-end">
-          {permissions.canEdit && (!isVisitCompleted || isFailedSync) && (
+          {permissions.canEdit && (!viewerHasVisited || isFailedSync) && (
             <>
               {isFailedSync ? (
                 <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">

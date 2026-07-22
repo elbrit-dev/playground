@@ -2,10 +2,14 @@
 import { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react";
 import { useLocalStorage } from "@calendar/components/calendar/hooks";
 import { fetchEventsByRange } from "@calendar/components/calendar/module/event/services/event.service";
+import { clearEventCache } from "@calendar/lib/calendar/event-cache";
+import { clearCached } from "@calendar/lib/data-cache";
+import { clearLeaveCache } from "@calendar/components/calendar/module/leave/cache/leave-cache";
 import { resolveCalendarRange } from "@calendar/lib/calendar/range";
 import { isLeafRole, resolveLoggedInRoleId, resolveVisibleEmployeeIds, resolveVisibleRoleIds } from "@calendar/lib/employeeHeirachy";
 import { useEmployeeResolvers } from "@calendar/lib/employeeResolver";
 import { fetchCalendarBootstrapData } from "@calendar/components/calendar/contexts/calendar-context/bootstrapping";
+import { LOGGED_IN_USER } from "@calendar/components/auth/calendar-users";
 import {
 	buildEmployeeEmailToId,
 	buildEmployeeRoleMap,
@@ -94,7 +98,8 @@ export function CalendarProvider({
 	const [use24HourFormat, setUse24HourFormatState] = useState(settings.use24HourFormat);
 	const [agendaModeGroupBy, setAgendaModeGroupByState] = useState(settings.agendaModeGroupBy);
 	const [selectedDate, setSelectedDate] = useState(new Date());
-	const [selectedUserId, setSelectedUserId] =  useState([]);
+	const [selectedUserId, setSelectedUserIdState] =  useState([]);
+	const [hasInitializedUserFilter, setHasInitializedUserFilter] = useState(false);
 	const [selectedColors, setSelectedColors] = useState([]);
 	const [selectedStatuses, setSelectedStatuses] = useState([]);
 	const [serverEvents, setServerEvents] = useState(events || []);
@@ -172,9 +177,13 @@ export function CalendarProvider({
 
 		setSelectedStatuses(newStatuses);
 	};
-	const filterEventsBySelectedUser = (userIds) => {
+	const setSelectedUserId = useCallback((userIds) => {
+		setSelectedUserIdState(userIds);
+		setHasInitializedUserFilter(true);
+	}, []);
+	const filterEventsBySelectedUser = useCallback((userIds) => {
 		setSelectedUserId(userIds);
-	};
+	}, [setSelectedUserId]);
 
 
 	const handleSelectDate = (date) => {
@@ -220,6 +229,18 @@ export function CalendarProvider({
 		);
 		return nextEvents;
 	}, [currentView, selectedDate]);
+
+	// Hard refresh for the manual "Sync" button. `refreshEvents` alone may return
+	// cached data, so drop the events + leave caches first, then re-fetch fresh
+	// from ERP and push into serverEvents — no full-app reload needed.
+	const syncCalendar = useCallback(async () => {
+		clearEventCache();
+		clearLeaveCache();
+		clearCached(["LEAVE_APPLICATIONS"]);
+		const nextEvents = await refreshEvents();
+		setServerEvents(nextEvents);
+		return nextEvents;
+	}, [refreshEvents]);
 
 
 	const clearFilter = () => {
@@ -440,6 +461,33 @@ export function CalendarProvider({
 		if (usersLoading || elbritRoleLoading) return [];
 		return resolveVisibleEmployeeIds(elbritRoleEdges, users);
 	}, [users, usersLoading, elbritRoleEdges, elbritRoleLoading]);
+	useEffect(() => {
+		if (usersLoading || elbritRoleLoading) return;
+		if (hasInitializedUserFilter) return;
+
+		const loggedInUserId =
+			LOGGED_IN_USER.id ??
+			users.find(
+				(user) =>
+					user.email &&
+					LOGGED_IN_USER.email &&
+					user.email.toLowerCase() === LOGGED_IN_USER.email.toLowerCase()
+			)?.id ??
+			null;
+
+		if (!loggedInUserId) {
+			setHasInitializedUserFilter(true);
+			return;
+		}
+
+		setSelectedUserId([loggedInUserId]);
+	}, [
+		elbritRoleLoading,
+		hasInitializedUserFilter,
+		setSelectedUserId,
+		users,
+		usersLoading,
+	]);
 	// Leaf-role users (e.g. BEs) have no subordinates; ERP already scopes the
 	// events they receive (own + DocShare-shared), so the hierarchy filter must
 	// not narrow further and hide events shared down to them.
@@ -513,6 +561,7 @@ export function CalendarProvider({
 		filterEventsBySelectedStatus,
 		filterEventsBySelectedUser,
 		events: filteredEvents,
+		allEvents,
 		view: currentView,
 		use24HourFormat,
 		toggleTimeFormat,
@@ -527,6 +576,7 @@ export function CalendarProvider({
 			setServerEvents(nextEvents);
 			return nextEvents;
 		},
+		syncCalendar,
 		pendingSyncCount,
 		retryPendingSync,
 		isRetryingSync,

@@ -17,6 +17,7 @@ query LeaveApplications($first: Int) {
           name
         }
         leave_approver_name
+        custom_escalation_approver__name
         leave_balance
         employee_name
         employee {
@@ -55,6 +56,8 @@ query LeaveAllocationsByEmployee(
       node {
         leave_type__name
         total_leaves_allocated
+        from_date
+        to_date
       }
     }
   }
@@ -67,6 +70,7 @@ query LeaveApplications($first: Int!, $filters: [DBFilterInput!]) {
       node {
         leave_type__name
         total_leave_days
+        from_date
       }
     }
   }

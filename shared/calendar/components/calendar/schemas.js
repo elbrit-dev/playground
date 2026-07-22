@@ -54,6 +54,7 @@ export const eventSchema = z
     allocated_to:z.any().optional(),
     shareEmployees: z.any().optional(),
     hqTerritory: z.string().optional(),
+    meetingLocation: z.string().optional(),
     customer: z.string().optional(),
     allDay: z.boolean().optional(),
     enableGoogleMeet: z.boolean().optional(),
@@ -66,6 +67,7 @@ export const eventSchema = z
     halfDayPosition: z.enum(["FIRST_DAY", "LAST_DAY"]).optional(),
     approvedBy: z.string().optional(),
     assignedTo:z.any().optional(),
+    meetingAttendance: z.any().optional(),
     /* ---------- Todo ---------- */
     status: z.enum(["Open", "Closed", "Cancelled","Completed","Approved","Rejected"]).optional(),
     priority: z.enum(["High", "Medium", "Low"]).optional(),
@@ -77,6 +79,7 @@ export const eventSchema = z
     fsl_doctor_item: z.array(pobItemSchema).optional(),
     roleId: z.string().optional(),
     leave_approver:z.string().optional(),
+    escalation_approver:z.string().optional(),
     attending: z.enum(["Yes", "No","Maybe",""]).optional(),
     custom_latitude: z.coerce.number().nullable().optional(),
     custom_longitude: z.coerce.number().nullable().optional(),
@@ -104,6 +107,23 @@ export const eventSchema = z
         });
       }
     });
+
+    /* ---------------------------------------------
+       LEAVE: NO PAST DATES
+       Can't apply for a previous day. Today is still allowed
+       (difference === 0); only strictly-past start dates are rejected.
+    --------------------------------------------- */
+    if (
+      data.tags === TAG_IDS.LEAVE &&
+      data.startDate &&
+      differenceInCalendarDays(data.startDate, new Date()) < 0
+    ) {
+      ctx.addIssue({
+        path: ["startDate"],
+        message: "Leave can't be applied for a past date",
+        code: z.ZodIssueCode.custom,
+      });
+    }
 
     /* ---------------------------------------------
        LEAVE: MEDICAL CERTIFICATE RULE
@@ -156,6 +176,18 @@ export const eventSchema = z
       ctx.addIssue({
         path: ["fsl_doctor_item"],
         message: "At least one item is required",
+        code: z.ZodIssueCode.custom,
+      });
+    }
+
+    if (
+      data.tags === TAG_IDS.MEETING &&
+      data.allDay &&
+      data.enableGoogleMeet
+    ) {
+      ctx.addIssue({
+        path: ["enableGoogleMeet"],
+        message: "All-day meetings cannot have Google Meet enabled",
         code: z.ZodIssueCode.custom,
       });
     }
