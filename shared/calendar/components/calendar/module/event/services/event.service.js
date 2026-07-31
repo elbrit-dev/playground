@@ -7,9 +7,13 @@ import {
   SAVE_EVENT_QUOTATION,
 } from "@calendar/components/calendar/module/event/graphql/events.query";
 import { mapErpGraphqlEventToCalendar } from "@calendar/components/calendar/module/event/mappers/erp-to-event";
-import { getCachedEvents, setCachedEvents } from "@calendar/lib/calendar/event-cache";
+import {
+  getCachedEvents,
+  getEventCacheGeneration,
+  setCachedEvents,
+} from "@calendar/lib/calendar/event-cache";
 import { buildRangeCacheKey } from "@calendar/lib/calendar/cache-key";
-import { clearEventCache } from "@calendar/lib/calendar/event-cache";
+import { invalidateCalendarData } from "@calendar/lib/calendar/invalidate";
 import { format } from "date-fns";
 import { clearCached, getCached } from "@calendar/lib/data-cache";
 import { GOOGLE_CALENDAR_BY_USER } from "@calendar/components/calendar/google-auth/queries";
@@ -21,7 +25,6 @@ import {
   syncEventDocShares,
 } from "@calendar/components/calendar/module/event/services/docshare.service";
 import { LOGGED_IN_USER } from "@calendar/components/auth/calendar-users";
-const PAGE_SIZE = 200;
 const QUOTATION_BATCH_SIZE = 25;
 const pendingEventRequests = new Map();
 
@@ -98,7 +101,7 @@ export async function saveEvent(doc, options = {}) {
     throw new Error("ERP did not return Event name");
   }
   // invalidate cache only after successful write
-  clearEventCache();
+  invalidateCalendarData({ reason: "event:save" });
 
   if (options.shareWithUserIds?.length) {
     const shareOptions = {
@@ -228,7 +231,7 @@ export async function saveDocToQuotation(doc) {
     throw new Error("ERP did not return document name");
   }
 
-  clearEventCache();
+  invalidateCalendarData({ reason: "quotation:save" });
   return data.saveDoc.doc;
 }
 export async function fetchAllCustomers() {
@@ -302,37 +305,106 @@ export function clearGoogleCalendarStatusCache(email) {
   clearCached([`GOOGLE_CALENDAR_STATUS:${email.toLowerCase()}`]);
 }
 
-export async function fetchEventsByRange(startDate, endDate, view) {
+/**
+ * @param {{ force?: boolean }} [options] `force` skips both the range cache and
+ *   the in-flight dedupe. A request that started before the caches were dropped
+ *   already resolved its leaves/todos/doc-shares from the *old* caches, so
+ *   handing that promise back to a Sync click is what made Sync look broken.
+ */
+export async function fetchEventsByRange(startDate, endDate, view, options = {}) {
+  const { force = false } = options;
   const cacheKey = buildRangeCacheKey(view, startDate, endDate);
 
-  const cached = getCachedEvents(cacheKey);
-  if (cached) return cached;
+  if (!force) {
+    const cached = getCachedEvents(cacheKey);
+    if (cached) return cached;
 
-  if (pendingEventRequests.has(cacheKey)) {
-    return pendingEventRequests.get(cacheKey);
+    const inFlight = pendingEventRequests.get(cacheKey);
+    if (inFlight) return inFlight;
   }
+
+  const generation = getEventCacheGeneration();
 
   const request = fetchEventsByRangeUncached(
     cacheKey,
     startDate,
-    endDate
+    endDate,
+    generation
   )
     .finally(() => {
-      pendingEventRequests.delete(cacheKey);
+      // A forced fetch may have replaced this entry — only clear our own.
+      if (pendingEventRequests.get(cacheKey) === request) {
+        pendingEventRequests.delete(cacheKey);
+      }
     });
 
   pendingEventRequests.set(cacheKey, request);
   return request;
 }
 
+// ERP refuses cursor pagination when an `after` cursor is combined with a
+// `filter` — it answers "Filter must be a tuple or list (in a list)". Because
+// `graphqlRequest` throws on GraphQL errors, that killed the *entire* fetch on
+// page 2, so any user whose visible event count crossed one page had a calendar
+// that never loaded or refreshed at all (page 1's rows were discarded with the
+// exception). Rather than walk cursors, ask for a window large enough to hold
+// the whole answer and widen it if ERP reports there is more.
+const INITIAL_EVENT_WINDOW = 500;
+const MAX_EVENT_WINDOW = 8000;
+
+async function fetchRawEventNodes(filter) {
+  let windowSize = INITIAL_EVENT_WINDOW;
+  let nodes = null;
+
+  while (true) {
+    let connection;
+
+    try {
+      // `after` is deliberately left unprovided rather than passed as null —
+      // absent is what tells ERP "no cursor" without going near the broken
+      // cursor+filter path.
+      const data = await graphqlRequest(EVENTS_BY_RANGE_QUERY, {
+        first: windowSize,
+        filters: filter,
+      });
+      connection = data?.Events;
+    } catch (error) {
+      // The widened window was refused. Showing the rows we already hold beats
+      // failing the whole calendar.
+      if (nodes) {
+        console.warn(
+          `Event fetch capped at ${nodes.length} rows — ERP refused a larger window.`,
+          error
+        );
+        return nodes;
+      }
+
+      throw error;
+    }
+
+    if (!connection) return nodes ?? [];
+
+    nodes = connection.edges.map((edge) => edge.node);
+
+    if (!connection.pageInfo?.hasNextPage) return nodes;
+
+    if (windowSize >= MAX_EVENT_WINDOW) {
+      console.warn(
+        `Event fetch truncated at ${MAX_EVENT_WINDOW} rows — some events are not being shown.`
+      );
+      return nodes;
+    }
+
+    windowSize = Math.min(windowSize * 2, MAX_EVENT_WINDOW);
+  }
+}
+
 async function fetchEventsByRangeUncached(
   cacheKey,
   startDate,
-  endDate
+  endDate,
+  generation
 ) {
-  let after = null;
-  let rawEventNodes = [];
-
   const filter = [
     {
       fieldname: "starts_on",
@@ -344,23 +416,7 @@ async function fetchEventsByRangeUncached(
   // --------------------------------------------
   // 1️⃣ FETCH RAW EVENT NODES (NO MAPPING YET)
   // --------------------------------------------
-  while (true) {
-    const data = await graphqlRequest(EVENTS_BY_RANGE_QUERY, {
-      first: PAGE_SIZE,
-      after,
-      filters: filter,
-    });
-    const connection = data?.Events;
-    if (!connection) break;
-
-    rawEventNodes.push(
-      ...connection.edges.map((edge) => edge.node)
-    );
-
-    if (!connection.pageInfo?.hasNextPage) break;
-    after = connection.pageInfo.endCursor;
-  }
-  rawEventNodes = rawEventNodes.filter((node) =>
+  let rawEventNodes = (await fetchRawEventNodes(filter)).filter((node) =>
     doesEventOverlapRange(node, startDate, endDate)
   );
   // --------------------------------------------
@@ -479,7 +535,7 @@ async function fetchEventsByRangeUncached(
   // 6️⃣ MERGE LEAVES + TODOS
   // --------------------------------------------
   const merged = [...events, ...leaves, ...todolist];
-  setCachedEvents(cacheKey, merged);
+  setCachedEvents(cacheKey, merged, generation);
 
   return merged;
 }
@@ -524,7 +580,7 @@ export async function deleteEventFromErp(erpName, docname) {
     });
 
     // Success path
-    clearEventCache();
+    invalidateCalendarData({ reason: "event:delete" });
     return true;
 
   } catch (error) {
@@ -536,7 +592,7 @@ export async function deleteEventFromErp(erpName, docname) {
       message.includes("does not exist") ||
       message.includes("Missing document")
     ) {
-      clearEventCache();
+      invalidateCalendarData({ reason: "event:delete" });
       return true;
     }
 
