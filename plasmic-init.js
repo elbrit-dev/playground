@@ -5,6 +5,7 @@ import { initPlasmicLoader, DataProvider as PlasmicDataProvider } from "@plasmic
 import { registerElbritCoreComponents } from './share/src/plasmic-init'
 import CalendarPage from "@calendar/components/CalendarPage";
 import NetworkBanner from "./components/NetworkBanner";
+import HelpSupport from "./components/features/help-support";
 // import NovuInbox from "./components/NovuInbox";
 import jmespath_plus from '@metrichor/jmespath-plus';
 import * as jmespath from 'jmespath';
@@ -125,6 +126,19 @@ PLASMIC.registerComponent(NetworkBanner, {
     },
   },
   importPath: "./components/NetworkBanner",
+});
+
+PLASMIC.registerComponent(HelpSupport, {
+  name: "HelpSupport",
+  displayName: "Help Support",
+  description: "Help desk dashboard, knowledge base, and HD ticket creation flow.",
+  props: {
+    className: {
+      type: "string",
+      description: "Optional wrapper class name.",
+    },
+  },
+  importPath: "./components/features/help-support",
 });
 
 registerElbritCoreComponents(PLASMIC)
