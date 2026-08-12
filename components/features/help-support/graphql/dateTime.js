@@ -38,6 +38,28 @@ export function formatIndiaDateTime(value, { dateOnly = false } = {}) {
           hour: "numeric",
           minute: "2-digit",
           hour12: true,
-        }),
+    }),
   }).format(date);
+}
+
+export function formatERPDuration(value) {
+  const input = String(value || "").trim();
+  if (!input) return "";
+
+  const parts = input.split(":");
+  if (parts.length < 2 || parts.length > 3) return input;
+
+  const [hoursValue, minutesValue, secondsValue = "0"] = parts;
+  const hours = Number(hoursValue);
+  const minutes = Number(minutesValue);
+  const seconds = Math.floor(Number(secondsValue));
+
+  if (![hours, minutes, seconds].every(Number.isFinite)) return input;
+
+  const segments = [];
+  if (hours) segments.push(`${hours}h`);
+  if (minutes) segments.push(`${minutes}m`);
+  if (seconds || !segments.length) segments.push(`${seconds}s`);
+
+  return segments.join(" ");
 }

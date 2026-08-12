@@ -19,7 +19,7 @@ import {
   mapHDTicketsResponse,
   mapHDViewsResponse,
 } from "./hdTicketMapper";
-import { clearHelpDeskGraphQLCache, executeHelpDeskGraphQL } from "./graphqlClient";
+import { clearHelpDeskGraphQLCache, executeHelpDeskGraphQL, executeHelpDeskMethod } from "./graphqlClient";
 
 export async function fetchHDTickets({ first = 50, filters = null, graphqlConfig } = {}) {
   const data = await executeHelpDeskGraphQL(HD_TICKETS_QUERY, { first, filters }, { cache: true, config: graphqlConfig });
@@ -37,6 +37,16 @@ export async function fetchHDTickets({ first = 50, filters = null, graphqlConfig
   }
 }
 
+export async function fetchHDTicketByName(ticketName, graphqlConfig) {
+  if (!ticketName) return null;
+  const tickets = await fetchHDTickets({
+    first: 1,
+    filters: [{ fieldname: "name", operator: "EQ", value: ticketName }],
+    graphqlConfig,
+  });
+  return tickets[0] || null;
+}
+
 export async function fetchHDTicketOptions({ first = 100, graphqlConfig } = {}) {
   const data = await executeHelpDeskGraphQL(HD_TICKET_OPTIONS_QUERY, { first }, { cache: true, config: graphqlConfig });
   return mapHDTicketOptionsResponse(data);
@@ -49,6 +59,11 @@ export async function fetchHDViews({ first = 100, graphqlConfig } = {}) {
     { cache: true, config: graphqlConfig }
   );
   return mapHDViewsResponse(data);
+}
+
+export async function fetchHelpDeskLoggedUser(graphqlConfig) {
+  const loggedUser = await executeHelpDeskMethod("frappe.auth.get_logged_user", {}, { config: graphqlConfig });
+  return typeof loggedUser === "string" ? loggedUser : loggedUser?.user || loggedUser?.name || "";
 }
 
 export async function createHDTicket(form, context) {

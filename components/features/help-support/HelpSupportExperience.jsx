@@ -6,10 +6,12 @@ import {
   createHDTicket,
   deleteHDTicket,
   fetchHDArticleComments,
+  fetchHDTicketByName,
   fetchHDTicketComments,
   fetchHDTicketOptions,
   fetchHDTickets,
   fetchHDViews,
+  fetchHelpDeskLoggedUser,
   fetchHelpSupportDashboard,
   saveHDArticleComment,
   saveHDTicketComment,
@@ -38,6 +40,15 @@ function cx(...classes) {
 
 function isEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
+function getTicketStatusCategory(status) {
+  if (/resolved|closed/i.test(status || "")) return "Resolved";
+  return "Open";
+}
+
+function isResolvedTicket(ticket) {
+  return /resolved|closed/i.test(ticket?.status || "");
 }
 
 function readStoredUserEmail() {
@@ -390,11 +401,23 @@ function TicketDataTable({ tickets, onOpen, selectedIds, onToggleTicket, onToggl
         </thead>
         <tbody className="divide-y divide-slate-100">
           {tickets.map((ticket) => (
-            <tr key={ticket.id} className="hover:bg-slate-50/80">
+            <tr
+              key={ticket.id}
+              onClick={() => onOpen(ticket)}
+              className="cursor-pointer hover:bg-slate-50/80"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onOpen(ticket);
+                }
+              }}
+            >
               <td className="px-3 py-2.5">
                 <input
                   type="checkbox"
                   checked={selectedIds.includes(ticket.id)}
+                  onClick={(event) => event.stopPropagation()}
                   onChange={() => onToggleTicket(ticket.id)}
                   className="h-4 w-4 rounded border-slate-300 text-[#0F87F9] focus:ring-[#0F87F9]"
                   aria-label={`Select ${ticket.id}`}
@@ -426,7 +449,10 @@ function TicketDataTable({ tickets, onOpen, selectedIds, onToggleTicket, onToggl
               <td className="px-3 py-2.5 text-right">
                 <button
                   type="button"
-                  onClick={() => onOpen(ticket)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onOpen(ticket);
+                  }}
                   className="rounded-md border border-slate-200 px-2.5 py-1 text-[11px] font-bold text-[#0F87F9] hover:bg-blue-50"
                 >
                   View
@@ -522,13 +548,22 @@ function readTicketField(ticket, field) {
 }
 
 function createTicketViewMatcher(filters = {}) {
-  const entries = Object.entries(filters).filter(
-    ([field]) => !field.startsWith("_") && !field.startsWith("__") && field !== "creation"
+  const entries = Array.isArray(filters)
+    ? filters
+        .map((filter) => {
+          if (!Array.isArray(filter)) return null;
+          const [field, operator, expected] = filter.length >= 4 ? filter.slice(1) : filter;
+          return [field, [operator, expected]];
+        })
+        .filter(Boolean)
+    : Object.entries(filters);
+  const visibleEntries = entries.filter(
+    ([field]) => !String(field).startsWith("_") && !String(field).startsWith("__") && field !== "creation"
   );
-  if (!entries.length) return () => true;
+  if (!visibleEntries.length) return () => true;
 
   return (ticket) =>
-    entries.every(([field, condition]) => {
+    visibleEntries.every(([field, condition]) => {
       const value = readTicketField(ticket, field);
       const normalizedValue = String(value || "").toLowerCase();
 
@@ -537,11 +572,18 @@ function createTicketViewMatcher(filters = {}) {
       }
 
       const [operator, expected] = condition;
+      const normalizedOperator = String(operator || "").toLowerCase();
+      const expectedValues = Array.isArray(expected) ? expected : String(expected || "").split(",");
       const normalizedExpected = String(expected || "").toLowerCase();
-      if (operator === "is") return expected === "set" ? Boolean(value) : !value;
-      if (operator === "LIKE") return normalizedValue.includes(normalizedExpected.replace(/%/g, ""));
-      if (operator === "in") return normalizedExpected.split(",").map((item) => item.trim()).includes(normalizedValue);
-      if (operator === "!=") return normalizedValue !== normalizedExpected;
+      if (normalizedOperator === "is") return expected === "set" ? Boolean(value) : !value;
+      if (normalizedOperator === "like") return normalizedValue.includes(normalizedExpected.replace(/%/g, ""));
+      if (normalizedOperator === "in") {
+        return expectedValues.map((item) => String(item || "").trim().toLowerCase()).includes(normalizedValue);
+      }
+      if (normalizedOperator === "not in") {
+        return !expectedValues.map((item) => String(item || "").trim().toLowerCase()).includes(normalizedValue);
+      }
+      if (normalizedOperator === "!=") return normalizedValue !== normalizedExpected;
       return normalizedValue === normalizedExpected;
     });
 }
@@ -1339,6 +1381,7 @@ export default function HelpSupportExperience({
   const [ticketPriorities, setTicketPriorities] = useState([]);
   const [ticketStatuses, setTicketStatuses] = useState([]);
   const [ticketViews, setTicketViews] = useState([]);
+  const [erpUser, setErpUser] = useState("");
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const effectiveUrl = url || graphqlEndpoint;
   const effectiveToken = token || authToken;
@@ -1361,6 +1404,7 @@ export default function HelpSupportExperience({
       setTicketPriorities([]);
       setTicketStatuses([]);
       setTicketViews([]);
+      setErpUser("");
       setTicketFilter("");
       setIsLoadingContent(false);
       return undefined;
@@ -1370,8 +1414,9 @@ export default function HelpSupportExperience({
       fetchHelpSupportDashboard({ fetchTickets: fetchHDTickets, graphqlConfig }),
       fetchHDTicketOptions({ graphqlConfig }),
       fetchHDViews({ graphqlConfig }),
+      fetchHelpDeskLoggedUser(graphqlConfig),
     ])
-      .then(([contentResult, optionsResult, viewsResult]) => {
+      .then(([contentResult, optionsResult, viewsResult, userResult]) => {
         if (!active) return;
 
         if (contentResult.status === "fulfilled") {
@@ -1407,6 +1452,7 @@ export default function HelpSupportExperience({
           });
         }
         setTicketViews(views);
+        setErpUser(userResult.status === "fulfilled" ? userResult.value : "");
         setTicketFilter((current) => {
           if (views.some((viewItem) => viewItem.id === current)) return current;
           return views.find((viewItem) => viewItem.isDefault)?.id || views[0]?.id || "";
@@ -1420,6 +1466,16 @@ export default function HelpSupportExperience({
       active = false;
     };
   }, [effectiveUrl, effectiveToken, graphqlConfig]);
+
+  const supportUser = useMemo(() => {
+    const email = uiContent.user?.email || uiContent.user?.username || erpUser || "";
+    return {
+      ...uiContent.user,
+      email,
+      username: uiContent.user?.username || email,
+      name: uiContent.user?.name || email,
+    };
+  }, [uiContent.user?.email, uiContent.user?.username, uiContent.user?.name, erpUser]);
 
   const normalizedQuery = query.trim().toLowerCase();
   const matches = (text) => !normalizedQuery || String(text).toLowerCase().includes(normalizedQuery);
@@ -1473,19 +1529,38 @@ export default function HelpSupportExperience({
 
   const ticketCounts = useMemo(
     () => ({
-      active: tickets.filter((ticket) => ticket.status !== "Resolved" && ticket.status !== "Closed").length,
-      resolved: tickets.filter((ticket) => ticket.status === "Resolved").length,
+      active: tickets.filter((ticket) => !isResolvedTicket(ticket)).length,
+      resolved: tickets.filter(isResolvedTicket).length,
       all: tickets.length,
     }),
     [tickets]
   );
+  const effectiveTicketViews = useMemo(() => {
+    const resolvedView = {
+        id: "__resolved_tickets",
+        label: "Resolved Tickets",
+        icon: "✅",
+        filters: { status: ["in", ["Resolved", "Closed"]] },
+    };
+
+    return [
+      ...ticketViews
+        .filter((viewItem) => !/resolved|closed/i.test(viewItem.label || ""))
+        .map((viewItem) =>
+          /pending|open/i.test(viewItem.label || "")
+            ? { ...viewItem, filters: { status: ["not in", ["Resolved", "Closed"]] } }
+            : viewItem
+        ),
+      resolvedView,
+    ];
+  }, [ticketViews]);
   const ticketViewMatchers = useMemo(
     () =>
-      ticketViews.map((viewItem) => ({
+      effectiveTicketViews.map((viewItem) => ({
         ...viewItem,
         matches: createTicketViewMatcher(viewItem.filters),
       })),
-    [ticketViews]
+    [effectiveTicketViews]
   );
   const ticketViewCounts = useMemo(
     () =>
@@ -1503,7 +1578,7 @@ export default function HelpSupportExperience({
     [searchedTickets, selectedTicketView]
   );
   const openTickets = useMemo(
-    () => searchedTickets.filter((ticket) => ticket.status !== "Resolved" && ticket.status !== "Closed"),
+    () => searchedTickets.filter((ticket) => !isResolvedTicket(ticket)),
     [searchedTickets]
   );
 
@@ -1513,14 +1588,14 @@ export default function HelpSupportExperience({
 
   const goHome = () => setView({ type: "home" });
   const goTickets = () => {
-    setTicketFilter((current) => current || ticketViews.find((viewItem) => viewItem.isDefault)?.id || ticketViews[0]?.id || "");
+    setTicketFilter((current) => current || effectiveTicketViews.find((viewItem) => viewItem.isDefault)?.id || effectiveTicketViews[0]?.id || "");
     setView({ type: "tickets" });
   };
   const goResolvedTickets = () => {
     const resolvedView =
-      ticketViews.find((viewItem) => /resolved|closed/i.test(viewItem.label)) ||
-      ticketViews.find((viewItem) => viewItem.isDefault) ||
-      ticketViews[0];
+      effectiveTicketViews.find((viewItem) => /resolved|closed/i.test(viewItem.label)) ||
+      effectiveTicketViews.find((viewItem) => viewItem.isDefault) ||
+      effectiveTicketViews[0];
     setTicketFilter(resolvedView?.id || "");
     setView({ type: "tickets" });
   };
@@ -1541,10 +1616,7 @@ export default function HelpSupportExperience({
     try {
       const createPromise = createHDTicket(ticket, {
           graphqlConfig,
-          user: {
-            email: uiContent.user?.email,
-            username: uiContent.user?.email,
-          },
+          user: supportUser,
         });
       toast.promise(createPromise, {
         loading: "Creating HD ticket...",
@@ -1555,7 +1627,7 @@ export default function HelpSupportExperience({
       const created = await createPromise;
 
       setTickets((current) => [created, ...current]);
-      setTicketFilter((current) => current || ticketViews.find((viewItem) => viewItem.isDefault)?.id || ticketViews[0]?.id || "");
+      setTicketFilter((current) => current || effectiveTicketViews.find((viewItem) => viewItem.isDefault)?.id || effectiveTicketViews[0]?.id || "");
       setView({ type: "ticket", ticketId: created.id });
       return created;
     } catch {
@@ -1567,11 +1639,19 @@ export default function HelpSupportExperience({
   const changeTicketStatus = async (ticketId, status) => {
     const previousTicket = tickets.find((ticket) => ticket.id === ticketId);
     setTickets((current) =>
-      current.map((ticket) => (ticket.id === ticketId ? { ...ticket, status, updatedAt: "Just now" } : ticket))
+      current.map((ticket) =>
+        ticket.id === ticketId
+          ? { ...ticket, status, statusCategory: getTicketStatusCategory(status), updatedAt: "Just now" }
+          : ticket
+      )
     );
     if (!previousTicket?.raw) return;
     try {
-      await updateHDTicket(ticketId, { graphqlConfig, status });
+      await updateHDTicket(ticketId, { graphqlConfig, status, status_category: getTicketStatusCategory(status) });
+      const refreshedTicket = await fetchHDTicketByName(ticketId, graphqlConfig);
+      if (refreshedTicket) {
+        setTickets((current) => current.map((ticket) => (ticket.id === ticketId ? refreshedTicket : ticket)));
+      }
     } catch (error) {
       setTickets((current) => current.map((ticket) => (ticket.id === ticketId ? previousTicket : ticket)));
       toast.error("Could not update ticket status", {
@@ -1593,6 +1673,10 @@ export default function HelpSupportExperience({
     if (!previousTicket?.raw || !erpField) return;
     try {
       await updateHDTicket(ticketId, { graphqlConfig, [erpField]: value });
+      const refreshedTicket = await fetchHDTicketByName(ticketId, graphqlConfig);
+      if (refreshedTicket) {
+        setTickets((current) => current.map((ticket) => (ticket.id === ticketId ? refreshedTicket : ticket)));
+      }
     } catch (error) {
       setTickets((current) => current.map((ticket) => (ticket.id === ticketId ? previousTicket : ticket)));
       toast.error("Could not update ticket", {
@@ -1658,7 +1742,7 @@ export default function HelpSupportExperience({
         activeFilter={ticketFilter}
         setActiveFilter={setTicketFilter}
         counts={ticketViewCounts}
-        views={ticketViews}
+        views={effectiveTicketViews}
         onCreate={() => setView({ type: "create" })}
         onDeleteTickets={deleteTickets}
       />
@@ -1676,7 +1760,7 @@ export default function HelpSupportExperience({
           activeFilter={ticketFilter}
           setActiveFilter={setTicketFilter}
           counts={ticketViewCounts}
-          views={ticketViews}
+          views={effectiveTicketViews}
           onCreate={() => setView({ type: "create" })}
           onDeleteTickets={deleteTickets}
           fill
@@ -1698,7 +1782,7 @@ export default function HelpSupportExperience({
         onStatusChange={changeTicketStatus}
         onFieldChange={changeTicketField}
         graphqlConfig={graphqlConfig}
-        user={uiContent.user}
+        user={supportUser}
         ticketTypes={ticketTypes}
         ticketPriorities={ticketPriorities}
         ticketStatuses={ticketStatuses}
@@ -1728,7 +1812,7 @@ export default function HelpSupportExperience({
       />
     );
   } else if (view.type === "article" && selectedArticle) {
-    mainView = <ArticleView article={selectedArticle} onBack={goHome} graphqlConfig={graphqlConfig} user={uiContent.user} />;
+    mainView = <ArticleView article={selectedArticle} onBack={goHome} graphqlConfig={graphqlConfig} user={supportUser} />;
   }
 
   const isHomeView = view.type === "home";

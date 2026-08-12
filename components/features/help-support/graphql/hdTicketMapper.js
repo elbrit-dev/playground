@@ -1,5 +1,5 @@
 import { DEFAULT_HD_TICKET_VALUES, HD_TICKET_FORM_FIELDS } from "./hdTicketFields";
-import { formatIndiaDateTime } from "./dateTime";
+import { formatERPDuration, formatIndiaDateTime } from "./dateTime";
 
 function compactDoc(doc) {
   return Object.fromEntries(
@@ -165,8 +165,10 @@ export function mapHDTicketNodeToSupportTicket(node, config = {}) {
     ticketType,
     priority,
     statusCategory: node.status_category || "",
-    firstResponse: node.first_response_time || "",
-    resolution: node.resolution_time || "",
+    firstResponse: formatIndiaDateTime(node.first_responded_on) || formatERPDuration(node.first_response_time),
+    firstResponseDuration: formatERPDuration(node.first_response_time),
+    resolution: formatIndiaDateTime(node.resolution_date) || formatERPDuration(node.resolution_time),
+    resolutionDuration: formatERPDuration(node.resolution_time),
     description: descriptionHtml,
     summary: node.summary || "",
     template,
