@@ -22,11 +22,25 @@ const DEFAULT_VIEW_STATE = {
   hiddenColumns: [],    // field names hidden via eye toggle
   loading: false,
   loadingPhase: null,   // 'index' | 'data' while loading; null when idle
+  loaded: false,        // true once a fetch has settled (result or error) at least once
   error: null,
 };
 
-export const useSmartDataStore = create(
-  subscribeWithSelector((set, get) => ({
+/**
+ * Creates an isolated store instance.
+ *
+ * Every SmartDataProvider owns one. View state is keyed by viewId, and view ids are
+ * only unique *within* a report config — two reports commonly declare the same ids
+ * (e.g. `main`, `drawer1`). Sharing one store across providers made those ids collide:
+ * the second provider's registerView() no-opped onto the first provider's slot and both
+ * fetch pipelines then wrote the same entry, so whichever response landed last painted
+ * both tables. Per-instance stores make that collision structurally impossible.
+ *
+ * Use `useSmartDataStore` (the module-level default below) only for standalone
+ * SmartDataTable usage with no provider, and in tests.
+ */
+export function createSmartDataStore() {
+  return create(subscribeWithSelector((set, get) => ({
     views: {},
 
     registerView(viewId, defaultPageSize) {
@@ -206,6 +220,7 @@ export const useSmartDataStore = create(
             totalRecords,
             loading: false,
             loadingPhase: null,
+            loaded: true,
             error: null,
             ...(columns      !== undefined && { columns }),
             ...(columnGroups !== undefined && { columnGroups }),
@@ -244,10 +259,46 @@ export const useSmartDataStore = create(
         return {
           views: {
             ...state.views,
-            [viewId]: { ...state.views[viewId], error, loading: false, loadingPhase: null },
+            [viewId]: { ...state.views[viewId], error, loading: false, loadingPhase: null, loaded: true },
           },
         };
       });
     },
-  }))
-);
+  })));
+}
+
+/**
+ * Default store — used by standalone SmartDataTable instances rendered without a
+ * SmartDataProvider, and by tests. Provider-owned tables use the provider's own
+ * instance, resolved via useSmartDataStoreApi().
+ */
+export const useSmartDataStore = createSmartDataStore();
+
+// ─── Live instance registry ───────────────────────────────────────────────────
+//
+// Debug tooling (the /report-table Context panel) renders outside the provider tree
+// and so cannot reach provider stores through context. Providers register here on
+// mount. Not used for data flow — read through useSmartDataStoreApi() for that.
+
+const liveStores        = new Set();
+const registryListeners = new Set();
+
+/** Adds a store to the registry. Returns an unregister function. */
+export function registerStoreInstance(store) {
+  liveStores.add(store);
+  registryListeners.forEach(fn => fn());
+  return () => {
+    liveStores.delete(store);
+    registryListeners.forEach(fn => fn());
+  };
+}
+
+/** Notifies when a store is added or removed. Returns an unsubscribe function. */
+export function subscribeToStoreRegistry(listener) {
+  registryListeners.add(listener);
+  return () => { registryListeners.delete(listener); };
+}
+
+export function getLiveStores() {
+  return [...liveStores];
+}
