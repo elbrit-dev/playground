@@ -980,16 +980,21 @@ function TicketConversation({
           <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-3 py-3">
             {isLoadingComments ? <p className="text-xs font-semibold text-slate-500">Loading ERP comments...</p> : null}
             {conversation.map((message) => {
-              const own = message.tone === "user";
+              const richContent = Boolean(message.isHtml);
+              const own = message.tone === "user" && !richContent;
               return (
                 <div key={message.id} className={cx("flex flex-col", own ? "items-end" : "items-start")}>
                   <div
                     className={cx(
-                      "max-w-[680px] rounded-xl px-3 py-2 text-xs leading-5",
-                      own ? "bg-[#0F87F9] text-white" : "bg-white text-slate-950 shadow-sm"
+                      "max-w-[680px] overflow-hidden rounded-xl px-3 py-2 text-xs leading-5 [&_a]:underline [&_br]:block [&_img]:my-2 [&_img]:block [&_img]:h-auto [&_img]:max-w-full [&_p]:mb-2 [&_video]:my-2 [&_video]:block [&_video]:h-auto [&_video]:max-w-full",
+                      richContent
+                        ? "w-full bg-white text-slate-950 shadow-sm"
+                        : own
+                          ? "bg-[#0F87F9] text-white"
+                          : "bg-white text-slate-950 shadow-sm"
                     )}
                   >
-                    {message.message}
+                    {message.isHtml ? <div dangerouslySetInnerHTML={{ __html: message.message }} /> : message.message}
                   </div>
                   <p className="mt-1 text-[11px] font-medium text-slate-500">
                     {message.author} · {message.role} · {message.time}

@@ -36,6 +36,25 @@ function parseJsonField(value, fallback) {
   }
 }
 
+function normalizeAssetUrls(html, config = {}) {
+  const baseUrl = config.endpointUrl?.replace(/\/api\/method\/graphql$/, "") || "";
+
+  if (!baseUrl || !html) return html || "";
+  return String(html)
+    .replace(/(src|href)="\/files\//g, `$1="${baseUrl}/files/`)
+    .replace(/(src|href)='\/files\//g, `$1='${baseUrl}/files/`)
+    .replace(/(src|href)="\/assets\//g, `$1="${baseUrl}/assets/`)
+    .replace(/(src|href)='\/assets\//g, `$1='${baseUrl}/assets/`);
+}
+
+function sanitizeHtml(value) {
+  return String(value || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/\son\w+=(?:"[^"]*"|'[^']*')/gi, "")
+    .replace(/(href|src)=["']javascript:[^"']*["']/gi, '$1="#"');
+}
+
 function nowDateParts() {
   const now = new Date();
   const date = now.toISOString().slice(0, 10);
@@ -91,7 +110,7 @@ export function mapCreateTicketFormToHDTicketDoc(form, context = {}) {
   });
 }
 
-export function mapHDTicketNodeToSupportTicket(node) {
+export function mapHDTicketNodeToSupportTicket(node, config = {}) {
   const ticketType = node.ticket_type__name || linkName(node.ticket_type) || node.ticket_type || "Unspecified";
   const template = node.template__name || linkName(node.template) || node.template || "";
   const agentGroup = node.agent_group__name || linkName(node.agent_group) || node.agent_group || "";
@@ -99,6 +118,7 @@ export function mapHDTicketNodeToSupportTicket(node) {
   const priority = node.priority__name || linkName(node.priority) || node.priority || "Medium";
   const assignee = node.owner__name || linkName(node.owner) || node.modified_by__name || linkName(node.modified_by) || "";
   const employee = node.raised_by || node.contact__name || node.customer__name || "";
+  const descriptionHtml = sanitizeHtml(normalizeAssetUrls(node.description || node.summary || "", config));
 
   return {
     id: node.name,
@@ -120,7 +140,7 @@ export function mapHDTicketNodeToSupportTicket(node) {
     statusCategory: node.status_category || "",
     firstResponse: node.first_response_time || "",
     resolution: node.resolution_time || "",
-    description: node.description || node.summary || "",
+    description: descriptionHtml,
     summary: node.summary || "",
     template,
     raw: node,
@@ -131,15 +151,16 @@ export function mapHDTicketNodeToSupportTicket(node) {
         role: "Requester",
         time: node.creation || "",
         tone: "user",
-        message: node.description || node.summary || node.subject || "",
+        message: descriptionHtml || node.subject || "",
+        isHtml: Boolean(descriptionHtml),
       },
     ].filter((message) => message.message),
   };
 }
 
-export function mapHDTicketsResponse(data) {
+export function mapHDTicketsResponse(data, config = {}) {
   return (
-    data?.HDTickets?.edges?.map((edge) => mapHDTicketNodeToSupportTicket(edge.node)).filter(Boolean) || []
+    data?.HDTickets?.edges?.map((edge) => mapHDTicketNodeToSupportTicket(edge.node, config)).filter(Boolean) || []
   );
 }
 

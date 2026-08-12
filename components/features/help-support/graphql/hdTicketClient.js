@@ -20,7 +20,7 @@ import { clearHelpDeskGraphQLCache, executeHelpDeskGraphQL } from "./graphqlClie
 
 export async function fetchHDTickets({ first = 50, filters = null, graphqlConfig } = {}) {
   const data = await executeHelpDeskGraphQL(HD_TICKETS_QUERY, { first, filters }, { cache: true, config: graphqlConfig });
-  return mapHDTicketsResponse(data);
+  return mapHDTicketsResponse(data, graphqlConfig);
 }
 
 export async function fetchHDTicketOptions({ first = 100, graphqlConfig } = {}) {
