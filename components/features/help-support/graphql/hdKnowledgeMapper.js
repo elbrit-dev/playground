@@ -1,3 +1,5 @@
+import { formatIndiaDateTime } from "./dateTime";
+
 function linkName(value) {
   if (!value) return "";
   if (typeof value === "string") return value;
@@ -23,14 +25,19 @@ function normalizeAssetUrls(html, config = {}) {
 }
 
 export function mapHDArticleCategoryNode(node, articleCount = 0) {
+  const createdAt = node.creation || "";
+  const updatedAt = node.modified || "";
+
   return {
     id: node.name,
     name: node.category_name || node.name,
     description: node.description || "",
     icon: node.icon || "",
     count: articleCount,
-    createdAt: node.creation || "",
-    updatedAt: node.modified || "",
+    createdAt,
+    createdAtLabel: formatIndiaDateTime(createdAt),
+    updatedAt,
+    updatedAtLabel: formatIndiaDateTime(updatedAt),
     raw: node,
   };
 }
@@ -40,6 +47,9 @@ export function mapHDArticleNode(node, config = {}) {
   const content = normalizeAssetUrls(node.content || "", config);
   const viewCount = Number(node.views) || 0;
   const summary = stripHtml(content).slice(0, 180);
+  const publishedOn = node.published_on || "";
+  const createdAt = node.creation || "";
+  const updatedAt = node.modified || node.published_on || node.creation || "";
 
   return {
     id: node.name,
@@ -56,9 +66,12 @@ export function mapHDArticleNode(node, config = {}) {
     likeCount: Number(node.likes || node.like_count) || 0,
     comments: [],
     status: node.status || "",
-    publishedOn: node.published_on || "",
-    createdAt: node.creation || "",
-    updatedAt: node.modified || node.published_on || node.creation || "",
+    publishedOn,
+    publishedOnLabel: formatIndiaDateTime(publishedOn),
+    createdAt,
+    createdAtLabel: formatIndiaDateTime(createdAt),
+    updatedAt,
+    updatedAtLabel: formatIndiaDateTime(updatedAt),
     raw: node,
   };
 }
@@ -88,7 +101,7 @@ export function mapHDArticleCommentsResponse(data) {
         id: node.name,
         author: node.comment_by || node.comment_email || "User",
         email: node.comment_email || "",
-        time: node.creation || "",
+        time: formatIndiaDateTime(node.creation || ""),
         body: stripHtml(node.content || ""),
         raw: node,
       };

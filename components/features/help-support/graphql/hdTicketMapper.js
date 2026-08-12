@@ -1,4 +1,5 @@
 import { DEFAULT_HD_TICKET_VALUES, HD_TICKET_FORM_FIELDS } from "./hdTicketFields";
+import { formatIndiaDateTime } from "./dateTime";
 
 function compactDoc(doc) {
   return Object.fromEntries(
@@ -10,6 +11,18 @@ function linkName(value) {
   if (!value) return "";
   if (typeof value === "string") return value;
   return value.name || value.value || "";
+}
+
+function normalizeIdentity(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isSameIdentity(left, right) {
+  return Boolean(normalizeIdentity(left) && normalizeIdentity(left) === normalizeIdentity(right));
+}
+
+function isCurrentUserIdentity(value, user = {}) {
+  return [user.email, user.username, user.name].some((identity) => isSameIdentity(value, identity));
 }
 
 function isEnabled(node) {
@@ -116,9 +129,20 @@ export function mapHDTicketNodeToSupportTicket(node, config = {}) {
   const agentGroup = node.agent_group__name || linkName(node.agent_group) || node.agent_group || "";
   const status = node.status__name || linkName(node.status) || node.status || "Open";
   const priority = node.priority__name || linkName(node.priority) || node.priority || "Medium";
-  const assignee = node.owner__name || linkName(node.owner) || node.modified_by__name || linkName(node.modified_by) || "";
+  const assignee =
+    node.assignee ||
+    node.allocated_to__name ||
+    linkName(node.allocated_to) ||
+    node.owner__name ||
+    linkName(node.owner) ||
+    node.modified_by__name ||
+    linkName(node.modified_by) ||
+    "";
   const employee = node.raised_by || node.contact__name || node.customer__name || "";
   const descriptionHtml = sanitizeHtml(normalizeAssetUrls(node.description || node.summary || "", config));
+  const ticketDate = node.opening_date || node.creation || "";
+  const createdAt = node.creation || "";
+  const updatedAt = node.modified || "";
 
   return {
     id: node.name,
@@ -127,9 +151,12 @@ export function mapHDTicketNodeToSupportTicket(node, config = {}) {
     title: node.subject || node.name,
     subject: node.subject || "",
     category: ticketType,
-    date: node.opening_date || node.creation || "",
-    createdAt: node.creation || "",
-    updatedAt: node.modified || "",
+    date: ticketDate,
+    dateLabel: formatIndiaDateTime(ticketDate, { dateOnly: Boolean(node.opening_date) }),
+    createdAt,
+    createdAtLabel: formatIndiaDateTime(createdAt),
+    updatedAt,
+    updatedAtLabel: formatIndiaDateTime(updatedAt),
     employee: employee || "Requester",
     raisedBy: node.raised_by || "",
     team: agentGroup || "Unassigned team",
@@ -149,7 +176,7 @@ export function mapHDTicketNodeToSupportTicket(node, config = {}) {
         id: `${node.name}-description`,
         author: node.raised_by || "Requester",
         role: "Requester",
-        time: node.creation || "",
+        time: formatIndiaDateTime(node.creation || ""),
         tone: "user",
         message: descriptionHtml || node.subject || "",
         isHtml: Boolean(descriptionHtml),
@@ -162,6 +189,31 @@ export function mapHDTicketsResponse(data, config = {}) {
   return (
     data?.HDTickets?.edges?.map((edge) => mapHDTicketNodeToSupportTicket(edge.node, config)).filter(Boolean) || []
   );
+}
+
+export function mapHDTicketAssignmentsResponse(data) {
+  const assignments = new Map();
+
+  data?.ToDoes?.edges
+    ?.map((edge) => edge.node)
+    .filter((node) => node?.reference_name)
+    .filter((node) => !node.status || node.status !== "Closed")
+    .forEach((node) => {
+      const assignee = node.allocated_to__name || linkName(node.allocated_to);
+      if (assignee && !assignments.has(node.reference_name)) {
+        assignments.set(node.reference_name, assignee);
+      }
+    });
+
+  return assignments;
+}
+
+export function applyHDTicketAssignments(tickets, assignments = new Map()) {
+  if (!assignments.size) return tickets;
+  return tickets.map((ticket) => {
+    const assignee = assignments.get(ticket.id);
+    return assignee ? { ...ticket, assignee } : ticket;
+  });
 }
 
 export function mapHDTicketOptionsResponse(data) {
@@ -188,20 +240,29 @@ export function mapHDTicketOptionsResponse(data) {
   return { ticketTypes, priorities, statuses };
 }
 
-export function mapHDTicketCommentsResponse(data) {
+export function mapHDTicketCommentsResponse(data, user = {}) {
   return (
     data?.HDTicketComments?.edges
       ?.map((edge) => edge.node)
       .filter((node) => node?.content)
       .sort((a, b) => new Date(a.creation || 0) - new Date(b.creation || 0))
-      .map((node) => ({
-        id: node.name,
-        author: node.commented_by__name || linkName(node.commented_by) || "Support",
-        role: node.is_pinned ? "Pinned comment" : "Support",
-        time: node.creation || "",
-        tone: "agent",
-        message: node.content,
-      })) || []
+      .map((node) => {
+        const author = node.commented_by__name || linkName(node.commented_by) || node.owner__name || linkName(node.owner) || "Support";
+        const own =
+          isCurrentUserIdentity(node.commented_by__name, user) ||
+          isCurrentUserIdentity(linkName(node.commented_by), user) ||
+          isCurrentUserIdentity(node.owner__name, user) ||
+          isCurrentUserIdentity(linkName(node.owner), user);
+
+        return {
+          id: node.name,
+          author,
+          role: node.is_pinned ? "Pinned comment" : own ? "Requester" : "Support",
+          time: formatIndiaDateTime(node.creation || ""),
+          tone: own ? "user" : "agent",
+          message: node.content,
+        };
+      }) || []
   );
 }
 

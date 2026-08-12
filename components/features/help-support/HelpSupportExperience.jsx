@@ -187,7 +187,7 @@ function TicketCard({ ticket, onOpen, compact = false }) {
           <p className="text-xs font-bold uppercase tracking-wide text-slate-400">{ticket.id}</p>
           <h3 className="mt-2 font-bold leading-5 text-slate-950">{ticket.title}</h3>
           <p className="mt-2 text-sm text-slate-500">
-            {ticket.category} · {ticket.updatedAt}
+            {ticket.category} · {ticket.updatedAtLabel || ticket.dateLabel || ticket.updatedAt || ticket.date}
           </p>
         </div>
         <StatusBadge status={ticket.status} />
@@ -351,7 +351,7 @@ const TICKET_FIELD_FILTERS = [
   { id: "title", label: "Subject", getValue: (ticket) => ticket.title },
   { id: "status", label: "Status", getValue: (ticket) => ticket.status },
   { id: "category", label: "Category", getValue: (ticket) => ticket.category },
-  { id: "date", label: "Date", getValue: (ticket) => ticket.date || ticket.createdAt },
+  { id: "date", label: "Date", getValue: (ticket) => ticket.dateLabel || ticket.createdAtLabel || ticket.date || ticket.createdAt },
   { id: "assignee", label: "Assignee", getValue: (ticket) => ticket.assignee },
   { id: "employee", label: "Employee", getValue: (ticket) => ticket.employee },
 ];
@@ -401,7 +401,7 @@ function TicketDataTable({ tickets, onOpen, selectedIds, onToggleTicket, onToggl
                 />
               </td>
               <td className="px-3 py-2.5 font-semibold text-slate-700">{ticket.id.replace("HD-", "")}</td>
-              <td className="px-3 py-2.5 text-slate-600">{ticket.date || ticket.createdAt || "-"}</td>
+              <td className="px-3 py-2.5 text-slate-600">{ticket.dateLabel || ticket.createdAtLabel || ticket.date || ticket.createdAt || "-"}</td>
               <td className="max-w-[300px] px-3 py-2.5">
                 <p className="font-semibold text-slate-950">{ticket.title}</p>
                 <p className="mt-0.5 truncate text-[11px] text-slate-500">{ticket.category}</p>
@@ -449,7 +449,7 @@ function MobileTicketRow({ ticket, onOpen }) {
             <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{ticket.id}</p>
             <h3 className="mt-1 text-sm font-bold leading-5 text-slate-950">{ticket.title}</h3>
             <p className="mt-1 text-xs text-slate-500">
-              {ticket.category} · {ticket.date || ticket.updatedAt}
+              {ticket.category} · {ticket.dateLabel || ticket.updatedAtLabel || ticket.date || ticket.updatedAt}
             </p>
           </div>
           <StatusBadge status={ticket.status} />
@@ -884,6 +884,16 @@ function TicketConversation({
   const [isLoadingComments, setIsLoadingComments] = useState(false);
   const [isSavingComment, setIsSavingComment] = useState(false);
   const canSend = comment.trim() && !isSavingComment;
+  const commentUser = useMemo(() => {
+    const storedEmail = readStoredUserEmail();
+    const email = user?.email || user?.username || storedEmail || "";
+    return {
+      ...user,
+      email,
+      username: user?.username || email,
+      name: user?.name || email,
+    };
+  }, [user?.email, user?.username, user?.name]);
 
   useEffect(() => {
     let active = true;
@@ -892,7 +902,7 @@ function TicketConversation({
     if (!ticket?.id || !ticket.raw) return undefined;
 
     setIsLoadingComments(true);
-    fetchHDTicketComments(ticket.id, graphqlConfig)
+    fetchHDTicketComments(ticket.id, graphqlConfig, commentUser)
       .then((items) => {
         if (active) setComments(items);
       })
@@ -910,7 +920,7 @@ function TicketConversation({
     return () => {
       active = false;
     };
-  }, [ticket?.id, ticket?.raw, graphqlConfig]);
+  }, [ticket?.id, ticket?.raw, graphqlConfig, commentUser]);
 
   const conversation = [...(ticket.conversation || []), ...comments];
 
@@ -920,12 +930,12 @@ function TicketConversation({
     const nextComment = comment.trim();
     setIsSavingComment(true);
     try {
-      const name = await saveHDTicketComment(ticket.id, nextComment, { graphqlConfig, user });
+      const name = await saveHDTicketComment(ticket.id, nextComment, { graphqlConfig, user: commentUser });
       setComments((current) => [
         ...current,
         {
           id: name || `msg-${ticket.id}-${Date.now()}`,
-          author: user?.name || user?.email || "You",
+          author: commentUser.name || commentUser.email || "You",
           role: "Requester",
           time: "Just now",
           tone: "user",
@@ -960,7 +970,7 @@ function TicketConversation({
               <p className="text-[11px] font-semibold text-slate-500">Tickets / {ticket.id}</p>
               <h2 className="truncate text-sm font-bold text-slate-950 md:text-base">{ticket.title}</h2>
               <p className="mt-0.5 text-[11px] text-slate-500 md:text-xs">
-                Created {ticket.createdAt || ticket.date || "Just now"} · {ticket.category}
+                Created {ticket.createdAtLabel || ticket.dateLabel || ticket.createdAt || ticket.date || "Just now"} · {ticket.category}
               </p>
             </div>
           </div>
@@ -1167,7 +1177,7 @@ function ArticleView({ article, onBack, graphqlConfig, user }) {
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-4">
-      <BackHeader title={article.title} subtitle={`${article.category} · ${article.updatedAt || "Knowledge base"}`} onBack={onBack} />
+      <BackHeader title={article.title} subtitle={`${article.category} · ${article.updatedAtLabel || article.publishedOnLabel || "Knowledge base"}`} onBack={onBack} />
       <Card className="min-h-0 flex-1 overflow-y-auto p-4 md:p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0">
@@ -1455,7 +1465,7 @@ export default function HelpSupportExperience({
     () =>
       tickets.filter((ticket) =>
         matches(
-          `${ticket.id} ${ticket.title} ${ticket.category} ${ticket.status} ${ticket.description} ${ticket.assignee} ${ticket.employee} ${ticket.team} ${ticket.ticketType} ${ticket.priority} ${ticket.date}`
+          `${ticket.id} ${ticket.title} ${ticket.category} ${ticket.status} ${ticket.description} ${ticket.assignee} ${ticket.employee} ${ticket.team} ${ticket.ticketType} ${ticket.priority} ${ticket.date} ${ticket.dateLabel} ${ticket.createdAtLabel} ${ticket.updatedAtLabel}`
         )
       ),
     [tickets, normalizedQuery]

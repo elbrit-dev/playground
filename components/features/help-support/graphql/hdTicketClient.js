@@ -1,6 +1,7 @@
 import {
   CREATE_HD_TICKET_MUTATION,
   DELETE_HD_TICKET_MUTATION,
+  HD_TICKET_ASSIGNMENTS_QUERY,
   HD_TICKET_COMMENTS_QUERY,
   HD_TICKET_OPTIONS_QUERY,
   HD_TICKETS_QUERY,
@@ -9,7 +10,9 @@ import {
   UPDATE_HD_TICKET_MUTATION,
 } from "./hdTicket.graphql";
 import {
+  applyHDTicketAssignments,
   mapCreateTicketFormToHDTicketDoc,
+  mapHDTicketAssignmentsResponse,
   mapHDTicketCommentsResponse,
   mapHDTicketNodeToSupportTicket,
   mapHDTicketOptionsResponse,
@@ -20,7 +23,18 @@ import { clearHelpDeskGraphQLCache, executeHelpDeskGraphQL } from "./graphqlClie
 
 export async function fetchHDTickets({ first = 50, filters = null, graphqlConfig } = {}) {
   const data = await executeHelpDeskGraphQL(HD_TICKETS_QUERY, { first, filters }, { cache: true, config: graphqlConfig });
-  return mapHDTicketsResponse(data, graphqlConfig);
+  const tickets = mapHDTicketsResponse(data, graphqlConfig);
+
+  try {
+    const assignmentsData = await executeHelpDeskGraphQL(
+      HD_TICKET_ASSIGNMENTS_QUERY,
+      { first: 200 },
+      { cache: true, config: graphqlConfig }
+    );
+    return applyHDTicketAssignments(tickets, mapHDTicketAssignmentsResponse(assignmentsData));
+  } catch {
+    return tickets;
+  }
 }
 
 export async function fetchHDTicketOptions({ first = 100, graphqlConfig } = {}) {
@@ -62,14 +76,14 @@ export async function updateHDTicket(name, patch) {
   return data?.saveDoc?.doc?.name || name;
 }
 
-export async function fetchHDTicketComments(ticketName, graphqlConfig) {
+export async function fetchHDTicketComments(ticketName, graphqlConfig, user = {}) {
   if (!ticketName) return [];
   const data = await executeHelpDeskGraphQL(
     HD_TICKET_COMMENTS_QUERY,
     { ticketName },
     { cache: true, config: graphqlConfig }
   );
-  return mapHDTicketCommentsResponse(data);
+  return mapHDTicketCommentsResponse(data, user);
 }
 
 export async function saveHDTicketComment(ticketName, comment, context = {}) {

@@ -148,6 +148,10 @@ query HDTicketComments($ticketName: String!) {
     edges {
       node {
         name
+        owner {
+          name
+        }
+        owner__name
         content
         commented_by {
           name
@@ -156,6 +160,30 @@ query HDTicketComments($ticketName: String!) {
         creation
         is_pinned
         reference_ticket__name
+      }
+    }
+  }
+}
+`;
+
+export const HD_TICKET_ASSIGNMENTS_QUERY = `
+query HDTicketAssignments($first: Int!) {
+  ToDoes(
+    first: $first
+    filter: [
+      { fieldname: "reference_type", operator: EQ, value: "HD Ticket" }
+    ]
+  ) {
+    edges {
+      node {
+        name
+        allocated_to {
+          name
+        }
+        allocated_to__name
+        reference_type
+        reference_name
+        status
       }
     }
   }
