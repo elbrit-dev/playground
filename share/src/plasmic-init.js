@@ -1,6 +1,5 @@
 'use client';
 
-import { initPlasmicLoader } from '@plasmicapp/loader-nextjs';
 import DataProvider from './app/datatable/components/DataProvider.jsx';
 import DataProviderViews from './app/datatable/components/DataProviderViews.jsx';
 import DataView from './app/datatable/components/DataView.jsx';
@@ -477,13 +476,8 @@ export function registerElbritCoreComponents(loader) {
   loader.registerComponent(ViewSwitcher, viewSwitcherMeta);
 }
 
-const ElbritCoreLib = initPlasmicLoader({
-  projects: [],
-});
-
-registerElbritCoreComponents(ElbritCoreLib);
-
-ElbritCoreLib.components = {
+const ElbritCoreLib = {
+  components: {
   DataProvider,
   DataProviderViews,
   DataView,
@@ -494,6 +488,7 @@ ElbritCoreLib.components = {
   SmartDataTable,
   ReportControls,
   ViewSwitcher,
+  },
 };
 
 export { ElbritCoreLib };

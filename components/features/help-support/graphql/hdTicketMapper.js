@@ -12,6 +12,30 @@ function linkName(value) {
   return value.name || value.value || "";
 }
 
+function isEnabled(node) {
+  return !Number(node?.disabled || 0);
+}
+
+function mapOptionNode(node) {
+  if (!node?.name) return null;
+  return {
+    name: node.name,
+    label: node.description || node.name,
+    description: node.description || "",
+    priority: linkName(node.priority) || node.priority__name || "",
+    integerValue: Number.isFinite(Number(node.integer_value)) ? Number(node.integer_value) : null,
+  };
+}
+
+function parseJsonField(value, fallback) {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
 function nowDateParts() {
   const now = new Date();
   const date = now.toISOString().slice(0, 10);
@@ -68,11 +92,13 @@ export function mapCreateTicketFormToHDTicketDoc(form, context = {}) {
 }
 
 export function mapHDTicketNodeToSupportTicket(node) {
-  const ticketType = linkName(node.ticket_type) || node.ticket_type || "Unspecified";
-  const template = linkName(node.template) || node.template || "";
-  const agentGroup = linkName(node.agent_group) || node.agent_group || "";
-  const status = linkName(node.status) || node.status || "Open";
-  const priority = linkName(node.priority) || node.priority || "Medium";
+  const ticketType = node.ticket_type__name || linkName(node.ticket_type) || node.ticket_type || "Unspecified";
+  const template = node.template__name || linkName(node.template) || node.template || "";
+  const agentGroup = node.agent_group__name || linkName(node.agent_group) || node.agent_group || "";
+  const status = node.status__name || linkName(node.status) || node.status || "Open";
+  const priority = node.priority__name || linkName(node.priority) || node.priority || "Medium";
+  const assignee = node.owner__name || linkName(node.owner) || node.modified_by__name || linkName(node.modified_by) || "";
+  const employee = node.raised_by || node.contact__name || node.customer__name || "";
 
   return {
     id: node.name,
@@ -84,10 +110,10 @@ export function mapHDTicketNodeToSupportTicket(node) {
     date: node.opening_date || node.creation || "",
     createdAt: node.creation || "",
     updatedAt: node.modified || "",
-    employee: node.raised_by || "Requester",
+    employee: employee || "Requester",
     raisedBy: node.raised_by || "",
-    team: agentGroup || "Helpdesk",
-    assignee: agentGroup || "Helpdesk",
+    team: agentGroup || "Unassigned team",
+    assignee: assignee || "Unassigned",
     agentGroup,
     ticketType,
     priority,
@@ -114,5 +140,73 @@ export function mapHDTicketNodeToSupportTicket(node) {
 export function mapHDTicketsResponse(data) {
   return (
     data?.HDTickets?.edges?.map((edge) => mapHDTicketNodeToSupportTicket(edge.node)).filter(Boolean) || []
+  );
+}
+
+export function mapHDTicketOptionsResponse(data) {
+  const ticketTypes =
+    data?.HDTicketTypes?.edges
+      ?.map((edge) => edge.node)
+      .filter(isEnabled)
+      .map(mapOptionNode)
+      .filter(Boolean) || [];
+  const priorities =
+    data?.HDTicketPrioritys?.edges
+      ?.map((edge) => edge.node)
+      .filter(isEnabled)
+      .map(mapOptionNode)
+      .filter(Boolean)
+      .sort((a, b) => {
+        if (a.integerValue === null && b.integerValue === null) return a.name.localeCompare(b.name);
+        if (a.integerValue === null) return 1;
+        if (b.integerValue === null) return -1;
+        return a.integerValue - b.integerValue;
+      }) || [];
+  const statuses = data?.HDTicketStatuses?.edges?.map((edge) => mapOptionNode(edge.node)).filter(Boolean) || [];
+
+  return { ticketTypes, priorities, statuses };
+}
+
+export function mapHDTicketCommentsResponse(data) {
+  return (
+    data?.HDTicketComments?.edges
+      ?.map((edge) => edge.node)
+      .filter((node) => node?.content)
+      .sort((a, b) => new Date(a.creation || 0) - new Date(b.creation || 0))
+      .map((node) => ({
+        id: node.name,
+        author: node.commented_by__name || linkName(node.commented_by) || "Support",
+        role: node.is_pinned ? "Pinned comment" : "Support",
+        time: node.creation || "",
+        tone: "agent",
+        message: node.content,
+      })) || []
+  );
+}
+
+export function mapHDViewsResponse(data) {
+  return (
+    data?.HDViews?.edges
+      ?.map((edge) => edge.node)
+      .filter((node) => (node?.dt__name || linkName(node?.dt)) === "HD Ticket")
+      .filter((node) => (node?.label || node?.name) !== "My Feedback")
+      .map((node) => ({
+        id: node.name,
+        label: node.label || node.name,
+        icon: node.icon || "",
+        routeName: node.route_name || "",
+        isDefault: Boolean(Number(node.is_default || 0)),
+        isCustomerPortal: Boolean(Number(node.is_customer_portal || 0)),
+        isStandard: Boolean(Number(node.is_standard || 0)),
+        pinned: Boolean(Number(node.pinned || 0)),
+        public: Boolean(Number(node.public || 0)),
+        type: node.type || "",
+        filters: parseJsonField(node.filters, {}),
+        orderBy: node.order_by || "",
+        columns: parseJsonField(node.columns, []),
+        rows: parseJsonField(node.rows, []),
+        groupByField: node.group_by_field || "",
+        raw: node,
+      })) || []
   );
 }

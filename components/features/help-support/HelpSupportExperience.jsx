@@ -2,7 +2,20 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Toaster, toast } from "sonner";
-import { createHDTicket, deleteHDTicket, fetchHDTickets, fetchHelpSupportDashboard, HD_TICKET_TYPES } from "./graphql";
+import {
+  createHDTicket,
+  deleteHDTicket,
+  fetchHDArticleComments,
+  fetchHDTicketComments,
+  fetchHDTicketOptions,
+  fetchHDTickets,
+  fetchHDViews,
+  fetchHelpSupportDashboard,
+  saveHDArticleComment,
+  saveHDTicketComment,
+  toggleHDArticleLike,
+  updateHDTicket,
+} from "./graphql";
 
 const HELP_SUPPORT_UI_CONTENT = {
   user: {},
@@ -48,6 +61,15 @@ function readStoredUserEmail() {
   }
 
   return "";
+}
+
+function initials(name) {
+  return String(name || "KB")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "KB";
 }
 
 function Card({ children, className = "", as: Component = "section", ...props }) {
@@ -297,16 +319,14 @@ function TrendingList({ items, onOpen }) {
   );
 }
 
-function TicketFilters({ activeFilter, setActiveFilter, counts }) {
-  const filters = [
-    { id: "active", label: `Active (${counts.active})` },
-    { id: "resolved", label: `Resolved (${counts.resolved})` },
-    { id: "all", label: `All (${counts.all})` },
-  ];
+function TicketFilters({ activeFilter, setActiveFilter, counts, views = [] }) {
+  if (!views.length) {
+    return <p className="text-xs font-semibold text-slate-500">ERP ticket views unavailable</p>;
+  }
 
   return (
     <div className="flex gap-2 overflow-x-auto pb-1">
-      {filters.map((filter) => (
+      {views.map((filter) => (
         <button
           key={filter.id}
           type="button"
@@ -318,7 +338,8 @@ function TicketFilters({ activeFilter, setActiveFilter, counts }) {
               : "border-slate-200 bg-white text-slate-700 hover:border-blue-200"
           )}
         >
-          {filter.label}
+          {filter.icon ? `${filter.icon} ` : ""}
+          {filter.label} ({counts[filter.id] || 0})
         </button>
       ))}
     </div>
@@ -438,7 +459,8 @@ function MobileTicketRow({ ticket, onOpen }) {
   );
 }
 
-function StatusSelect({ status, onChange }) {
+function StatusSelect({ status, onChange, statuses = [] }) {
+  const statusOptions = mergeSelectedOption(statuses, status);
   const statusStyles = {
     Open: "bg-red-500",
     Replied: "bg-blue-500",
@@ -452,10 +474,11 @@ function StatusSelect({ status, onChange }) {
       <select
         value={status}
         onChange={(event) => onChange(event.target.value)}
+        disabled={!statusOptions.length}
         className="h-7 rounded-md border-0 bg-transparent px-1 text-xs font-semibold outline-none"
         aria-label="Change ticket status"
       >
-        {["Open", "Replied", "Resolved", "Closed"].map((item) => (
+        {statusOptions.map((item) => (
           <option key={item} value={item}>
             {item}
           </option>
@@ -465,14 +488,73 @@ function StatusSelect({ status, onChange }) {
   );
 }
 
-function FieldSelect({ label, value, options, onChange }) {
+function toOptionNames(options) {
+  return options.map((option) => (typeof option === "string" ? option : option.name)).filter(Boolean);
+}
+
+function mergeSelectedOption(options, value) {
+  const names = toOptionNames(options);
+  if (value && !names.includes(value)) return [value, ...names];
+  return names;
+}
+
+function readTicketField(ticket, field) {
+  const fieldMap = {
+    name: "id",
+    subject: "subject",
+    ticket_type: "ticketType",
+    priority: "priority",
+    status: "status",
+    status_category: "statusCategory",
+    agent_group: "agentGroup",
+    raised_by: "raisedBy",
+    creation: "createdAt",
+    modified: "updatedAt",
+    response_by: "raw.response_by",
+    resolution_by: "raw.resolution_by",
+    agreement_status: "raw.agreement_status",
+    last_customer_response: "raw.last_customer_response",
+    last_agent_response: "raw.last_agent_response",
+    sla: "raw.sla",
+  };
+  const path = fieldMap[field] || field;
+  return path.split(".").reduce((value, key) => value?.[key], ticket);
+}
+
+function createTicketViewMatcher(filters = {}) {
+  const entries = Object.entries(filters).filter(
+    ([field]) => !field.startsWith("_") && !field.startsWith("__") && field !== "creation"
+  );
+  if (!entries.length) return () => true;
+
+  return (ticket) =>
+    entries.every(([field, condition]) => {
+      const value = readTicketField(ticket, field);
+      const normalizedValue = String(value || "").toLowerCase();
+
+      if (!Array.isArray(condition)) {
+        return normalizedValue === String(condition || "").toLowerCase();
+      }
+
+      const [operator, expected] = condition;
+      const normalizedExpected = String(expected || "").toLowerCase();
+      if (operator === "is") return expected === "set" ? Boolean(value) : !value;
+      if (operator === "LIKE") return normalizedValue.includes(normalizedExpected.replace(/%/g, ""));
+      if (operator === "in") return normalizedExpected.split(",").map((item) => item.trim()).includes(normalizedValue);
+      if (operator === "!=") return normalizedValue !== normalizedExpected;
+      return normalizedValue === normalizedExpected;
+    });
+}
+
+function FieldSelect({ label, value, options, onChange, disabled = false }) {
   return (
     <label className="block">
       <span className="text-[11px] font-semibold text-slate-500">{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-semibold text-slate-700 outline-none focus:border-[#0F87F9] focus:ring-2 focus:ring-blue-100"
+        disabled={disabled}
+        className="mt-1 h-8 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-semibold text-slate-700 outline-none focus:border-[#0F87F9] focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:text-slate-400"
       >
         {options.map((option) => (
           <option key={option} value={option}>
@@ -484,49 +566,59 @@ function FieldSelect({ label, value, options, onChange }) {
   );
 }
 
-function TicketMetaPanel({ ticket, onFieldChange }) {
-  const options = {
-    ticketType: ["Issue", "Bug", "Request", "Question"],
-    priority: ["Low", "Medium", "High", "Urgent"],
-    employee: [],
-    team: ["North Delhi Sales", "Field Operations", "DCR Support", "IT Support"],
-    assignee: ["Priya", "IT Helpdesk", "DCR Support", "Helpdesk"],
-  };
-  const fields = [
-    ["Ticket Type", "ticketType", ticket.ticketType || "Issue"],
-    ["Priority", "priority", ticket.priority || "Medium"],
-    ["Employee", "employee", ticket.employee || "-"],
-    ["Team", "team", ticket.team || "Field Operations"],
-    ["Assignee", "assignee", ticket.assignee || "Helpdesk"],
+function ReadOnlyField({ label, value }) {
+  return (
+    <div>
+      <p className="text-[11px] font-semibold text-slate-500">{label}</p>
+      <p className="mt-1 min-h-8 rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-xs font-semibold text-slate-700">
+        {value || "-"}
+      </p>
+    </div>
+  );
+}
+
+function TicketMetaPanel({ ticket, onFieldChange, ticketTypes = [], ticketPriorities = [] }) {
+  const ticketTypeOptions = mergeSelectedOption(ticketTypes, ticket.ticketType || ticket.category);
+  const priorityOptions = mergeSelectedOption(ticketPriorities, ticket.priority);
+  const pairedFields = [
+    ["Ticket Type", "ticketType", ticket.ticketType || ticket.category || ticketTypeOptions[0] || ""],
+    ["Priority", "priority", ticket.priority || priorityOptions[0] || ""],
   ];
+  const owner = ticket.assignee || ticket.agentGroup || ticket.team || "Helpdesk";
 
   return (
     <Card className="order-first shrink-0 p-3 lg:order-none lg:w-[300px]">
       <div className="mb-3 flex items-center gap-3">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-500">
-          {(ticket.assignee || "H").charAt(0)}
+          {owner.charAt(0)}
         </div>
         <div className="min-w-0">
-          <p className="truncate text-xs font-bold text-slate-950">{ticket.assignee || "Helpdesk"}</p>
-          <p className="text-[11px] text-slate-500">Ticket owner</p>
+          <p className="truncate text-xs font-bold text-slate-950">{owner}</p>
+          <p className="text-[11px] text-slate-500">ERP assignment</p>
         </div>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-        {fields.map(([label, field, value]) => (
+      <div className="grid grid-cols-2 gap-2">
+        {pairedFields.map(([label, field, value]) => (
           <FieldSelect
             key={field}
             label={label}
             value={value}
-            options={options[field]}
+            options={field === "ticketType" ? ticketTypeOptions : priorityOptions}
+            disabled={field === "ticketType" ? !ticketTypeOptions.length : !priorityOptions.length}
             onChange={(nextValue) => onFieldChange(ticket.id, field, nextValue)}
           />
         ))}
+      </div>
+      <div className="mt-3 grid gap-2">
+        <ReadOnlyField label="Employee" value={ticket.employee} />
+        <ReadOnlyField label="Team" value={ticket.team} />
+        <ReadOnlyField label="Assignee" value={ticket.assignee} />
       </div>
     </Card>
   );
 }
 
-function TicketsPanel({ tickets, onOpen, activeFilter, setActiveFilter, counts, onCreate, onDeleteTickets, fill = false }) {
+function TicketsPanel({ tickets, onOpen, activeFilter, setActiveFilter, counts, views, onCreate, onDeleteTickets, fill = false }) {
   const [selectedIds, setSelectedIds] = useState([]);
   const [filterField, setFilterField] = useState("title");
   const [filterValue, setFilterValue] = useState("");
@@ -576,7 +668,7 @@ function TicketsPanel({ tickets, onOpen, activeFilter, setActiveFilter, counts, 
           </button>
         </div>
         <div className="grid gap-3 xl:grid-cols-[1fr_auto] xl:items-center">
-          <TicketFilters activeFilter={activeFilter} setActiveFilter={setActiveFilter} counts={counts} />
+          <TicketFilters activeFilter={activeFilter} setActiveFilter={setActiveFilter} counts={counts} views={views} />
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg bg-slate-100 p-1 md:flex-none">
               <i className="pi pi-filter ml-2 text-xs text-slate-500" aria-hidden />
@@ -638,13 +730,14 @@ function TicketsPanel({ tickets, onOpen, activeFilter, setActiveFilter, counts, 
   );
 }
 
-function CreateTicketForm({ content, onSubmit, onCancel }) {
-  const [ticketType, setTicketType] = useState("Unspecified");
+function CreateTicketForm({ content, onSubmit, onCancel, ticketTypes = [] }) {
+  const ticketTypeOptions = useMemo(() => toOptionNames(ticketTypes), [ticketTypes]);
+  const [ticketType, setTicketType] = useState("");
   const [subject, setSubject] = useState("");
   const [raisedBy, setRaisedBy] = useState(() => content.user?.email || "");
   const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const canSubmit = subject.trim() && isEmail(raisedBy) && description.trim() && !isSubmitting;
+  const canSubmit = ticketType && subject.trim() && isEmail(raisedBy) && description.trim() && !isSubmitting;
 
   useEffect(() => {
     setRaisedBy((current) => {
@@ -653,6 +746,14 @@ function CreateTicketForm({ content, onSubmit, onCancel }) {
       return storedEmail || current;
     });
   }, []);
+
+  useEffect(() => {
+    if (!ticketTypeOptions.length) {
+      setTicketType("");
+      return;
+    }
+    setTicketType((current) => (ticketTypeOptions.includes(current) ? current : ticketTypeOptions[0]));
+  }, [ticketTypeOptions]);
 
   const submit = async (event) => {
     event.preventDefault();
@@ -680,7 +781,7 @@ function CreateTicketForm({ content, onSubmit, onCancel }) {
           <fieldset className="min-w-0">
             <legend className="mb-2 block text-sm font-semibold text-slate-700">{content.ticketForm.categoryLabel}</legend>
             <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
-              {HD_TICKET_TYPES.map((type) => {
+              {ticketTypeOptions.map((type) => {
                 const selected = ticketType === type;
                 return (
                   <button
@@ -698,6 +799,9 @@ function CreateTicketForm({ content, onSubmit, onCancel }) {
                   </button>
                 );
               })}
+              {!ticketTypeOptions.length ? (
+                <p className="text-xs font-semibold text-slate-500">Ticket types are loading from ERP.</p>
+              ) : null}
             </div>
           </fieldset>
           <label className="min-w-0">
@@ -764,15 +868,79 @@ function CreateTicketForm({ content, onSubmit, onCancel }) {
   );
 }
 
-function TicketConversation({ ticket, onBack, onAddComment, onStatusChange, onFieldChange }) {
+function TicketConversation({
+  ticket,
+  onBack,
+  onStatusChange,
+  onFieldChange,
+  graphqlConfig,
+  user,
+  ticketTypes,
+  ticketPriorities,
+  ticketStatuses,
+}) {
   const [comment, setComment] = useState("");
-  const canSend = comment.trim();
+  const [comments, setComments] = useState([]);
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
+  const [isSavingComment, setIsSavingComment] = useState(false);
+  const canSend = comment.trim() && !isSavingComment;
 
-  const submit = (event) => {
+  useEffect(() => {
+    let active = true;
+    setComments([]);
+    setComment("");
+    if (!ticket?.id || !ticket.raw) return undefined;
+
+    setIsLoadingComments(true);
+    fetchHDTicketComments(ticket.id, graphqlConfig)
+      .then((items) => {
+        if (active) setComments(items);
+      })
+      .catch((error) => {
+        if (active) {
+          toast.error("Could not load ticket comments", {
+            description: error?.message || "Please check ERP access.",
+          });
+        }
+      })
+      .finally(() => {
+        if (active) setIsLoadingComments(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [ticket?.id, ticket?.raw, graphqlConfig]);
+
+  const conversation = [...(ticket.conversation || []), ...comments];
+
+  const submit = async (event) => {
     event.preventDefault();
     if (!canSend) return;
-    onAddComment(ticket.id, comment.trim());
-    setComment("");
+    const nextComment = comment.trim();
+    setIsSavingComment(true);
+    try {
+      const name = await saveHDTicketComment(ticket.id, nextComment, { graphqlConfig, user });
+      setComments((current) => [
+        ...current,
+        {
+          id: name || `msg-${ticket.id}-${Date.now()}`,
+          author: user?.name || user?.email || "You",
+          role: "Requester",
+          time: "Just now",
+          tone: "user",
+          message: nextComment,
+        },
+      ]);
+      setComment("");
+      toast.success("Comment added");
+    } catch (error) {
+      toast.error("Could not save ticket comment", {
+        description: error?.message || "Please check ERP access.",
+      });
+    } finally {
+      setIsSavingComment(false);
+    }
   };
 
   return (
@@ -796,7 +964,7 @@ function TicketConversation({ ticket, onBack, onAddComment, onStatusChange, onFi
               </p>
             </div>
           </div>
-          <StatusSelect status={ticket.status} onChange={(status) => onStatusChange(ticket.id, status)} />
+          <StatusSelect status={ticket.status} statuses={ticketStatuses} onChange={(status) => onStatusChange(ticket.id, status)} />
         </div>
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] md:text-xs">
           <span className="font-semibold text-slate-700">
@@ -810,7 +978,8 @@ function TicketConversation({ ticket, onBack, onAddComment, onStatusChange, onFi
       <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto p-3 lg:grid-cols-[minmax(0,1fr)_300px] lg:overflow-hidden">
         <div className="flex min-h-[360px] min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-100 lg:min-h-0">
           <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-3 py-3">
-            {(ticket.conversation || []).map((message) => {
+            {isLoadingComments ? <p className="text-xs font-semibold text-slate-500">Loading ERP comments...</p> : null}
+            {conversation.map((message) => {
               const own = message.tone === "user";
               return (
                 <div key={message.id} className={cx("flex flex-col", own ? "items-end" : "items-start")}>
@@ -842,12 +1011,17 @@ function TicketConversation({ ticket, onBack, onAddComment, onStatusChange, onFi
                 disabled={!canSend}
                 className="inline-flex h-9 items-center justify-center rounded-lg bg-[#0F87F9] px-3 text-xs font-bold text-white disabled:bg-blue-200"
               >
-                Send
+                {isSavingComment ? "Sending..." : "Send"}
               </button>
             </div>
           </form>
         </div>
-        <TicketMetaPanel ticket={ticket} onFieldChange={onFieldChange} />
+        <TicketMetaPanel
+          ticket={ticket}
+          onFieldChange={onFieldChange}
+          ticketTypes={ticketTypes}
+          ticketPriorities={ticketPriorities}
+        />
       </div>
     </section>
   );
@@ -889,18 +1063,195 @@ function ArticlesResultView({ title, subtitle, articles, onBack, onArticle }) {
   );
 }
 
-function ArticleView({ article, onBack }) {
+function ArticleView({ article, onBack, graphqlConfig, user }) {
+  const [liked, setLiked] = useState(false);
+  const [isSavingLike, setIsSavingLike] = useState(false);
+  const [answer, setAnswer] = useState("");
+  const [comments, setComments] = useState(article.comments || []);
+  const [comment, setComment] = useState("");
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
+  const [isSavingComment, setIsSavingComment] = useState(false);
+  const likeCount = (article.likeCount || 0) + (liked ? 1 : 0);
+
+  useEffect(() => {
+    setLiked(false);
+    setAnswer("");
+    setComments(article.comments || []);
+    setComment("");
+  }, [article.id, article.comments]);
+
+  useEffect(() => {
+    let active = true;
+    setIsLoadingComments(true);
+    fetchHDArticleComments(article.id, graphqlConfig)
+      .then((items) => {
+        if (active) setComments(items);
+      })
+      .catch((error) => {
+        if (active) {
+          toast.error("Could not load article comments", {
+            description: error?.message || "Please check ERP access.",
+          });
+        }
+      })
+      .finally(() => {
+        if (active) setIsLoadingComments(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [article.id, graphqlConfig]);
+
+  const shareArticle = async () => {
+    const shareUrl = typeof window !== "undefined" ? window.location.href : article.title;
+    const shareData = { title: article.title, text: article.summary, url: shareUrl };
+    try {
+      if (typeof navigator !== "undefined" && navigator.share) {
+        await navigator.share(shareData);
+      } else if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(shareUrl);
+        toast.success("Article link copied");
+      }
+    } catch {
+      // Ignore cancelled native share sheets.
+    }
+  };
+
+  const toggleLike = async () => {
+    const nextLiked = !liked;
+    setLiked(nextLiked);
+    setIsSavingLike(true);
+    try {
+      await toggleHDArticleLike(article.id, nextLiked, graphqlConfig);
+    } catch (error) {
+      setLiked(!nextLiked);
+      toast.error("Could not update like", {
+        description: error?.message || "Please check ERP access.",
+      });
+    } finally {
+      setIsSavingLike(false);
+    }
+  };
+
+  const submitComment = async (event) => {
+    event.preventDefault();
+    if (!comment.trim()) return;
+    const nextComment = comment.trim();
+    setIsSavingComment(true);
+    try {
+      const name = await saveHDArticleComment(article.id, nextComment, { graphqlConfig, user });
+      setComments((current) => [
+        {
+          id: name || `${article.id}-${Date.now()}`,
+          author: user?.name || user?.email || "You",
+          time: "Just now",
+          body: nextComment,
+        },
+        ...current,
+      ]);
+      setComment("");
+      toast.success("Comment added");
+    } catch (error) {
+      toast.error("Could not save comment", {
+        description: error?.message || "Please check ERP access.",
+      });
+    } finally {
+      setIsSavingComment(false);
+    }
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-4">
       <BackHeader title={article.title} subtitle={`${article.category} · ${article.updatedAt || "Knowledge base"}`} onBack={onBack} />
       <Card className="min-h-0 flex-1 overflow-y-auto p-4 md:p-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#0F87F9]">Knowledge base</p>
-        <h2 className="mt-2 text-lg font-bold leading-tight text-slate-950 md:text-xl">{article.title}</h2>
-        {article.author ? <p className="mt-2 text-xs font-semibold text-slate-500">By {article.author}</p> : null}
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#0F87F9]">{article.category}</p>
+            <h2 className="mt-2 text-lg font-bold leading-tight text-slate-950 md:text-xl">{article.title}</h2>
+            {article.author ? (
+              <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-slate-500">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-50 text-[11px] font-black text-[#0F87F9]">
+                  {initials(article.author)}
+                </span>
+                <span>{article.author}</span>
+              </div>
+            ) : null}
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <span className="inline-flex h-8 items-center rounded-full bg-blue-50 px-3 text-xs font-bold text-[#0F87F9]">
+              {article.views}
+            </span>
+            <button
+              type="button"
+              onClick={toggleLike}
+              disabled={isSavingLike}
+              className={cx(
+                "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-bold transition",
+                liked ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-[#0F87F9]"
+              )}
+            >
+              <i className={liked ? "pi pi-heart-fill" : "pi pi-heart"} aria-hidden />
+              {likeCount}
+            </button>
+            <button
+              type="button"
+              onClick={shareArticle}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full bg-slate-100 px-3 text-xs font-bold text-slate-700 transition hover:bg-blue-50 hover:text-[#0F87F9]"
+            >
+              <i className="pi pi-share-alt" aria-hidden />
+              Share
+            </button>
+          </div>
+        </div>
         <div
           className="mt-4 max-w-none rounded-xl bg-slate-50 p-3 text-[11px] leading-5 text-slate-700 [&_a]:text-[#0F87F9] [&_code]:rounded [&_code]:bg-slate-200 [&_code]:px-1 [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-sm [&_h2]:font-bold [&_h3]:mb-2 [&_h3]:mt-4 [&_h3]:text-sm [&_h3]:font-bold [&_img]:mx-auto [&_img]:my-3 [&_img]:block [&_img]:h-auto [&_img]:max-w-[90%] [&_li]:ml-4 [&_li]:list-disc [&_p]:mb-2.5 [&_strong]:font-bold [&_video]:mx-auto [&_video]:my-3 [&_video]:block [&_video]:h-auto [&_video]:max-w-[90%] md:p-4 md:text-[12px] md:leading-5"
           dangerouslySetInnerHTML={{ __html: article.content || article.summary || "" }}
         />
+        <div className="mt-4 rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 md:p-4">
+          {answer ? (
+            <p className="rounded-xl bg-blue-50 px-3 py-3 text-center text-sm font-bold text-[#0F87F9]">
+              {answer === "yes" ? "Marked as solved." : "Thanks for the feedback."}
+            </p>
+          ) : (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-bold text-slate-950">Did this answer your question?</p>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setAnswer("yes")} className="h-9 rounded-full border border-slate-200 px-5 text-sm font-bold text-slate-700 hover:bg-blue-50">
+                  Yes
+                </button>
+                <button type="button" onClick={() => setAnswer("no")} className="h-9 rounded-full border border-slate-200 px-5 text-sm font-bold text-slate-700 hover:bg-blue-50">
+                  No
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        <section className="mt-5">
+          <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Comments ({comments.length})</h3>
+          <form onSubmit={submitComment} className="mt-3 flex gap-2">
+            <input
+              value={comment}
+              onChange={(event) => setComment(event.target.value)}
+              placeholder="Add a comment..."
+              className="h-10 min-w-0 flex-1 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[#0F87F9] focus:ring-2 focus:ring-blue-100"
+            />
+            <button type="submit" disabled={!comment.trim() || isSavingComment} className="h-10 rounded-lg bg-[#0F87F9] px-4 text-sm font-bold text-white disabled:bg-blue-200">
+              {isSavingComment ? "Posting..." : "Post"}
+            </button>
+          </form>
+          <div className="mt-3 space-y-2">
+            {isLoadingComments ? <p className="text-sm font-medium text-slate-500">Loading comments...</p> : null}
+            {comments.map((item) => (
+              <div key={item.id} className="rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100">
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <p className="font-bold text-slate-950">{item.author}</p>
+                  <p className="text-slate-400">{item.time}</p>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{item.body}</p>
+              </div>
+            ))}
+          </div>
+        </section>
       </Card>
     </div>
   );
@@ -949,7 +1300,13 @@ function MobileTabs({ activeTab, onSelect, ticketCount }) {
   );
 }
 
-export default function HelpSupportExperience({ content = HELP_SUPPORT_UI_CONTENT, className = "" }) {
+export default function HelpSupportExperience({
+  content = HELP_SUPPORT_UI_CONTENT,
+  url = "",
+  token = "",
+  graphqlEndpoint = "",
+  authToken = "",
+}) {
   const uiContent = {
     ...HELP_SUPPORT_UI_CONTENT,
     ...content,
@@ -959,26 +1316,85 @@ export default function HelpSupportExperience({ content = HELP_SUPPORT_UI_CONTEN
   };
   const [query, setQuery] = useState("");
   const [view, setView] = useState({ type: "home" });
-  const [ticketFilter, setTicketFilter] = useState("active");
+  const [ticketFilter, setTicketFilter] = useState("");
   const [tickets, setTickets] = useState([]);
   const [articles, setArticles] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [ticketTypes, setTicketTypes] = useState([]);
+  const [ticketPriorities, setTicketPriorities] = useState([]);
+  const [ticketStatuses, setTicketStatuses] = useState([]);
+  const [ticketViews, setTicketViews] = useState([]);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
+  const effectiveUrl = url || graphqlEndpoint;
+  const effectiveToken = token || authToken;
+  const graphqlConfig = useMemo(
+    () => ({
+      endpointUrl: effectiveUrl,
+      authToken: effectiveToken,
+    }),
+    [effectiveUrl, effectiveToken]
+  );
 
   useEffect(() => {
     let active = true;
     setIsLoadingContent(true);
-    fetchHelpSupportDashboard({ fetchTickets: fetchHDTickets })
-      .then((remoteContent) => {
+    if (!effectiveUrl || !effectiveToken) {
+      setTickets([]);
+      setArticles([]);
+      setCategories([]);
+      setTicketTypes([]);
+      setTicketPriorities([]);
+      setTicketStatuses([]);
+      setTicketViews([]);
+      setTicketFilter("");
+      setIsLoadingContent(false);
+      return undefined;
+    }
+
+    Promise.allSettled([
+      fetchHelpSupportDashboard({ fetchTickets: fetchHDTickets, graphqlConfig }),
+      fetchHDTicketOptions({ graphqlConfig }),
+      fetchHDViews({ graphqlConfig }),
+    ])
+      .then(([contentResult, optionsResult, viewsResult]) => {
         if (!active) return;
-        setTickets(remoteContent.tickets);
-        setArticles(remoteContent.articles);
-        setCategories(remoteContent.categories);
-      })
-      .catch((error) => {
-        if (!active) return;
-        toast.error("Could not load help desk content", {
-          description: error?.message || "Please check the ERP GraphQL configuration.",
+
+        if (contentResult.status === "fulfilled") {
+          setTickets(contentResult.value.tickets);
+          setArticles(contentResult.value.articles);
+          setCategories(contentResult.value.categories);
+        } else {
+          setTickets([]);
+          setArticles([]);
+          setCategories([]);
+          toast.error("Could not load help desk content", {
+            description: contentResult.reason?.message || "Please check the ERP GraphQL configuration.",
+          });
+        }
+
+        if (optionsResult.status === "fulfilled") {
+          setTicketTypes(optionsResult.value.ticketTypes);
+          setTicketPriorities(optionsResult.value.priorities);
+          setTicketStatuses(optionsResult.value.statuses);
+        } else {
+          setTicketTypes([]);
+          setTicketPriorities([]);
+          setTicketStatuses([]);
+          toast.error("Could not load ticket options", {
+            description: optionsResult.reason?.message || "Please check ERP access.",
+          });
+        }
+
+        const views = viewsResult.status === "fulfilled" ? viewsResult.value : [];
+        if (viewsResult.status === "rejected") {
+          toast.error("Could not load ERP ticket views", {
+            description: viewsResult.reason?.message || "Please check ERP access.",
+          });
+        }
+        setTicketViews(views);
+        setTicketFilter((current) => {
+          if (views.some((viewItem) => viewItem.id === current)) return current;
+          return views.find((viewItem) => viewItem.isDefault)?.id || views[0]?.id || "";
         });
       })
       .finally(() => {
@@ -988,7 +1404,7 @@ export default function HelpSupportExperience({ content = HELP_SUPPORT_UI_CONTEN
     return () => {
       active = false;
     };
-  }, []);
+  }, [effectiveUrl, effectiveToken, graphqlConfig]);
 
   const normalizedQuery = query.trim().toLowerCase();
   const matches = (text) => !normalizedQuery || String(text).toLowerCase().includes(normalizedQuery);
@@ -1048,12 +1464,33 @@ export default function HelpSupportExperience({ content = HELP_SUPPORT_UI_CONTEN
     }),
     [tickets]
   );
-  const visibleTickets = searchedTickets.filter((ticket) => {
-    if (ticketFilter === "resolved") return ticket.status === "Resolved";
-    if (ticketFilter === "active") return ticket.status !== "Resolved" && ticket.status !== "Closed";
-    return true;
-  });
-  const openTickets = searchedTickets.filter((ticket) => ticket.status !== "Resolved" && ticket.status !== "Closed");
+  const ticketViewMatchers = useMemo(
+    () =>
+      ticketViews.map((viewItem) => ({
+        ...viewItem,
+        matches: createTicketViewMatcher(viewItem.filters),
+      })),
+    [ticketViews]
+  );
+  const ticketViewCounts = useMemo(
+    () =>
+      Object.fromEntries(
+        ticketViewMatchers.map((viewItem) => [
+          viewItem.id,
+          searchedTickets.filter(viewItem.matches).length,
+        ])
+      ),
+    [searchedTickets, ticketViewMatchers]
+  );
+  const selectedTicketView = ticketViewMatchers.find((viewItem) => viewItem.id === ticketFilter);
+  const visibleTickets = useMemo(
+    () => (selectedTicketView ? searchedTickets.filter(selectedTicketView.matches) : searchedTickets),
+    [searchedTickets, selectedTicketView]
+  );
+  const openTickets = useMemo(
+    () => searchedTickets.filter((ticket) => ticket.status !== "Resolved" && ticket.status !== "Closed"),
+    [searchedTickets]
+  );
 
   const selectedTicket = tickets.find((ticket) => ticket.id === view.ticketId);
   const selectedCategory = categories.find((category) => category.id === view.categoryId);
@@ -1061,11 +1498,15 @@ export default function HelpSupportExperience({ content = HELP_SUPPORT_UI_CONTEN
 
   const goHome = () => setView({ type: "home" });
   const goTickets = () => {
-    setTicketFilter("active");
+    setTicketFilter((current) => current || ticketViews.find((viewItem) => viewItem.isDefault)?.id || ticketViews[0]?.id || "");
     setView({ type: "tickets" });
   };
   const goResolvedTickets = () => {
-    setTicketFilter("resolved");
+    const resolvedView =
+      ticketViews.find((viewItem) => /resolved|closed/i.test(viewItem.label)) ||
+      ticketViews.find((viewItem) => viewItem.isDefault) ||
+      ticketViews[0];
+    setTicketFilter(resolvedView?.id || "");
     setView({ type: "tickets" });
   };
   const goArticle = (article) => setView({ type: "article", articleId: article.id });
@@ -1084,6 +1525,7 @@ export default function HelpSupportExperience({ content = HELP_SUPPORT_UI_CONTEN
   const createTicket = async (ticket) => {
     try {
       const createPromise = createHDTicket(ticket, {
+          graphqlConfig,
           user: {
             email: uiContent.user?.email,
             username: uiContent.user?.email,
@@ -1098,7 +1540,7 @@ export default function HelpSupportExperience({ content = HELP_SUPPORT_UI_CONTEN
       const created = await createPromise;
 
       setTickets((current) => [created, ...current]);
-      setTicketFilter("active");
+      setTicketFilter((current) => current || ticketViews.find((viewItem) => viewItem.isDefault)?.id || ticketViews[0]?.id || "");
       setView({ type: "ticket", ticketId: created.id });
       return created;
     } catch {
@@ -1107,48 +1549,48 @@ export default function HelpSupportExperience({ content = HELP_SUPPORT_UI_CONTEN
     }
   };
 
-  const addComment = (ticketId, message) => {
-    setTickets((current) =>
-      current.map((ticket) =>
-        ticket.id === ticketId
-          ? {
-              ...ticket,
-              status: ticket.status === "Resolved" ? "Resolved" : "Replied",
-              updatedAt: "Just now",
-              conversation: [
-                ...(ticket.conversation || []),
-                {
-                  id: `msg-${ticketId}-${Date.now()}`,
-                  author: "You",
-                  role: "Field team",
-                  time: "Just now",
-                  tone: "user",
-                  message,
-                },
-              ],
-            }
-          : ticket
-      )
-    );
-  };
-
-  const changeTicketStatus = (ticketId, status) => {
+  const changeTicketStatus = async (ticketId, status) => {
+    const previousTicket = tickets.find((ticket) => ticket.id === ticketId);
     setTickets((current) =>
       current.map((ticket) => (ticket.id === ticketId ? { ...ticket, status, updatedAt: "Just now" } : ticket))
     );
+    if (!previousTicket?.raw) return;
+    try {
+      await updateHDTicket(ticketId, { graphqlConfig, status });
+    } catch (error) {
+      setTickets((current) => current.map((ticket) => (ticket.id === ticketId ? previousTicket : ticket)));
+      toast.error("Could not update ticket status", {
+        description: error?.message || "Please check ERP access.",
+      });
+    }
   };
 
-  const changeTicketField = (ticketId, field, value) => {
+  const changeTicketField = async (ticketId, field, value) => {
+    const fieldMap = {
+      ticketType: "ticket_type",
+      priority: "priority",
+    };
+    const erpField = fieldMap[field];
+    const previousTicket = tickets.find((ticket) => ticket.id === ticketId);
     setTickets((current) =>
       current.map((ticket) => (ticket.id === ticketId ? { ...ticket, [field]: value, updatedAt: "Just now" } : ticket))
     );
+    if (!previousTicket?.raw || !erpField) return;
+    try {
+      await updateHDTicket(ticketId, { graphqlConfig, [erpField]: value });
+    } catch (error) {
+      setTickets((current) => current.map((ticket) => (ticket.id === ticketId ? previousTicket : ticket)));
+      toast.error("Could not update ticket", {
+        description: error?.message || "Please check ERP access.",
+      });
+    }
   };
 
   const deleteTickets = async (ticketIds) => {
     const remoteTicketIds = ticketIds.filter((ticketId) => tickets.some((ticket) => ticket.id === ticketId && ticket.raw));
     if (remoteTicketIds.length) {
       try {
-        const deletePromise = Promise.all(remoteTicketIds.map((ticketId) => deleteHDTicket(ticketId)));
+        const deletePromise = Promise.all(remoteTicketIds.map((ticketId) => deleteHDTicket(ticketId, graphqlConfig)));
         toast.promise(deletePromise, {
           loading: `Deleting ${remoteTicketIds.length} ticket${remoteTicketIds.length === 1 ? "" : "s"}...`,
           success: "Ticket deleted",
@@ -1182,7 +1624,7 @@ export default function HelpSupportExperience({ content = HELP_SUPPORT_UI_CONTEN
           {openTickets.length ? (
             <OpenTicketsRail tickets={openTickets} onOpen={goTicket} onViewAll={goTickets} />
           ) : (
-            <EmptyState message="No active tickets match your search." />
+            <EmptyState message="No tickets match your current ERP view." />
           )}
           {filteredCategories.length ? (
             <CollectionBento categories={filteredCategories} onOpen={goCollection} />
@@ -1200,7 +1642,8 @@ export default function HelpSupportExperience({ content = HELP_SUPPORT_UI_CONTEN
         onOpen={goTicket}
         activeFilter={ticketFilter}
         setActiveFilter={setTicketFilter}
-        counts={ticketCounts}
+        counts={ticketViewCounts}
+        views={ticketViews}
         onCreate={() => setView({ type: "create" })}
         onDeleteTickets={deleteTickets}
       />
@@ -1211,13 +1654,14 @@ export default function HelpSupportExperience({ content = HELP_SUPPORT_UI_CONTEN
   if (view.type === "tickets") {
     mainView = (
       <div className="flex h-full min-h-0 flex-1 flex-col gap-4">
-        <BackHeader title="Tickets" subtitle={isLoadingContent ? "Loading HD tickets..." : "Active, resolved and all ticket records"} onBack={goHome} />
+        <BackHeader title="Tickets" subtitle={isLoadingContent ? "Loading HD tickets..." : "ERP helpdesk views and ticket records"} onBack={goHome} />
         <TicketsPanel
           tickets={visibleTickets}
           onOpen={goTicket}
           activeFilter={ticketFilter}
           setActiveFilter={setTicketFilter}
-          counts={ticketCounts}
+          counts={ticketViewCounts}
+          views={ticketViews}
           onCreate={() => setView({ type: "create" })}
           onDeleteTickets={deleteTickets}
           fill
@@ -1228,7 +1672,7 @@ export default function HelpSupportExperience({ content = HELP_SUPPORT_UI_CONTEN
     mainView = (
       <div className="flex h-full min-h-0 flex-1 flex-col gap-4">
         <BackHeader title="Create ticket" subtitle="Raise a support request" onBack={goHome} />
-        <CreateTicketForm content={uiContent} onSubmit={createTicket} onCancel={goHome} />
+        <CreateTicketForm content={uiContent} onSubmit={createTicket} onCancel={goHome} ticketTypes={ticketTypes} />
       </div>
     );
   } else if (view.type === "ticket" && selectedTicket) {
@@ -1236,9 +1680,13 @@ export default function HelpSupportExperience({ content = HELP_SUPPORT_UI_CONTEN
       <TicketConversation
         ticket={selectedTicket}
         onBack={() => setView({ type: "tickets" })}
-        onAddComment={addComment}
         onStatusChange={changeTicketStatus}
         onFieldChange={changeTicketField}
+        graphqlConfig={graphqlConfig}
+        user={uiContent.user}
+        ticketTypes={ticketTypes}
+        ticketPriorities={ticketPriorities}
+        ticketStatuses={ticketStatuses}
       />
     );
   } else if (view.type === "collection" && selectedCategory) {
@@ -1265,13 +1713,13 @@ export default function HelpSupportExperience({ content = HELP_SUPPORT_UI_CONTEN
       />
     );
   } else if (view.type === "article" && selectedArticle) {
-    mainView = <ArticleView article={selectedArticle} onBack={goHome} />;
+    mainView = <ArticleView article={selectedArticle} onBack={goHome} graphqlConfig={graphqlConfig} user={uiContent.user} />;
   }
 
   const isHomeView = view.type === "home";
 
   return (
-    <div className={cx("mb-3 flex h-[calc(100%-0.75rem)] min-h-0 w-full max-w-full flex-col overflow-hidden bg-slate-50 text-sm text-slate-950 md:mb-4 md:h-[calc(100%-1rem)]", className)}>
+    <div className="mb-3 flex h-[calc(100%-0.75rem)] min-h-0 w-full max-w-full flex-col overflow-hidden bg-slate-50 text-sm text-slate-950 md:mb-4 md:h-[calc(100%-1rem)]">
       <Toaster richColors position="top-right" />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-clip overscroll-contain px-2 pb-2 pt-2 md:px-6 md:pb-8 md:pt-4">
         <div
