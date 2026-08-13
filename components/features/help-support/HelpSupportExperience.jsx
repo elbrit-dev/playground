@@ -98,7 +98,7 @@ function BackHeader({ title, subtitle, onBack, action }) {
         type="button"
         onClick={onBack}
         aria-label="Back"
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-50 text-xs text-slate-800 transition hover:bg-blue-50 hover:text-[#0F87F9]"
+        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-50 text-xs text-slate-800 transition hover:bg-blue-50 hover:text-[#0F87F9] md:h-8 md:w-8"
       >
         <i className="pi pi-chevron-left" aria-hidden />
       </button>
@@ -120,26 +120,49 @@ function SectionHeader({ title, action }) {
   );
 }
 
-function StatusBadge({ status }) {
-  const styles = {
-    Open: "bg-amber-50 text-amber-700 ring-amber-100",
-    Replied: "bg-blue-50 text-blue-700 ring-blue-100",
-    Resolved: "bg-emerald-50 text-emerald-700 ring-emerald-100",
-    Closed: "bg-slate-100 text-slate-600 ring-slate-200",
-  };
+const TICKET_STATUS_DOTS = {
+  Open: "bg-amber-500",
+  Replied: "bg-blue-500",
+  Paused: "bg-violet-500",
+  Resolved: "bg-emerald-500",
+  Closed: "bg-slate-400",
+};
 
+const TICKET_STATUS_STYLES = {
+  Open: "bg-amber-50 text-amber-700 ring-amber-100",
+  Replied: "bg-blue-50 text-blue-700 ring-blue-100",
+  Paused: "bg-violet-50 text-violet-700 ring-violet-100",
+  Resolved: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+  Closed: "bg-slate-100 text-slate-600 ring-slate-200",
+};
+
+function StatusBadge({ status }) {
   return (
-    <span className={cx("inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold ring-1", styles[status])}>
-      {status}
+    <span
+      className={cx(
+        "inline-flex shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold ring-1",
+        // ERP statuses are configurable, so anything unmapped still needs a readable badge.
+        TICKET_STATUS_STYLES[status] || "bg-slate-100 text-slate-600 ring-slate-200"
+      )}
+    >
+      {status || "Unknown"}
     </span>
   );
 }
 
 function SlaBadge({ value }) {
-  const overdue = String(value).toLowerCase().includes("overdue");
+  const text = String(value ?? "").trim();
+  const overdue = text.toLowerCase().includes("overdue");
+  const pending = !text || /^(pending|-)$/i.test(text);
+
   return (
-    <span className={cx("inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold", overdue ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-700")}>
-      {value}
+    <span
+      className={cx(
+        "inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold",
+        overdue ? "bg-red-50 text-red-600" : pending ? "bg-slate-100 text-slate-500" : "bg-emerald-50 text-emerald-700"
+      )}
+    >
+      {text || "Pending"}
     </span>
   );
 }
@@ -172,11 +195,13 @@ function MetricCard({ label, value, icon, onClick }) {
 
 function MobileStatStrip({ stats }) {
   return (
-    <Card className="grid grid-cols-4 divide-x divide-slate-100 px-2 py-4">
+    <Card className="grid grid-cols-4 divide-x divide-slate-100 px-1 py-4">
       {stats.map((stat) => (
-        <div key={stat.label} className="text-center">
+        <div key={stat.label} className="min-w-0 px-1 text-center">
           <p className="text-xl font-black text-slate-950">{stat.value}</p>
-          <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{stat.label}</p>
+          <p className="mt-1 truncate text-[9px] font-bold uppercase tracking-[0.08em] text-slate-400 min-[380px]:text-[10px] min-[380px]:tracking-[0.14em]">
+            {stat.label}
+          </p>
         </div>
       ))}
     </Card>
@@ -190,7 +215,7 @@ function TicketCard({ ticket, onOpen, compact = false }) {
       onClick={() => onOpen(ticket)}
       className={cx(
         "block rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-200 hover:shadow-md",
-        compact && "w-[280px] shrink-0"
+        compact && "w-[260px] shrink-0 snap-start sm:w-[280px]"
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -219,7 +244,7 @@ function OpenTicketsRail({ tickets, onViewAll, onOpen }) {
           </button>
         }
       />
-      <div className="flex max-w-full gap-3 overflow-x-auto pb-2">
+      <div className="flex max-w-full snap-x snap-mandatory gap-3 overflow-x-auto pb-2">
         {tickets.map((ticket) => (
           <TicketCard key={ticket.id} ticket={ticket} compact onOpen={onOpen} />
         ))}
@@ -300,13 +325,13 @@ function RecentlyViewed({ items, onOpen }) {
   return (
     <section>
       <SectionHeader title="Recently viewed" />
-      <div className="flex max-w-full gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-2 md:overflow-visible">
+      <div className="flex max-w-full snap-x snap-mandatory gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-2 md:snap-none md:overflow-visible">
         {items.map((article) => (
           <button
             key={article.id}
             type="button"
             onClick={() => onOpen(article)}
-            className="w-[260px] shrink-0 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-200 md:w-auto"
+            className="w-[240px] shrink-0 snap-start rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-200 sm:w-[260px] md:w-auto"
           >
             <h3 className="font-bold leading-5 text-slate-950">{article.title}</h3>
             <p className="mt-3 text-sm font-medium text-slate-500">{article.category}</p>
@@ -343,7 +368,7 @@ function TicketFilters({ activeFilter, setActiveFilter, counts, views = [] }) {
           type="button"
           onClick={() => setActiveFilter(filter.id)}
           className={cx(
-            "h-8 shrink-0 rounded-full border px-3 text-xs font-bold transition",
+            "h-9 shrink-0 rounded-full border px-3 text-xs font-bold transition md:h-8",
             activeFilter === filter.id
               ? "border-[#0F87F9] bg-[#0F87F9] text-white"
               : "border-slate-200 bg-white text-slate-700 hover:border-blue-200"
@@ -429,13 +454,8 @@ function TicketDataTable({ tickets, onOpen, selectedIds, onToggleTicket, onToggl
                 <p className="font-semibold text-slate-950">{ticket.title}</p>
                 <p className="mt-0.5 truncate text-[11px] text-slate-500">{ticket.category}</p>
               </td>
-              <td className="px-3 py-2.5">
-                <span
-                  className={cx(
-                    "mr-2 inline-block h-2 w-2 rounded-full",
-                    ticket.status === "Resolved" ? "bg-emerald-500" : ticket.status === "Replied" ? "bg-blue-500" : "bg-red-500"
-                  )}
-                />
+              <td className="whitespace-nowrap px-3 py-2.5">
+                <span className={cx("mr-2 inline-block h-2 w-2 rounded-full", TICKET_STATUS_DOTS[ticket.status] || "bg-slate-400")} />
                 {ticket.status}
               </td>
               <td className="px-3 py-2.5">
@@ -468,40 +488,40 @@ function TicketDataTable({ tickets, onOpen, selectedIds, onToggleTicket, onToggl
 
 function MobileTicketRow({ ticket, onOpen }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-      <button type="button" onClick={() => onOpen(ticket)} className="w-full min-w-0 text-left">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{ticket.id}</p>
-            <h3 className="mt-1 text-sm font-bold leading-5 text-slate-950">{ticket.title}</h3>
-            <p className="mt-1 text-xs text-slate-500">
-              {ticket.category} · {ticket.dateLabel || ticket.updatedAtLabel || ticket.date || ticket.updatedAt}
-            </p>
-          </div>
-          <StatusBadge status={ticket.status} />
+    <button
+      type="button"
+      onClick={() => onOpen(ticket)}
+      className="w-full min-w-0 rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm transition active:bg-slate-50"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{ticket.id}</p>
+          <h3 className="mt-1 break-words text-sm font-bold leading-5 text-slate-950">{ticket.title}</h3>
+          <p className="mt-1 break-words text-xs text-slate-500">
+            {ticket.category} · {ticket.dateLabel || ticket.updatedAtLabel || ticket.date || ticket.updatedAt}
+          </p>
         </div>
-      </button>
-    </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <StatusBadge status={ticket.status} />
+          <i className="pi pi-chevron-right text-[10px] text-slate-300" aria-hidden />
+        </div>
+      </div>
+    </button>
   );
 }
 
 function StatusSelect({ status, onChange, statuses = [] }) {
   const statusOptions = mergeSelectedOption(statuses, status);
-  const statusStyles = {
-    Open: "bg-red-500",
-    Replied: "bg-blue-500",
-    Resolved: "bg-emerald-500",
-    Closed: "bg-slate-400",
-  };
+  const statusStyles = TICKET_STATUS_DOTS;
 
   return (
-    <label className="inline-flex h-8 w-fit shrink-0 items-center gap-2 rounded-lg bg-slate-100 px-2 text-xs font-semibold text-slate-700">
-      <span className={cx("h-2.5 w-2.5 rounded-full", statusStyles[status] || "bg-slate-400")} />
+    <label className="inline-flex h-10 w-fit shrink-0 items-center gap-2 rounded-lg bg-slate-100 px-2 text-xs font-semibold text-slate-700 md:h-8">
+      <span className={cx("h-2.5 w-2.5 shrink-0 rounded-full", statusStyles[status] || "bg-slate-400")} />
       <select
         value={status}
         onChange={(event) => onChange(event.target.value)}
         disabled={!statusOptions.length}
-        className="h-7 rounded-md border-0 bg-transparent px-1 text-xs font-semibold outline-none"
+        className="h-9 rounded-md border-0 bg-transparent px-1 text-xs font-semibold outline-none md:h-7"
         aria-label="Change ticket status"
       >
         {statusOptions.map((item) => (
@@ -629,7 +649,7 @@ function TicketMetaPanel({ ticket, onFieldChange, ticketTypes = [], ticketPriori
   const owner = ticket.assignee || ticket.agentGroup || ticket.team || "Helpdesk";
 
   return (
-    <Card className="order-first shrink-0 p-3 lg:order-none lg:w-[300px]">
+    <Card className="shrink-0 p-3 lg:w-[300px]">
       <div className="mb-3 flex items-center gap-3">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-500">
           {owner.charAt(0)}
@@ -660,7 +680,7 @@ function TicketMetaPanel({ ticket, onFieldChange, ticketTypes = [], ticketPriori
   );
 }
 
-function TicketsPanel({ tickets, onOpen, activeFilter, setActiveFilter, counts, views, onCreate, onDeleteTickets, fill = false }) {
+function TicketsPanel({ tickets, onOpen, activeFilter, setActiveFilter, counts, views, onCreate, onDeleteTickets, fill = false, isLoading = false }) {
   const [selectedIds, setSelectedIds] = useState([]);
   const [filterField, setFilterField] = useState("title");
   const [filterValue, setFilterValue] = useState("");
@@ -703,7 +723,7 @@ function TicketsPanel({ tickets, onOpen, activeFilter, setActiveFilter, counts, 
           <button
             type="button"
             onClick={onCreate}
-            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-slate-950 px-3 text-[13px] font-bold text-white hover:bg-slate-800"
+            className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-slate-950 px-3 text-[13px] font-bold text-white hover:bg-slate-800 md:h-8"
           >
             <i className="pi pi-plus" aria-hidden />
             Create
@@ -717,7 +737,7 @@ function TicketsPanel({ tickets, onOpen, activeFilter, setActiveFilter, counts, 
               <select
                 value={filterField}
                 onChange={(event) => setFilterField(event.target.value)}
-                className="h-7 rounded-md border-0 bg-white px-2 text-xs font-semibold text-slate-700 outline-none"
+                className="h-9 rounded-md border-0 bg-white px-2 text-xs font-semibold text-slate-700 outline-none md:h-7"
               >
                 {TICKET_FIELD_FILTERS.map((field) => (
                   <option key={field.id} value={field.id}>
@@ -729,23 +749,26 @@ function TicketsPanel({ tickets, onOpen, activeFilter, setActiveFilter, counts, 
                 value={filterValue}
                 onChange={(event) => setFilterValue(event.target.value)}
                 placeholder={`Filter by ${fieldConfig.label}`}
-                className="h-7 min-w-[110px] flex-1 rounded-md border-0 bg-white px-2 text-xs outline-none placeholder:text-slate-400 md:w-40"
+                className="h-9 min-w-[90px] flex-1 rounded-md border-0 bg-white px-2 text-xs outline-none placeholder:text-slate-400 md:h-7 md:w-40"
               />
             </div>
-            <button
-              type="button"
-              onClick={deleteSelected}
-              disabled={!visibleSelectedIds.length}
-              className="h-8 rounded-lg bg-red-50 px-3 text-xs font-bold text-red-600 hover:bg-red-100 disabled:bg-slate-100 disabled:text-slate-400"
-            >
-              Delete{visibleSelectedIds.length ? ` (${visibleSelectedIds.length})` : ""}
-            </button>
+            {visibleSelectedIds.length ? (
+              <button
+                type="button"
+                onClick={deleteSelected}
+                className="h-10 shrink-0 rounded-lg bg-red-50 px-3 text-xs font-bold text-red-600 hover:bg-red-100 md:h-8"
+              >
+                Delete ({visibleSelectedIds.length})
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
 
       <div className={cx("min-w-0", fill ? "min-h-0 flex-1 overflow-auto" : "overflow-visible")}>
-        {filteredTickets.length ? (
+        {isLoading ? (
+          <LoadingRows rows={4} />
+        ) : filteredTickets.length ? (
           <>
           <TicketDataTable
             tickets={filteredTickets}
@@ -765,29 +788,37 @@ function TicketsPanel({ tickets, onOpen, activeFilter, setActiveFilter, counts, 
           </div>
           </>
         ) : (
-          <EmptyState message="No tickets match your search and filter." />
+          <EmptyState icon="pi pi-comments" message="No tickets match your search and filter." />
         )}
       </div>
     </section>
   );
 }
 
-function CreateTicketForm({ content, onSubmit, onCancel, ticketTypes = [] }) {
+function CreateTicketForm({ content, onSubmit, onCancel, ticketTypes = [], user }) {
   const ticketTypeOptions = useMemo(() => toOptionNames(ticketTypes), [ticketTypes]);
+  const sessionEmail = useMemo(
+    () => [user?.email, user?.username, content.user?.email, content.user?.username].find(isEmail) || "",
+    [user?.email, user?.username, content.user?.email, content.user?.username]
+  );
   const [ticketType, setTicketType] = useState("");
   const [subject, setSubject] = useState("");
-  const [raisedBy, setRaisedBy] = useState(() => content.user?.email || "");
+  const [raisedBy, setRaisedBy] = useState(sessionEmail);
   const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const canSubmit = ticketType && subject.trim() && isEmail(raisedBy) && description.trim() && !isSubmitting;
 
   useEffect(() => {
+    if (sessionEmail) {
+      setRaisedBy(sessionEmail);
+      return;
+    }
     setRaisedBy((current) => {
       if (isEmail(current)) return current;
       const storedEmail = readStoredUserEmail();
       return storedEmail || current;
     });
-  }, []);
+  }, [sessionEmail]);
 
   useEffect(() => {
     if (!ticketTypeOptions.length) {
@@ -852,20 +883,35 @@ function CreateTicketForm({ content, onSubmit, onCancel, ticketTypes = [] }) {
               value={subject}
               onChange={(event) => setSubject(event.target.value)}
               placeholder={content.ticketForm.subjectPlaceholder}
-              className="h-11 w-full min-w-0 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[#0F87F9] focus:ring-4 focus:ring-blue-100"
+              className="h-11 w-full min-w-0 rounded-lg border border-slate-200 px-3 text-base outline-none focus:border-[#0F87F9] focus:ring-4 focus:ring-blue-100 md:text-sm"
             />
           </label>
-          <label className="min-w-0">
+          <div className="min-w-0">
             <span className="mb-2 block text-sm font-semibold text-slate-700">Raised by email</span>
-            <input
-              type="email"
-              value={raisedBy}
-              onChange={(event) => setRaisedBy(event.target.value)}
-              placeholder="name@elbrit.org"
-              className="h-11 w-full min-w-0 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[#0F87F9] focus:ring-4 focus:ring-blue-100"
-              required
-            />
-          </label>
+            {isEmail(raisedBy) ? (
+              <div className="flex h-11 w-full min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700">
+                <i className="pi pi-user text-slate-400" aria-hidden />
+                <span className="min-w-0 flex-1 truncate font-semibold">{raisedBy}</span>
+                <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-[#0F87F9]">
+                  Signed in
+                </span>
+              </div>
+            ) : (
+              <input
+                type="email"
+                value={raisedBy}
+                onChange={(event) => setRaisedBy(event.target.value)}
+                placeholder="name@elbrit.org"
+                className="h-11 w-full min-w-0 rounded-lg border border-slate-200 px-3 text-base outline-none focus:border-[#0F87F9] focus:ring-4 focus:ring-blue-100 md:text-sm"
+                required
+              />
+            )}
+            <p className="mt-1.5 text-[11px] text-slate-500">
+              {isEmail(raisedBy)
+                ? "Taken from your ERP session — no need to fill it in."
+                : "We could not detect your ERP account, so please enter your email."}
+            </p>
+          </div>
         </div>
         <label className="block">
           <span className="mb-2 block text-sm font-semibold text-slate-700">{content.ticketForm.descriptionLabel}</span>
@@ -874,36 +920,27 @@ function CreateTicketForm({ content, onSubmit, onCancel, ticketTypes = [] }) {
             onChange={(event) => setDescription(event.target.value)}
             placeholder={content.ticketForm.descriptionPlaceholder}
             rows={5}
-            className="w-full resize-none rounded-lg border border-slate-200 p-3 text-sm outline-none focus:border-[#0F87F9] focus:ring-4 focus:ring-blue-100"
+            className="w-full resize-y rounded-lg border border-slate-200 p-3 text-base outline-none focus:border-[#0F87F9] focus:ring-4 focus:ring-blue-100 md:text-sm"
           />
         </label>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <button
-            type="button"
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 px-4 text-sm font-semibold text-slate-500"
-          >
-            <i className="pi pi-paperclip" aria-hidden />
-            Attach files
-          </button>
-          <div className="flex gap-2">
-            {onCancel ? (
-              <button
-                type="button"
-                onClick={onCancel}
-                className="h-10 rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-600 hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-            ) : null}
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+          {onCancel ? (
             <button
-              type="submit"
-              disabled={!canSubmit}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#0F87F9] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-600 disabled:bg-blue-200"
+              type="button"
+              onClick={onCancel}
+              className="h-11 w-full rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-600 hover:bg-slate-50 sm:h-10 sm:w-auto"
             >
-              <i className="pi pi-plus" aria-hidden />
-              {isSubmitting ? "Submitting..." : content.ticketForm.submitLabel}
+              Cancel
             </button>
-          </div>
+          ) : null}
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#0F87F9] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-600 disabled:bg-blue-200 sm:h-10 sm:w-auto"
+          >
+            <i className="pi pi-plus" aria-hidden />
+            {isSubmitting ? "Submitting..." : content.ticketForm.submitLabel}
+          </button>
         </div>
       </form>
     </Card>
@@ -1004,7 +1041,7 @@ function TicketConversation({
               type="button"
               onClick={onBack}
               aria-label="Back"
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-50 text-xs text-slate-800 transition hover:bg-blue-50 hover:text-[#0F87F9]"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-50 text-xs text-slate-800 transition hover:bg-blue-50 hover:text-[#0F87F9] md:h-8 md:w-8"
             >
               <i className="pi pi-chevron-left" aria-hidden />
             </button>
@@ -1038,7 +1075,7 @@ function TicketConversation({
                 <div key={message.id} className={cx("flex flex-col", own ? "items-end" : "items-start")}>
                   <div
                     className={cx(
-                      "max-w-[680px] overflow-hidden rounded-xl px-3 py-2 text-xs leading-5 [&_a]:underline [&_br]:block [&_img]:my-2 [&_img]:block [&_img]:h-auto [&_img]:max-w-full [&_p]:mb-2 [&_video]:my-2 [&_video]:block [&_video]:h-auto [&_video]:max-w-full",
+                      "max-w-full overflow-hidden break-words rounded-xl px-3 py-2 text-xs leading-5 sm:max-w-[680px] [&_a]:break-all [&_a]:underline [&_br]:block [&_img]:my-2 [&_img]:block [&_img]:h-auto [&_img]:max-w-full [&_p]:mb-2 [&_pre]:overflow-x-auto [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto [&_video]:my-2 [&_video]:block [&_video]:h-auto [&_video]:max-w-full",
                       richContent
                         ? "w-full bg-white text-slate-950 shadow-sm"
                         : own
@@ -1061,12 +1098,12 @@ function TicketConversation({
                 value={comment}
                 onChange={(event) => setComment(event.target.value)}
                 placeholder="Add a comment..."
-                className="h-9 min-w-0 flex-1 rounded-lg border border-slate-200 px-3 text-xs outline-none focus:border-[#0F87F9] focus:ring-2 focus:ring-blue-100"
+                className="h-11 min-w-0 flex-1 rounded-lg border border-slate-200 px-3 text-base outline-none focus:border-[#0F87F9] focus:ring-2 focus:ring-blue-100 md:h-9 md:text-xs"
               />
               <button
                 type="submit"
                 disabled={!canSend}
-                className="inline-flex h-9 items-center justify-center rounded-lg bg-[#0F87F9] px-3 text-xs font-bold text-white disabled:bg-blue-200"
+                className="inline-flex h-11 shrink-0 items-center justify-center rounded-lg bg-[#0F87F9] px-4 text-xs font-bold text-white disabled:bg-blue-200 md:h-9 md:px-3"
               >
                 {isSavingComment ? "Sending..." : "Send"}
               </button>
@@ -1261,7 +1298,7 @@ function ArticleView({ article, onBack, graphqlConfig, user }) {
           </div>
         </div>
         <div
-          className="mt-4 max-w-none rounded-xl bg-slate-50 p-3 text-[11px] leading-5 text-slate-700 [&_a]:text-[#0F87F9] [&_code]:rounded [&_code]:bg-slate-200 [&_code]:px-1 [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-sm [&_h2]:font-bold [&_h3]:mb-2 [&_h3]:mt-4 [&_h3]:text-sm [&_h3]:font-bold [&_img]:mx-auto [&_img]:my-3 [&_img]:block [&_img]:h-auto [&_img]:max-w-[90%] [&_li]:ml-4 [&_li]:list-disc [&_p]:mb-2.5 [&_strong]:font-bold [&_video]:mx-auto [&_video]:my-3 [&_video]:block [&_video]:h-auto [&_video]:max-w-[90%] md:p-4 md:text-[12px] md:leading-5"
+          className="mt-4 max-w-none break-words rounded-xl bg-slate-50 p-3 text-[13px] leading-6 text-slate-700 [&_a]:break-words [&_a]:text-[#0F87F9] [&_code]:rounded [&_code]:bg-slate-200 [&_code]:px-1 [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-sm [&_h2]:font-bold [&_h3]:mb-2 [&_h3]:mt-4 [&_h3]:text-sm [&_h3]:font-bold [&_img]:mx-auto [&_img]:my-3 [&_img]:block [&_img]:h-auto [&_img]:max-w-full [&_li]:ml-4 [&_li]:list-disc [&_ol>li]:list-decimal [&_p]:mb-2.5 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-slate-100 [&_pre]:p-3 [&_strong]:font-bold [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto [&_video]:mx-auto [&_video]:my-3 [&_video]:block [&_video]:h-auto [&_video]:max-w-full md:p-4"
           dangerouslySetInnerHTML={{ __html: article.content || article.summary || "" }}
         />
         <div className="mt-4 rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 md:p-4">
@@ -1290,9 +1327,13 @@ function ArticleView({ article, onBack, graphqlConfig, user }) {
               value={comment}
               onChange={(event) => setComment(event.target.value)}
               placeholder="Add a comment..."
-              className="h-10 min-w-0 flex-1 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[#0F87F9] focus:ring-2 focus:ring-blue-100"
+              className="h-11 min-w-0 flex-1 rounded-lg border border-slate-200 px-3 text-base outline-none focus:border-[#0F87F9] focus:ring-2 focus:ring-blue-100 md:h-10 md:text-sm"
             />
-            <button type="submit" disabled={!comment.trim() || isSavingComment} className="h-10 rounded-lg bg-[#0F87F9] px-4 text-sm font-bold text-white disabled:bg-blue-200">
+            <button
+              type="submit"
+              disabled={!comment.trim() || isSavingComment}
+              className="h-11 shrink-0 rounded-lg bg-[#0F87F9] px-4 text-sm font-bold text-white disabled:bg-blue-200 md:h-10"
+            >
               {isSavingComment ? "Posting..." : "Post"}
             </button>
           </form>
@@ -1314,12 +1355,29 @@ function ArticleView({ article, onBack, graphqlConfig, user }) {
   );
 }
 
-function EmptyState({ message }) {
+function EmptyState({ message, icon = "pi pi-inbox" }) {
   return (
-    <Card className="p-6 text-center">
-      <i className="pi pi-search text-2xl text-slate-300" aria-hidden />
-      <p className="mt-2 text-sm font-medium text-slate-500">{message}</p>
-    </Card>
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white/60 px-5 py-8 text-center">
+      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-50 text-slate-300">
+        <i className={cx(icon, "text-lg")} aria-hidden />
+      </span>
+      <p className="mt-3 max-w-sm text-sm font-medium text-slate-500">{message}</p>
+    </div>
+  );
+}
+
+function LoadingRows({ rows = 3 }) {
+  return (
+    <div className="space-y-3" aria-busy="true" aria-live="polite">
+      <span className="sr-only">Loading help desk content</span>
+      {Array.from({ length: rows }).map((_, index) => (
+        <div key={index} className="animate-pulse rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="h-2.5 w-20 rounded-full bg-slate-100" />
+          <div className="mt-3 h-3.5 w-3/4 rounded-full bg-slate-100" />
+          <div className="mt-2 h-2.5 w-1/2 rounded-full bg-slate-100" />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -1720,20 +1778,36 @@ export default function HelpSupportExperience({
       </div>
       <div className="grid min-h-0 gap-5 xl:grid-cols-2">
         <div className="flex min-w-0 flex-col gap-5">
-          {openTickets.length ? (
+          {isLoadingContent ? (
+            <LoadingRows rows={2} />
+          ) : openTickets.length ? (
             <OpenTicketsRail tickets={openTickets} onOpen={goTicket} onViewAll={goTickets} />
           ) : (
-            <EmptyState message="No tickets match your current ERP view." />
+            <EmptyState icon="pi pi-comments" message="No tickets match your current ERP view." />
           )}
-          {filteredCategories.length ? (
+          {isLoadingContent ? (
+            <LoadingRows rows={2} />
+          ) : filteredCategories.length ? (
             <CollectionBento categories={filteredCategories} onOpen={goCollection} />
           ) : (
-            <EmptyState message="No collections match your search." />
+            <EmptyState icon="pi pi-folder-open" message="No collections match your search." />
           )}
         </div>
         <div className="flex min-w-0 flex-col gap-5">
-          {filteredTrending.length ? <TrendingList items={filteredTrending} onOpen={goArticle} /> : <EmptyState message="No trending articles match your search." />}
-          {filteredRecent.length ? <RecentlyViewed items={filteredRecent} onOpen={goArticle} /> : <EmptyState message="No recently viewed articles match your search." />}
+          {isLoadingContent ? (
+            <LoadingRows rows={3} />
+          ) : filteredTrending.length ? (
+            <TrendingList items={filteredTrending} onOpen={goArticle} />
+          ) : (
+            <EmptyState icon="pi pi-book" message="No trending articles match your search." />
+          )}
+          {isLoadingContent ? (
+            <LoadingRows rows={2} />
+          ) : filteredRecent.length ? (
+            <RecentlyViewed items={filteredRecent} onOpen={goArticle} />
+          ) : (
+            <EmptyState icon="pi pi-clock" message="No recently viewed articles match your search." />
+          )}
         </div>
       </div>
       <TicketsPanel
@@ -1745,6 +1819,7 @@ export default function HelpSupportExperience({
         views={effectiveTicketViews}
         onCreate={() => setView({ type: "create" })}
         onDeleteTickets={deleteTickets}
+        isLoading={isLoadingContent}
       />
     </div>
   );
@@ -1763,6 +1838,7 @@ export default function HelpSupportExperience({
           views={effectiveTicketViews}
           onCreate={() => setView({ type: "create" })}
           onDeleteTickets={deleteTickets}
+          isLoading={isLoadingContent}
           fill
         />
       </div>
@@ -1771,7 +1847,13 @@ export default function HelpSupportExperience({
     mainView = (
       <div className="flex h-full min-h-0 flex-1 flex-col gap-4">
         <BackHeader title="Create ticket" subtitle="Raise a support request" onBack={goHome} />
-        <CreateTicketForm content={uiContent} onSubmit={createTicket} onCancel={goHome} ticketTypes={ticketTypes} />
+        <CreateTicketForm
+          content={uiContent}
+          onSubmit={createTicket}
+          onCancel={goHome}
+          ticketTypes={ticketTypes}
+          user={supportUser}
+        />
       </div>
     );
   } else if (view.type === "ticket" && selectedTicket) {
@@ -1846,14 +1928,24 @@ export default function HelpSupportExperience({
                   Create ticket
                 </button>
               </div>
-              <label className="mt-3 flex h-10 max-w-2xl items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 focus-within:border-[#0F87F9] focus-within:ring-2 focus-within:ring-blue-100">
-                <i className="pi pi-search text-slate-400" aria-hidden />
+              <label className="mt-3 flex h-11 max-w-2xl items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 focus-within:border-[#0F87F9] focus-within:ring-2 focus-within:ring-blue-100 md:h-10">
+                <i className="pi pi-search shrink-0 text-slate-400" aria-hidden />
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder={uiContent.header.searchPlaceholder}
-                  className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-slate-400"
+                  className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-slate-400 md:text-[13px]"
                 />
+                {query ? (
+                  <button
+                    type="button"
+                    onClick={() => setQuery("")}
+                    aria-label="Clear search"
+                    className="-mr-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-200 hover:text-slate-600"
+                  >
+                    <i className="pi pi-times text-xs" aria-hidden />
+                  </button>
+                ) : null}
               </label>
             </section>
           ) : null}
