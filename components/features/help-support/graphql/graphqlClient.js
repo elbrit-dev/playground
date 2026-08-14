@@ -33,7 +33,9 @@ function getGraphQLConfig(config = {}) {
 }
 
 function cacheKey(query, variables, config) {
-  return JSON.stringify({ endpointUrl: config.endpointUrl, query, variables });
+  // The token is part of the key so a response fetched with one user's token is
+  // never replayed to another — ERP permissions differ per token.
+  return JSON.stringify({ endpointUrl: config.endpointUrl, authToken: config.authToken, query, variables });
 }
 
 export function clearHelpDeskGraphQLCache() {
