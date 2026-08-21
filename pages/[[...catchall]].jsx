@@ -25,7 +25,10 @@ export default function PlasmicPage(props) {
       prefetchedQueryData={queryParams}
     >
       {mounted && (
-        <PlasmicComponent component={plasmicData.entryCompMetas[0].displayName} />
+        <PlasmicComponent
+          component={plasmicData.entryCompMetas[0].name}
+          projectId={plasmicData.entryCompMetas[0].projectId}
+        />
       )}
     </PlasmicRootProvider>
   );
@@ -33,7 +36,13 @@ export default function PlasmicPage(props) {
 
 export const getStaticProps = async (context) => {
   const { catchall } = context.params ?? {};
-  const plasmicPath = typeof catchall === 'string' ? catchall : catchall?.join('/') || '/';
+  const segments = typeof catchall === 'string' ? catchall : catchall?.join('/') || '';
+  // The leading slash matters: the loader only treats a spec as a PAGE PATH
+  // when it starts with "/". Without it the spec is pascalcase'd and matched
+  // against component NAMES, so "my-profile" resolved to the registered
+  // MyProfile code component instead of the page at /my-profile (named
+  // "Profile") - which then failed to render with "Unable to find components".
+  const plasmicPath = `/${segments.replace(/^\/+/, '')}`;
   const plasmicData = await PLASMIC.maybeFetchComponentData(plasmicPath);
   if (!plasmicData) {
     // This is where you could return 404

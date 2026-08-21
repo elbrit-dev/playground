@@ -6,6 +6,7 @@ import { registerElbritCoreComponents } from './share/src/plasmic-init'
 import CalendarPage from "@calendar/components/CalendarPage";
 import NetworkBanner from "./components/NetworkBanner";
 import HelpSupport from "./components/features/help-support";
+import MyProfile from "./components/features/my-profile";
 // import NovuInbox from "./components/NovuInbox";
 import jmespath_plus from '@metrichor/jmespath-plus';
 import * as jmespath from 'jmespath';
@@ -154,7 +155,46 @@ PLASMIC.registerComponent(HelpSupport, {
   styleSections: true,
   importPath: "./components/features/help-support",
 });
-
+PLASMIC.registerComponent(MyProfile, {
+  name: "MyProfile",
+  displayName: "MyProfile",
+  description:
+    "Read-only employee profile: personal info, role details, account details, documents and payslips, with PDF export.",
+  props: {
+    profile: {
+      type: "object",
+      displayName: "Profile",
+      description:
+        "Company, employee identity and the read-only field sections. Shape: { company, employee, syncText, readonlyNote, personalInfo: { overviewNote, overview[], contactNote, contact[] }, roleDetails: { reportingNote, reporting[] }, accountDetails: { salaryNote, salary[], statutoryNote, statutory[], insuranceNote, insuranceCoverage, insurance[] } }. Every field list is an array of { label, value, copy?, reveal?, maskedValue? }.",
+    },
+    leaveBalance: {
+      type: "object",
+      displayName: "Leave balance",
+      description:
+        "Leave balance card. Shape: { note, items: [{ label, value, caption, strong? }] }.",
+    },
+    payslips: {
+      type: "object",
+      displayName: "Payslips",
+      description:
+        "Salary Slip data. Shape: { summary[], fiscalYears[], slips: [{ month, period, gross, deductions, netPay, status }], selectedSlip: { title, subtitle, netPay, creditText, earnings[], grossPay, deductions[], totalDeductions, meta[], incomeTaxSlab?, taxSummary?[], incomeTaxSummary?[] } }. Earnings/deductions rows accept an optional `ytd` for the Year To Date column.",
+    },
+    documents: {
+      type: "object",
+      displayName: "Documents",
+      description:
+        "Documents tab. Shape: { note, items: [{ name, issued, format, size, url? }] }. Give an item a `url` and its download serves that file instead of a generated record sheet.",
+    },
+    defaultTab: {
+      type: "choice",
+      displayName: "Default tab",
+      options: ["personal", "role", "account", "documents", "payslips"],
+      defaultValue: "personal",
+    },
+  },
+  styleSections: true,
+  importPath: "./components/features/my-profile",
+});
 registerElbritCoreComponents(PLASMIC)
 
 // PLASMIC.registerComponent(DataProvider, {
