@@ -706,9 +706,23 @@ function PayslipsTab({ data }) {
  * as "not set", so `overview: null` stays an empty array instead of crashing.
  */
 function fromProps({ profile, leaveBalance, payslips, documents }) {
+  // Plasmic can hand these over as a real object (a dynamic value bound to a
+  // GraphQL query) or as pasted JSON text, depending on which control was used.
+  // Accept both so neither route silently renders nothing.
+  const asObject = (value) => {
+    if (typeof value !== "string") return value;
+    const text = value.trim();
+    if (!text) return undefined;
+    try {
+      return JSON.parse(text);
+    } catch {
+      return undefined;
+    }
+  };
+
   const set = (object) =>
     Object.fromEntries(
-      Object.entries(object || {}).filter(([, value]) => value !== undefined && value !== null)
+      Object.entries(asObject(object) || {}).filter(([, value]) => value !== undefined && value !== null)
     );
 
   const p = set(profile);
@@ -745,15 +759,9 @@ export default function MyProfileExperience({
   leaveBalance,
   payslips,
   documents,
-  defaultTab = "personal",
+  defaultTab = "personal",url,
   className = "",
 }) {
-  console.log("profile", profile);
-  console.log("leaveBalance", leaveBalance);
-  console.log("payslips", payslips);
-  console.log("documents", documents);
-  console.log("defaultTab", defaultTab);
-  console.log("className", className);
   const data = useMemo(
     () => fromProps({ profile, leaveBalance, payslips, documents }),
     [profile, leaveBalance, payslips, documents]
