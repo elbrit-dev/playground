@@ -191,6 +191,11 @@ PLASMIC.registerComponent(MyProfile, {
       options: ["personal", "role", "account", "documents", "payslips"],
       defaultValue: "personal",
     },
+    helpDeskLink: {
+      type: "string",
+      displayName: "Help desk link",
+      description: "URL for the \"Open Help desk\" link in the desktop header. Left empty, it renders as plain non-interactive text.",
+    },
   },
   styleSections: true,
   importPath: "./components/features/my-profile",

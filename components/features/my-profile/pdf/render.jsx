@@ -7,8 +7,15 @@ import { DocumentRecordDocument, ProfileDocument } from "./ProfileDocument";
 import { DEFAULT_COMPANY } from "./chrome";
 import { registerPdfFonts } from "./theme";
 
+// A Plasmic prop that has never been filled in often carries "" rather than
+// being absent entirely (e.g. company.logoUrl left blank in the Profile prop
+// editor). Treat that the same as unset so it can't silently blank out a
+// default the caller never meant to override.
 function withCompany(company) {
-  return { ...DEFAULT_COMPANY, ...(company || {}) };
+  const provided = Object.fromEntries(
+    Object.entries(company || {}).filter(([, value]) => value !== undefined && value !== null && value !== "")
+  );
+  return { ...DEFAULT_COMPANY, ...provided };
 }
 
 async function toBlob(element, fontBasePath) {

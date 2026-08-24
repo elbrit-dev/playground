@@ -1,6 +1,6 @@
 import React from "react";
 import { Image, Text, View } from "@react-pdf/renderer";
-import { COLORS, styles } from "./theme";
+import { absoluteAssetUrl, COLORS, styles } from "./theme";
 
 export const DEFAULT_COMPANY = {
   name: "Elbrit Lifesciences Private Limited",
@@ -12,7 +12,9 @@ export const DEFAULT_COMPANY = {
   cin: "U74999TZ2014PTC029965",
   supportEmail: "support@elbrit.org",
   supportPhone: "1800 257 3579",
-  logoUrl: "", // left blank on purpose - drop a URL here and it renders
+  // Served from /public. Any absolute URL or path works; blank hides the slot
+  // while still reserving its space, so the layout never shifts.
+  logoUrl: "/logo.png",
 };
 
 /**
@@ -23,7 +25,7 @@ export function Letterhead({ company, title }) {
   return (
     <View>
       <View style={styles.logoSlot}>
-        {company.logoUrl ? <Image src={company.logoUrl} style={styles.logoImage} /> : null}
+        {company.logoUrl ? <Image src={absoluteAssetUrl(company.logoUrl)} style={styles.logoImage} /> : null}
       </View>
       <View style={styles.companyBlock}>
         <Text style={styles.companyName}>{company.name}</Text>

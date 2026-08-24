@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Bell,
+  Building2,
   Camera,
   Check,
   ChevronDown,
@@ -12,8 +12,9 @@ import {
   EyeOff,
   FileText,
   HelpCircle,
-  Home,
-  Settings,
+  Landmark,
+  ShieldPlus,
+  User,
 } from "lucide-react";
 
 import {
@@ -93,19 +94,6 @@ async function copyText(value) {
   }
   textarea.remove();
   return copied;
-}
-
-function IconButton({ label, children }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[#333333] transition hover:bg-[#f3f4f6] active:translate-y-px"
-    >
-      {children}
-    </button>
-  );
 }
 
 function CopyButton({ value, label = "value", className = "" }) {
@@ -219,7 +207,7 @@ function FieldGrid({ items, columns = "xl:grid-cols-4" }) {
   );
 }
 
-function HeaderCard({ data }) {
+function HeaderCard({ data, helpDeskLink }) {
   const employee = data.employee;
 
   return (
@@ -318,12 +306,20 @@ function HeaderCard({ data }) {
             <HelpCircle aria-hidden className="mt-0.5 h-3 w-3 shrink-0 text-[#aaaaaa]" strokeWidth={1.7} />
             <p>{data.readonlyNote}</p>
           </div>
-          <button
-            type="button"
-            className={cx(TEXT.body, "shrink-0 text-left text-[#0077ff] hover:underline lg:text-right")}
-          >
-            Open Help desk
-          </button>
+          {helpDeskLink ? (
+            <a
+              href={helpDeskLink}
+              target="_blank"
+              rel="noreferrer"
+              className={cx(TEXT.body, "shrink-0 text-left text-[#0077ff] hover:underline lg:text-right")}
+            >
+              Open Help desk
+            </a>
+          ) : (
+            <span className={cx(TEXT.body, "shrink-0 text-left text-[#aaaaaa] lg:text-right")}>
+              Open Help desk
+            </span>
+          )}
         </div>
       </div>
     </section>
@@ -614,7 +610,7 @@ function AmountRows({ rows }) {
   );
 }
 
-function PayslipPreview({ data }) {
+function PayslipPreview({ data, helpDeskLink }) {
   const selected = data.payslips.selectedSlip;
   if (!selected) return null;
 
@@ -679,22 +675,396 @@ function PayslipPreview({ data }) {
           </div>
         ))}
       </div>
-      <button type="button" className={cx(TEXT.label, "mt-3 text-left text-[#0077ff] hover:underline")}>
-        Raise a payroll query for this month
-      </button>
+      {helpDeskLink ? (
+        <a
+          href={helpDeskLink}
+          target="_blank"
+          rel="noreferrer"
+          className={cx(TEXT.label, "mt-3 block text-left text-[#0077ff] hover:underline")}
+        >
+          Raise a payroll query for this month
+        </a>
+      ) : (
+        <span className={cx(TEXT.label, "mt-3 block text-left text-[#aaaaaa]")}>
+          Raise a payroll query for this month
+        </span>
+      )}
     </aside>
   );
 }
 
-function PayslipsTab({ data }) {
+function PayslipsTab({ data, helpDeskLink }) {
   const payslips = data.payslips;
   return (
     <div className="space-y-2.5">
       <SummaryCards items={asArray(payslips.summary)} />
       <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <SalarySlips data={data} />
-        <PayslipPreview data={data} />
+        <PayslipPreview data={data} helpDeskLink={helpDeskLink} />
       </div>
+    </div>
+  );
+}
+
+/* ================================ mobile ================================= *
+ * A distinct layout below `sm`, not a squeezed version of the desktop one:
+ * one profile card, a Profile/Payslips toggle, and collapsible sections
+ * instead of a tab strip. Reads the same `data` the desktop view does.
+ * ========================================================================= */
+
+function MobileFieldRow({ item }) {
+  const [revealed, setRevealed] = useState(false);
+  const shown = item.reveal && !revealed ? item.maskedValue ?? maskValue(item.value) : item.value;
+
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-[#f0f0f0] px-4 py-2.5 last:border-b-0">
+      <span className={cx(TEXT.label, "shrink-0 pt-0.5 text-[#aaaaaa]")}>{item.label}</span>
+      <div className="flex min-w-0 items-center gap-1">
+        <span
+          className={cx(
+            TEXT.value,
+            "min-w-0 break-words text-right text-[#202020]",
+            item.mono && "font-mono tracking-[0.04em]"
+          )}
+        >
+          {shown}
+        </span>
+        {item.copy ? <CopyButton value={item.value} label={item.label} /> : null}
+        {item.reveal ? (
+          <RevealButton label={item.label} revealed={revealed} onToggle={() => setRevealed((v) => !v)} />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function MobileFieldRows({ items }) {
+  if (!items.length) return null;
+  return <div>{items.map((item, index) => <MobileFieldRow key={`${item.label}-${index}`} item={item} />)}</div>;
+}
+
+function MobileAccordionSection({ icon: Icon, title, subtitle, open, onToggle, children }) {
+  return (
+    <section className="overflow-clip rounded-[10px] bg-white shadow-[0_1px_6px_rgba(15,23,42,0.05)]">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+      >
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[#eef4ff] text-[#0b7cff]">
+          <Icon aria-hidden className="h-4 w-4" strokeWidth={1.7} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className={cx(TEXT.body, "block truncate font-bold text-[#111111]")}>{title}</span>
+          {subtitle ? (
+            <span className={cx(TEXT.label, "mt-0.5 block truncate text-[#aaaaaa]")}>{subtitle}</span>
+          ) : null}
+        </span>
+        <ChevronDown
+          aria-hidden
+          className={cx("h-4 w-4 shrink-0 text-[#aaaaaa] transition-transform", open && "rotate-180")}
+          strokeWidth={1.7}
+        />
+      </button>
+      {open ? <div className="border-t border-[#f0f0f0]">{children}</div> : null}
+    </section>
+  );
+}
+
+function MobileStat({ label, value }) {
+  return (
+    <div className="min-w-0 flex-1">
+      <div className={cx(TEXT.micro, "truncate text-[#aaaaaa]")}>{label}</div>
+      <div className={cx(TEXT.body, "mt-0.5 truncate font-bold text-[#162653]")}>{value || "—"}</div>
+    </div>
+  );
+}
+
+function MobileProfileCard({ data }) {
+  const employee = data.employee;
+  const latestSlip = data.payslips.selectedSlip;
+  const leaveTotal = asArray(data.leaveBalance.items).find((item) => item.strong) || asArray(data.leaveBalance.items)[0];
+  const headquarters = String(employee.headquarters || "").replace(/^HQ[-\s]*/i, "");
+
+  return (
+    <section className="rounded-[10px] bg-white p-4 shadow-[0_1px_6px_rgba(15,23,42,0.05)]">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="relative h-11 w-11 shrink-0 rounded-full bg-[#e8f3ff] text-[#0b7cff]">
+            <span className="flex h-full w-full items-center justify-center text-[16px] font-bold leading-none">
+              {initialsOf(employee)}
+            </span>
+            <button
+              type="button"
+              aria-label="Change profile picture"
+              title="Change profile picture"
+              className="absolute bottom-[-2px] right-[-2px] inline-flex h-4 w-4 items-center justify-center rounded-full border border-[#dddddd] bg-white text-[#333333] shadow-sm"
+            >
+              <Camera aria-hidden className="h-2 w-2" strokeWidth={1.7} />
+            </button>
+          </div>
+          <div className="min-w-0">
+            <div className={cx(TEXT.body, "truncate font-bold text-[#162653]")}>{employee.name}</div>
+            {employee.designation ? (
+              <div className={cx(TEXT.label, "truncate text-[#3b3b3b]")}>{employee.designation}</div>
+            ) : null}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => downloadProfilePdf(data)}
+          className={cx(TEXT.label, "shrink-0 rounded-[4px] bg-[#1d73f8] px-2.5 py-1.5 font-bold text-white")}
+        >
+          Export
+        </button>
+      </div>
+
+      {employee.employeeCode || employee.status ? (
+        <div className={cx(TEXT.micro, "mt-2.5 flex flex-wrap items-center gap-2")}>
+          {employee.employeeCode ? (
+            <span className="rounded border border-[#d8d8d8] px-1.5 py-0.5 font-mono tracking-[0.1em] text-[#111111]">
+              {employee.employeeCode}
+            </span>
+          ) : null}
+          {employee.status ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#eaf8eb] px-2 py-0.5 font-medium text-[#008a16]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#12c244]" />
+              {employee.status}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
+      {latestSlip || leaveTotal || headquarters ? (
+        <div className="mt-3 flex items-stretch gap-3 border-t border-[#f0f0f0] pt-3">
+          {latestSlip ? <MobileStat label={`Net pay · ${latestSlip.title || latestSlip.month || ""}`} value={latestSlip.netPay} /> : null}
+          {latestSlip && (leaveTotal || headquarters) ? <div className="w-px shrink-0 bg-[#f0f0f0]" /> : null}
+          {leaveTotal ? <MobileStat label="Leave balance" value={leaveTotal.value} /> : null}
+          {leaveTotal && headquarters ? <div className="w-px shrink-0 bg-[#f0f0f0]" /> : null}
+          {headquarters ? <MobileStat label="HQ" value={headquarters} /> : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+const MOBILE_VIEWS = [
+  { id: "profile", label: "Profile" },
+  { id: "payslips", label: "Payslips" },
+];
+
+function MobileSegmentedTabs({ active, onChange }) {
+  return (
+    <div className="flex gap-1 rounded-[10px] bg-[#e7e8ed] p-1">
+      {MOBILE_VIEWS.map((view) => {
+        const isActive = view.id === active;
+        return (
+          <button
+            key={view.id}
+            type="button"
+            onClick={() => onChange(view.id)}
+            className={cx(
+              TEXT.body,
+              "flex-1 rounded-[8px] py-1.5 text-center font-bold transition",
+              isActive ? "bg-white text-[#111111] shadow-sm" : "text-[#666666]"
+            )}
+          >
+            {view.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function shortDocSummary(items) {
+  return items
+    .slice(0, 3)
+    .map((doc) => String(doc.name || "").split(/[\s-]/)[0])
+    .filter(Boolean)
+    .join(", ");
+}
+
+function MobileAccordionList({ data }) {
+  const [openId, setOpenId] = useState("personal");
+  const toggle = (id) => setOpenId((current) => (current === id ? null : id));
+
+  const personalItems = [...asArray(data.personalInfo.overview), ...asArray(data.personalInfo.contact)];
+  const roleItems = asArray(data.roleDetails.reporting);
+  const accountItems = [...asArray(data.accountDetails.salary), ...asArray(data.accountDetails.statutory)];
+  const coverage = data.accountDetails.insuranceCoverage;
+  const insuranceItems = [
+    coverage ? { label: coverage.label, value: [coverage.value, coverage.caption].filter(Boolean).join(" · ") } : null,
+    ...asArray(data.accountDetails.insurance),
+  ].filter(Boolean);
+  const documentItems = asArray(data.documents.items);
+
+  const sections = [
+    { id: "personal", icon: User, title: "Personal info", subtitle: "Contact, address, emergency", items: personalItems },
+    { id: "role", icon: Building2, title: "Role details", subtitle: "Reporting, role profile, approvals", items: roleItems },
+    { id: "account", icon: Landmark, title: "Account details", subtitle: "Bank and statutory", items: accountItems },
+    {
+      id: "insurance",
+      icon: ShieldPlus,
+      title: "Health insurance",
+      subtitle: coverage ? `Coverage ${coverage.value}` : "Policy details",
+      items: insuranceItems,
+    },
+    {
+      id: "documents",
+      icon: FileText,
+      title: "Documents",
+      subtitle: documentItems.length ? shortDocSummary(documentItems) : "Issued by HR",
+      items: null,
+      documents: documentItems,
+    },
+  ];
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      {sections.map((section) => (
+        <MobileAccordionSection
+          key={section.id}
+          icon={section.icon}
+          title={section.title}
+          subtitle={section.subtitle}
+          open={openId === section.id}
+          onToggle={() => toggle(section.id)}
+        >
+          {section.documents ? (
+            <ul>
+              {section.documents.map((doc, index) => (
+                <DocumentRow key={`${doc.name}-${index}`} doc={doc} data={data} />
+              ))}
+            </ul>
+          ) : (
+            <MobileFieldRows items={section.items} />
+          )}
+        </MobileAccordionSection>
+      ))}
+    </div>
+  );
+}
+
+function MobilePayslipCard({ data, helpDeskLink }) {
+  const selected = data.payslips.selectedSlip;
+  if (!selected) return null;
+
+  return (
+    <section className="rounded-[10px] bg-white p-4 shadow-[0_1px_6px_rgba(15,23,42,0.05)]">
+      <div className="flex items-start justify-between gap-3">
+        <div className={cx(TEXT.body, "font-bold text-[#111111]")}>{selected.title || selected.month}</div>
+        <span className={cx(TEXT.micro, "rounded-full bg-[#dff8e4] px-2 py-0.5 font-medium text-[#00951b]")}>
+          Credited
+        </span>
+      </div>
+      <div className={cx(TEXT.title, "mt-2 font-bold text-[#162653]")}>{selected.netPay}</div>
+      <div className={cx(TEXT.micro, "mt-0.5 text-[#aaaaaa]")}>net pay</div>
+      <div className="mt-3 grid grid-cols-2 gap-2.5">
+        <div className="rounded-[8px] bg-[#f5f6f8] p-2.5">
+          <div className={cx(TEXT.micro, "text-[#aaaaaa]")}>Gross</div>
+          <div className={cx(TEXT.body, "mt-0.5 font-bold text-[#111111]")}>{selected.grossPay}</div>
+        </div>
+        <div className="rounded-[8px] bg-[#f5f6f8] p-2.5">
+          <div className={cx(TEXT.micro, "text-[#aaaaaa]")}>Deductions</div>
+          <div className={cx(TEXT.body, "mt-0.5 font-bold text-[#111111]")}>{selected.totalDeductions}</div>
+        </div>
+      </div>
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          onClick={() => downloadPayslipPdf(selected, data)}
+          className={cx(TEXT.body, "flex-1 rounded-[8px] bg-[#1d73f8] py-2 text-center font-bold text-white")}
+        >
+          Download PDF
+        </button>
+        {helpDeskLink ? (
+          <a
+            href={helpDeskLink}
+            target="_blank"
+            rel="noreferrer"
+            className={cx(TEXT.body, "flex-1 rounded-[8px] border border-[#d9d9d9] py-2 text-center font-bold text-[#333333]")}
+          >
+            Raise query
+          </a>
+        ) : (
+          <span
+            className={cx(TEXT.body, "flex-1 rounded-[8px] border border-[#e5e5e5] py-2 text-center font-bold text-[#bbbbbb]")}
+          >
+            Raise query
+          </span>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function MobileEarlierMonths({ data }) {
+  const payslips = data.payslips;
+  const slips = asArray(payslips.slips);
+  if (!slips.length) return null;
+
+  return (
+    <section className="overflow-clip rounded-[10px] bg-white shadow-[0_1px_6px_rgba(15,23,42,0.05)]">
+      <div className="flex items-center justify-between px-4 py-3">
+        <h2 className={cx(TEXT.body, "font-bold text-[#162653]")}>Earlier months</h2>
+        <button
+          type="button"
+          onClick={() => downloadPayslipRegisterPdf(data)}
+          className={cx(TEXT.label, "inline-flex items-center gap-1 font-bold text-[#0077ff]")}
+        >
+          <Download aria-hidden className="h-3 w-3" strokeWidth={1.7} />
+          Export all
+        </button>
+      </div>
+      <ul>
+        {slips.map((slip, index) => (
+          <li
+            key={slip.month}
+            className={cx(
+              "flex items-center gap-3 border-t border-[#f0f0f0] px-4 py-2.5",
+              index === 0 && "bg-[#f7fbff]"
+            )}
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[#eef4ff] text-[#0b7cff]">
+              <FileText aria-hidden className="h-4 w-4" strokeWidth={1.7} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className={cx(TEXT.body, "font-bold text-[#111111]")}>{slip.month}</div>
+              <div className={cx(TEXT.micro, "mt-0.5 truncate text-[#aaaaaa]")}>{slip.period}</div>
+            </div>
+            <div className={cx(TEXT.body, "shrink-0 font-bold text-[#111111]")}>{slip.netPay}</div>
+            <button
+              type="button"
+              aria-label={`Download ${slip.month} payslip`}
+              title={`Download ${slip.month} payslip`}
+              onClick={() => downloadPayslipPdf(slipFromRow(payslips, slip), data)}
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded text-[#aaaaaa] transition hover:bg-[#f3f4f6] hover:text-[#333333]"
+            >
+              <Download aria-hidden className="h-3.5 w-3.5" strokeWidth={1.7} />
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function MobileProfileExperience({ data, helpDeskLink }) {
+  const [view, setView] = useState("profile");
+
+  return (
+    <div className="flex w-full flex-col gap-3">
+      <MobileProfileCard data={data} />
+      <MobileSegmentedTabs active={view} onChange={setView} />
+      {view === "profile" ? <MobileAccordionList data={data} /> : null}
+      {view === "payslips" ? (
+        <div className="flex flex-col gap-2.5">
+          <MobilePayslipCard data={data} helpDeskLink={helpDeskLink} />
+          <MobileEarlierMonths data={data} />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -759,7 +1129,8 @@ export default function MyProfileExperience({
   leaveBalance,
   payslips,
   documents,
-  defaultTab = "personal",url,
+  helpDeskLink,
+  defaultTab = "personal",
   className = "",
 }) {
   const data = useMemo(
@@ -771,52 +1142,30 @@ export default function MyProfileExperience({
     TABS.some((tab) => tab.id === defaultTab) ? defaultTab : "personal"
   );
 
+  // The outer breadcrumb/notification/settings header duplicated chrome the
+  // host page already provides, so both viewports render straight into their
+  // own layout with no page-level header or footer of their own.
   return (
-    <main
-      className={cx("flex w-full flex-col bg-[#e7e8ed] p-2 font-sans text-[#333333] sm:p-3 lg:p-4", className)}
-    >
-      <div className={cx(TEXT.micro, "mb-2.5 font-bold uppercase tracking-[0.08em] text-[#aaaaaa]")}>
-        Web Console · /My-Profile
-      </div>
-      {/* `overflow-clip` rounds the shell without making it a scroll container,
-          so the page scrolls as one and the payslip preview can still stick. */}
-      <div className="flex w-full flex-col overflow-clip rounded-[8px] bg-[#f2f2f2]">
-        <header className="flex min-h-10 items-center justify-between gap-3 border-b border-[#d5d5d5] bg-white px-3 sm:px-5">
-          <nav aria-label="Breadcrumb" className={cx(TEXT.body, "flex min-w-0 items-center gap-2")}>
-            <Home aria-hidden className="h-3 w-3 shrink-0 text-[#aaaaaa]" strokeWidth={1.7} />
-            <span className="hidden text-[#aaaaaa] sm:inline">Home</span>
-            <span className="text-[#aaaaaa]">/</span>
-            <span className="truncate text-[#111111]">My Profile</span>
-          </nav>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <IconButton label="Notifications">
-              <Bell aria-hidden className="h-3 w-3" strokeWidth={1.7} />
-            </IconButton>
-            <IconButton label="Settings">
-              <Settings aria-hidden className="h-3 w-3" strokeWidth={1.7} />
-            </IconButton>
-            <button
-              type="button"
-              aria-label="Open profile drawer"
-              className={cx(
-                TEXT.label,
-                "inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#e2f0ff] font-medium text-[#0b7cff]"
-              )}
-            >
-              {initialsOf(data.employee)}
-            </button>
+    <div className={cx("flex w-full flex-col font-sans text-[#333333]", className)}>
+      <main className="hidden w-full flex-col bg-[#e7e8ed] p-2 sm:flex sm:p-3 lg:p-4">
+        {/* `overflow-clip` rounds the shell without making it a scroll container,
+            so the page scrolls as one and the payslip preview can still stick. */}
+        <div className="flex w-full flex-col overflow-clip rounded-[8px] bg-[#f2f2f2]">
+          <div className="space-y-3 px-3 py-4 sm:px-4 lg:px-6">
+            <HeaderCard data={data} helpDeskLink={helpDeskLink} />
+            <Tabs activeTab={activeTab} onChange={setActiveTab} syncText={data.syncText} />
+            {activeTab === "personal" ? <PersonalTab data={data} /> : null}
+            {activeTab === "role" ? <RoleTab data={data} /> : null}
+            {activeTab === "account" ? <AccountTab data={data} /> : null}
+            {activeTab === "documents" ? <DocumentsTab data={data} /> : null}
+            {activeTab === "payslips" ? <PayslipsTab data={data} helpDeskLink={helpDeskLink} /> : null}
           </div>
-        </header>
-        <div className="space-y-3 px-3 py-4 sm:px-4 lg:px-6">
-          <HeaderCard data={data} />
-          <Tabs activeTab={activeTab} onChange={setActiveTab} syncText={data.syncText} />
-          {activeTab === "personal" ? <PersonalTab data={data} /> : null}
-          {activeTab === "role" ? <RoleTab data={data} /> : null}
-          {activeTab === "account" ? <AccountTab data={data} /> : null}
-          {activeTab === "documents" ? <DocumentsTab data={data} /> : null}
-          {activeTab === "payslips" ? <PayslipsTab data={data} /> : null}
         </div>
-      </div>
-    </main>
+      </main>
+
+      <main className="flex w-full flex-col gap-3 bg-[#f5f6f8] p-3 sm:hidden">
+        <MobileProfileExperience data={data} helpDeskLink={helpDeskLink} />
+      </main>
+    </div>
   );
 }

@@ -8,13 +8,21 @@ export const PDF_FONT = "DejaVuSans";
 
 let registered = false;
 
+/** Root-relative paths are not resolved by the renderer - give it an origin. */
+export function absoluteAssetUrl(path) {
+  if (!path || /^(https?:|data:|blob:)/.test(path)) return path;
+  if (typeof window === "undefined") return path;
+  return new URL(path, window.location.origin).href;
+}
+
 export function registerPdfFonts(basePath = "/fonts") {
   if (registered) return;
+  const base = absoluteAssetUrl(basePath);
   Font.register({
     family: PDF_FONT,
     fonts: [
-      { src: `${basePath}/DejaVuSans.ttf`, fontWeight: "normal" },
-      { src: `${basePath}/DejaVuSans-Bold.ttf`, fontWeight: "bold" },
+      { src: `${base}/DejaVuSans.ttf`, fontWeight: "normal" },
+      { src: `${base}/DejaVuSans-Bold.ttf`, fontWeight: "bold" },
     ],
   });
   // Long unbroken values (policy numbers, PF account codes) should wrap on
