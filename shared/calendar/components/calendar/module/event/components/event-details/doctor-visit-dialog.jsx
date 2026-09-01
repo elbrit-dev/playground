@@ -267,15 +267,12 @@ export function EventDoctorVisitDialog({
 
   const handleJoin = async () => {
     try {
-      const existingParticipants =
-        event.event_participants?.map((p) => ({
-          reference_doctype: p.reference_doctype,
-          reference_docname: p.reference_docname,
-        })) || [];
+      // Keep every field of the other rows: reducing them to ids used to blank
+      // out the attendance and visit times other participants had recorded.
+      const existingParticipants = event.event_participants ?? [];
 
       await joinDoctorVisit({
         erpName: event.erpName,
-        existingParticipants,
         employeeId: LOGGED_IN_USER.id,
       });
 
@@ -306,15 +303,10 @@ export function EventDoctorVisitDialog({
   };
   const handleLeaveVisit = async () => {
     try {
-      const existingParticipants =
-        event.event_participants?.map((p) => ({
-          reference_doctype: p.reference_doctype,
-          reference_docname: p.reference_docname,
-        })) || [];
+      const existingParticipants = event.event_participants ?? [];
 
       await leaveDoctorVisit({
         erpName: event.erpName,
-        existingParticipants,
         employeeId: LOGGED_IN_USER.id,
       });
 
