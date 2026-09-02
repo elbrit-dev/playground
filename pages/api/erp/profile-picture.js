@@ -1,14 +1,60 @@
 // pages/api/erp/profile-picture.js
 //
-// Saves a new profile picture into the ERP. Two steps, because Frappe stores the
-// bytes and the reference separately: `uploadFile` writes a File doc, then
-// `saveDoc` points the User's `user_image` (and, when an Employee docname comes
-// with the request, that Employee's `image`) at the returned file URL.
+// GET  reads the picture the ERP currently holds for a user, so the avatar shows
+//      what is in the ERP without anyone binding a prop to it.
+// POST saves a new one. Two steps, because Frappe stores the bytes and the
+//      reference separately: `uploadFile` writes a File doc, then `saveDoc`
+//      points the User's `user_image` (and, when an Employee docname comes with
+//      the request, that Employee's `image`) at the returned file URL.
 //
 // This runs server-side so the endpoint and token are read from env here rather
 // than passed in from Studio the way HelpSupport does it.
 
 import { getEndpoints, getTokens } from "../../../lib/graphql-endpoints";
+
+// `modified` rides along as a cache-buster: Frappe can hand back a file URL it
+// has reused, and without a changing query string the browser would keep
+// showing the image it already cached.
+// The plural/filter form, matching every other query in this codebase - the
+// singular `User(name:)` shape is not used anywhere here, so it is not assumed
+// to exist. `user_image`, `image` and `modified` are plain scalars, not Links,
+// so they need no `__name` qualifier (see the note in employee.graphql.js).
+const USER_IMAGE_QUERY = `
+  query ProfilePicture($user: String!) {
+    Users(first: 1, filter: [{ fieldname: "name", operator: EQ, value: $user }]) {
+      edges {
+        node {
+          name
+          user_image
+          modified
+        }
+      }
+    }
+  }
+`;
+
+const USER_AND_EMPLOYEE_IMAGE_QUERY = `
+  query ProfilePictureWithEmployee($user: String!, $employee: String!) {
+    Users(first: 1, filter: [{ fieldname: "name", operator: EQ, value: $user }]) {
+      edges {
+        node {
+          name
+          user_image
+          modified
+        }
+      }
+    }
+    Employees(first: 1, filter: [{ fieldname: "name", operator: EQ, value: $employee }]) {
+      edges {
+        node {
+          name
+          image
+          modified
+        }
+      }
+    }
+  }
+`;
 
 const UPLOAD_FILE_MUTATION = `
   mutation UploadProfilePicture(
@@ -278,7 +324,7 @@ function decodeDataUrl(dataUrl) {
 /** ERP User docnames are email addresses; Guest and Administrator are off limits. */
 function validateUser(user) {
   const value = String(user || "").trim();
-  if (!value) return { error: "The ERP user id is missing, so there is nothing to update." };
+  if (!value) return { error: "The ERP user id is missing." };
   if (value.length > 140) return { error: "The ERP user id is not a valid user." };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
     return { error: "The ERP user id must be an email address." };
@@ -316,9 +362,62 @@ function safeFileName(user, mimeType) {
   return `profile-${stem}-${Date.now()}.${extension}`;
 }
 
+/** Appends the doc's `modified` so a reused file URL still busts the cache. */
+function versioned(fileUrl, modified) {
+  if (!fileUrl || !modified) return fileUrl;
+  const separator = fileUrl.includes("?") ? "&" : "?";
+  return `${fileUrl}${separator}v=${encodeURIComponent(String(modified))}`;
+}
+
+/**
+ * Reads whatever picture the ERP holds right now. `User.user_image` is the one
+ * the avatar is meant to mirror; `Employee.image` is only consulted when the
+ * User has none, so an HR-uploaded photo still shows up.
+ */
+async function handleRead(req, res) {
+  const validatedUser = validateUser(req.query?.user);
+  if (validatedUser.error) return res.status(400).json({ error: validatedUser.error });
+  const user = validatedUser.user;
+  const employee = String(req.query?.employee || "").trim().slice(0, 140);
+
+  let erp;
+  try {
+    erp = erpConfig(String(req.query?.endpointKey || "").trim());
+  } catch (error) {
+    console.error("Profile picture: ERP config missing", error);
+    return res.status(500).json({ error: error?.message || "The ERP connection is not configured." });
+  }
+
+  let data;
+  try {
+    data = employee
+      ? await runGraphQL(USER_AND_EMPLOYEE_IMAGE_QUERY, { user, employee }, erp)
+      : await runGraphQL(USER_IMAGE_QUERY, { user }, erp);
+  } catch (error) {
+    console.error("Profile picture: read failed", error);
+    return res.status(502).json({ error: error?.message || "The ERP would not return the picture." });
+  }
+
+  const userNode = data?.Users?.edges?.[0]?.node;
+  const employeeNode = data?.Employees?.edges?.[0]?.node;
+  const source = userNode?.user_image
+    ? { url: userNode.user_image, modified: userNode.modified, from: "User.user_image" }
+    : { url: employeeNode?.image || "", modified: employeeNode?.modified, from: "Employee.image" };
+
+  // A user with no picture is a normal answer, not an error - the avatar keeps
+  // showing initials. Not cached: the point is to notice ERP-side changes.
+  res.setHeader("Cache-Control", "no-store");
+  return res.status(200).json({
+    fileUrl: source.url ? versioned(absoluteFileUrl(source.url, erp.endpointUrl), source.modified) : "",
+    source: source.url ? source.from : "",
+  });
+}
+
 export default async function handler(req, res) {
+  if (req.method === "GET") return handleRead(req, res);
+
   if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
+    res.setHeader("Allow", "GET, POST");
     return res.status(405).json({ error: "Method not allowed." });
   }
 

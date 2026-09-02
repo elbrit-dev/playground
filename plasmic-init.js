@@ -184,7 +184,7 @@ PLASMIC.registerComponent(MyProfile, {
       type: "object",
       displayName: "Profile",
       description:
-        "Company, employee identity and the read-only field sections. Shape: { company, employee, syncText, readonlyNote, personalInfo: { overviewNote, overview[], contactNote, contact[] }, roleDetails: { reportingNote, reporting[] }, accountDetails: { salaryNote, salary[], statutoryNote, statutory[], insuranceNote, insuranceCoverage, insurance[] } }. Every field list is an array of { label, value, copy?, reveal?, maskedValue? }. `employee` also drives the avatar: { imageUrl, userId, id } - `imageUrl` is the current picture (User.user_image, absolute or /files/…), `userId` is the ERP User id that a new picture is saved onto (Employee.user_id; falls back to the Company email row, then the button disables), and `id` is the Employee docname the picture is mirrored to (falls back to employeeCode).",
+        "Company, employee identity and the read-only field sections. Shape: { company, employee, syncText, personalInfo: { overviewNote, overview[], contactNote, contact[] }, roleDetails: { reportingNote, reporting[] }, accountDetails: { salaryNote, salary[], statutoryNote, statutory[], insuranceNote, insuranceCoverage, insurance[] } }. Every field list is an array of { label, value, copy?, reveal?, maskedValue? }. `employee` also drives the avatar: { imageUrl, userId, id } - `imageUrl` is the current picture (User.user_image, absolute or /files/…), `userId` is the ERP User id that a new picture is saved onto (Employee.user_id; falls back to the Company email row, then the button disables), and `id` is the Employee docname the picture is mirrored to (falls back to employeeCode).",
     },
     leaveBalance: {
       type: "object",
