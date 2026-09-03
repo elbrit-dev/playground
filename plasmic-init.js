@@ -4,6 +4,8 @@ import { initPlasmicLoader, DataProvider as PlasmicDataProvider } from "@plasmic
 // import TableDataProvider from "./components/TableDataProvider";
 import { registerElbritCoreComponents } from './share/src/plasmic-init'
 import CalendarPage from "@calendar/components/CalendarPage";
+import NovuInbox from "./components/NovuInbox";
+import ProfileHeader from "./components/features/profile-header";
 import { EVENT_TYPE_MODES, TAG_IDS, TAGS } from "@calendar/components/calendar/constants";
 import NetworkBanner from "./components/NetworkBanner";
 import HelpSupport from "./components/features/help-support";
@@ -115,6 +117,104 @@ PLASMIC.registerComponent(CalendarPage, {
   },
 });
 
+PLASMIC.registerComponent(NovuInbox, {
+  name: "NovuInbox",
+  props: {
+    email: {
+      type: "string",
+      description: "User email (used as Novu subscriberId)",
+    },
+    firstName: {
+      type: "string",
+      description: "User first name (optional).",
+    },
+    lastName: {
+      type: "string",
+      description: "User last name (optional).",
+    },
+    phone: {
+      type: "string",
+      description: "User phone number in E.164 format.",
+    },
+    tags: {
+      type: "object",
+      description: "User tags (Flat object).",
+    },
+    meta: {
+      type: "object",
+      description: "Additional metadata (Flat object).",
+    },
+    applicationIdentifier: {
+      type: "string",
+      description: "Novu application identifier.",
+      // Reads NEXT_PUBLIC_NOVU_APPLICATION_IDENTIFIER (set per Netlify deploy context);
+      // falls back to the self-hosted (notify.elbrit.org) Production env identifier.
+      defaultValue: process.env.NEXT_PUBLIC_NOVU_APPLICATION_IDENTIFIER || "K3rsfIP_eYvg",
+    },
+    subscriberHash: {
+      type: "string",
+      description: "Optional subscriber hash for HMAC.",
+    },
+    apiUrl: {
+      type: "string",
+      description: "Novu API base URL. Self-hosted; without it the widget hits Novu Cloud.",
+      defaultValue: process.env.NEXT_PUBLIC_NOVU_BACKEND_URL || "https://api.notify.elbrit.org",
+    },
+    socketUrl: {
+      type: "string",
+      description: "Novu WebSocket URL for live inbox updates (self-hosted).",
+      defaultValue: process.env.NEXT_PUBLIC_NOVU_SOCKET_URL || "https://ws.notify.elbrit.org",
+    },
+    className: {
+      type: "string",
+      description: "CSS class name for the container",
+    },
+    fallbackRedirectPath: {
+      type: "string",
+      description: "Page to open when a clicked notification has no redirect URL of its own.",
+      defaultValue: "/chat",
+    },
+    bellSize: {
+      type: "number",
+      description: "Size (px) of the notification bell icon.",
+      defaultValue: 28,
+    },
+    bellPadding: {
+      type: "string",
+      description: "Padding around the bell trigger button (any CSS length, e.g. '0', '2px'). Smaller = less background space around the bell.",
+      defaultValue: "2px",
+    },
+    promptGateKey: {
+      type: "string",
+      defaultValue: "token",
+      description:
+        "The automatic notification-permission popup at page open only appears when this localStorage key holds a non-empty value (i.e. the user is logged in). Leave empty to always prompt. The Push Notification Toggle is never gated by this.",
+    },
+    onNotificationClick: {
+      type: "eventHandler",
+      argTypes: [
+        { name: "notification", type: "object" }
+      ],
+      description: "Called when a notification (body) is clicked. The notification's own redirect URL still navigates automatically.",
+    },
+    onPrimaryActionClick: {
+      type: "eventHandler",
+      argTypes: [
+        { name: "notification", type: "object" }
+      ],
+      description: "Callback function called when primary action button is clicked",
+    },
+    onSecondaryActionClick: {
+      type: "eventHandler",
+      argTypes: [
+        { name: "notification", type: "object" }
+      ],
+      description: "Callback function called when secondary action button is clicked",
+    },
+  },
+  importPath: "./components/NovuInbox",
+});
+
 PLASMIC.registerComponent(NetworkBanner, {
   name: "NetworkBanner",
   displayName: "Network Banner",
@@ -147,7 +247,66 @@ PLASMIC.registerComponent(NetworkBanner, {
   },
   importPath: "./components/NetworkBanner",
 });
-
+PLASMIC.registerComponent(ProfileHeader, {
+  name: "ProfileHeader",
+  displayName: "ProfileHeader",
+  description:
+    "Page header for the profile screen: title on the left, an actions slot for the notification bell on the right, then the company logo.",
+  props: {
+    title: {
+      type: "string",
+      displayName: "Title",
+      defaultValue: "My profile",
+    },
+    subtitle: {
+      type: "string",
+      displayName: "Subtitle",
+      description: "Optional small line under the title. Leave empty and nothing renders.",
+    },
+    actions: {
+      type: "slot",
+      displayName: "Bell / actions",
+      description:
+        "Sits to the left of the logo - drop NovuInbox here for the notification bell. Any number of icons can go in; they lay out in a row.",
+      defaultValue: [{ type: "component", name: "NovuInbox" }],
+    },
+    logoUrl: {
+      type: "imageUrl",
+      displayName: "Logo",
+      description: "Shown at the far right. Leave empty and the logo (and its divider) are dropped.",
+    },
+    logoAlt: {
+      type: "string",
+      displayName: "Logo alt text",
+      defaultValue: "Company logo",
+    },
+    logoHeight: {
+      type: "number",
+      displayName: "Logo height",
+      defaultValue: 28,
+      description: "Height in px. Width follows the image's aspect ratio.",
+    },
+    logoHref: {
+      type: "string",
+      displayName: "Logo link",
+      description: "Optional - makes the logo a link that opens in a new tab.",
+    },
+    sticky: {
+      type: "boolean",
+      displayName: "Stick to top",
+      defaultValue: false,
+      description: "Keeps the header visible while the page scrolls.",
+    },
+    bordered: {
+      type: "boolean",
+      displayName: "Bottom border",
+      defaultValue: true,
+    },
+    className: { type: "string", description: "CSS class on the header element." },
+  },
+  styleSections: true,
+  importPath: "./components/features/profile-header",
+});
 PLASMIC.registerComponent(HelpSupport, {
   name: "HelpSupport",
   displayName: "Help Support",
