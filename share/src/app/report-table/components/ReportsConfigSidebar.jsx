@@ -341,6 +341,8 @@ function ReportDocsPanel() {
           <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5">api</div>
           <CodeBlock>{`api: {
   urlKey: 'myApi',
+  reportApiVersion: 'v1',  // 'v1' (default) | 'v2' — see below
+  drillDown: { enabled: false, initialDepth: 2 },  // v2 only — see below
   index: 'Primary',  // Saved tab query name; GQL from that query
   indexVariables: { startDate: '2026-01-01', endDate: '2026-01-31' },
   indexVariablesMap: {
@@ -364,6 +366,49 @@ function ReportDocsPanel() {
     },
   },
 }`}</CodeBlock>
+          <p className="text-[11px] text-gray-500 mt-1.5">
+            <code className="font-mono text-blue-700">reportApiVersion</code> selects which
+            backend field <code className="font-mono text-blue-700">graphqlQueryReportDataSource</code>{' '}
+            calls. Defaults to <code className="font-mono text-blue-700">&apos;v1&apos;</code> (legacy{' '}
+            <code className="font-mono text-blue-700">customReport</code>, unchanged behavior) so
+            existing configs are unaffected. Set to{' '}
+            <code className="font-mono text-blue-700">&apos;v2&apos;</code> per <em>view</em> (it can
+            be overridden inside <code className="font-mono text-blue-700">views.&lt;id&gt;.api</code>{' '}
+            just like any other api field) once that view&apos;s <code className="font-mono text-blue-700">group_by</code>{' '}
+            /<code className="font-mono text-blue-700">selected_columns</code> have been checked against{' '}
+            <code className="font-mono text-blue-700">customReportV2</code>&apos;s stricter validation
+            (e.g. target metrics require grouping by Department or HQ).
+          </p>
+          <p className="text-[11px] text-gray-500 mt-1.5">
+            On <code className="font-mono text-blue-700">&apos;v2&apos;</code> the sidebar filter
+            dropdowns are served by the{' '}
+            <code className="font-mono text-blue-700">reportFilterValues</code> query, one dimension
+            at a time when a dropdown is opened, instead of riding along on the report. The report no
+            longer returns them at all &mdash;{' '}
+            <code className="font-mono text-blue-700">_meta.meta_filter_values</code> is always{' '}
+            <code className="font-mono text-blue-700">{'{}'}</code> &mdash; so the tab list is a fixed
+            ten dimensions rather than whatever the response happened to carry. v1 views keep using{' '}
+            <code className="font-mono text-blue-700">elbrit_sales_filter_api</code>.
+          </p>
+          <p className="text-[11px] text-gray-500 mt-1.5">
+            <code className="font-mono text-blue-700">drillDown</code> makes the first request
+            ask for only the top <code className="font-mono text-blue-700">initialDepth</code>{' '}
+            levels of <code className="font-mono text-blue-700">group_by</code>, and fetches each
+            node&apos;s children from the{' '}
+            <code className="font-mono text-blue-700">reportDrillDown</code> query when the user
+            expands it. A five-level <code className="font-mono text-blue-700">group_by</code> over
+            a year returns ~204k rows and takes over a minute in one call; the same request split
+            this way renders in seconds and each expand costs one bounded query.
+          </p>
+          <p className="text-[11px] text-gray-500 mt-1.5">
+            It is <strong>ignored unless the view also resolves to{' '}
+            <code className="font-mono text-blue-700">&apos;v2&apos;</code></strong> &mdash;{' '}
+            <code className="font-mono text-blue-700">reportDrillDown</code> has no v1 equivalent.
+            Two things change for views that enable it: the inline column-filter row is hidden
+            (it can only filter rows already fetched, so it would silently filter a partial tree
+            &mdash; use the sidebar filters, which go to the server), and Export re-fetches at
+            full depth before writing the file, which is slow but complete.
+          </p>
         </section>
 
         {/* controls */}

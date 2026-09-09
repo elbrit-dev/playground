@@ -22,11 +22,11 @@ async function getView(view) {
 }
 
 function getColumns(body) {
-  return body.data.customReport.report_meta[0].columns;
+  return body.data.customReportV2.report_meta[0].columns;
 }
 
 function getRows(body) {
-  return body.data.customReport.edges.map(e => e.node);
+  return body.data.customReportV2.edges.map(e => e.node);
 }
 
 // ─── Error cases ──────────────────────────────────────────────────────────────
@@ -60,9 +60,9 @@ describe('GET /api/report-mock — all views 200', () => {
 
 describe('GET /api/report-mock — GraphQL envelope', () => {
   VALID_VIEWS.forEach(view => {
-    it(`${view}: response has data.customReport with report_meta, edges, pageInfo`, async () => {
+    it(`${view}: response has data.customReportV2 with report_meta, edges, pageInfo`, async () => {
       const { body } = await getView(view);
-      const cr = body.data?.customReport;
+      const cr = body.data?.customReportV2;
       expect(cr).toBeDefined();
       expect(cr.report_meta).toBeInstanceOf(Array);
       expect(cr.report_meta[0]).toHaveProperty('columns');
@@ -76,7 +76,7 @@ describe('GET /api/report-mock — GraphQL envelope', () => {
   VIEWS_WITH_META.forEach(view => {
     it(`${view}: _meta column has meta_pagination with total_roots matching edges length`, async () => {
       const { body } = await getView(view);
-      const cr = body.data.customReport;
+      const cr = body.data.customReportV2;
       const metaCol = cr.report_meta[0].columns.find(c => c.fieldname === '_meta');
       expect(metaCol?.meta_pagination?.total_roots).toBe(cr.edges.length);
     });
@@ -105,7 +105,7 @@ describe('GET /api/report-mock — result non-empty', () => {
   VALID_VIEWS.forEach(view => {
     it(`${view}: result array is non-empty`, async () => {
       const { body } = await getView(view);
-      expect(body.data.customReport.edges.length).toBeGreaterThan(0);
+      expect(body.data.customReportV2.edges.length).toBeGreaterThan(0);
     });
   });
 });
@@ -132,12 +132,13 @@ describe('GET /api/report-mock — department_hq', () => {
     expect(firstParent).toBeLessThan(firstChild);
   });
 
-  it('has _meta column with meta_filter_values.hq', async () => {
+  it('has _meta column with filter values emptied out', async () => {
     const { body } = await getView('department_hq');
     const metaCol = getColumns(body).find(c => c.fieldname === '_meta');
     expect(metaCol).toBeDefined();
-    expect(metaCol.meta_filter_values.hq).toBeInstanceOf(Array);
-    expect(metaCol.meta_filter_values.hq.length).toBeGreaterThan(0);
+    // Always {} now — dropdown values come from the reportFilterValues query.
+    expect(metaCol.meta_filter_values).toEqual({});
+    expect(metaCol.meta_filter_values_deprecated).toContain('reportFilterValues');
   });
 });
 
@@ -188,11 +189,11 @@ describe('GET /api/report-mock — customer_item_breakdown', () => {
 });
 
 describe('GET /api/report-mock — brand_item', () => {
-  it('has _meta column with brand filter values', async () => {
+  it('has _meta column with filter values emptied out', async () => {
     const { body } = await getView('brand_item');
     const metaCol = getColumns(body).find(c => c.fieldname === '_meta');
     expect(metaCol).toBeDefined();
-    expect(metaCol.meta_filter_values.brand).toBeInstanceOf(Array);
+    expect(metaCol.meta_filter_values).toEqual({});
   });
 });
 
@@ -222,5 +223,89 @@ describe('GET /api/report-mock — department_hq_breakdown', () => {
     const parents  = rows.filter(r => r.is_group).length;
     const children = rows.filter(r => !r.is_group).length;
     expect(parents + children).toBe(rows.length);
+  });
+});
+
+// ─── reportFilterValues mode ───────────────────────────────────────────────────
+
+describe('GET /api/report-mock?dimension= — reportFilterValues', () => {
+  const getGroup = async (qs) => {
+    const res = await GET(new Request(`http://localhost/api/report-mock?${qs}`));
+    const body = await res.json();
+    return { res, body, group: body.data?.reportFilterValues?.groups?.[0] };
+  };
+
+  it('returns one group in the reportFilterValues envelope', async () => {
+    const { res, body, group } = await getGroup('dimension=hq');
+    expect(res.status).toBe(200);
+    expect(body.data.reportFilterValues.execution_time).toBeTypeOf('number');
+    expect(group.dimension).toBe('HQ');
+    expect(group.filter_key).toBe('hq');
+    expect(group.values.length).toBeGreaterThan(0);
+    expect(group.values[0]).toHaveProperty('line_count');
+  });
+
+  it('filters values by search, case-insensitively', async () => {
+    const { group } = await getGroup('dimension=hq&search=BAN');
+    expect(group.values.map(v => v.value)).toEqual(['HQ-Bangalore']);
+  });
+
+  it('truncates at limit and says so', async () => {
+    const { group } = await getGroup('dimension=hq&limit=3');
+    expect(group.values).toHaveLength(3);
+    expect(group.truncated).toBe(true);
+  });
+
+  it('nulls both counts when include_counts=false', async () => {
+    const { group } = await getGroup('dimension=hq&include_counts=false');
+    expect(group.values[0].distinct_count).toBeNull();
+    expect(group.values[0].line_count).toBeNull();
+  });
+
+  it('400s on an unknown dimension', async () => {
+    const { res, body } = await getGroup('dimension=nonsense');
+    expect(res.status).toBe(400);
+    expect(body.error).toContain('Unknown dimension');
+  });
+});
+
+
+// ─── reportDrillDown mode ──────────────────────────────────────────────────────
+
+describe('GET /api/report-mock?parent= — reportDrillDown', () => {
+  const getDrill = async (qs) => {
+    const res = await GET(new Request(`http://localhost/api/report-mock?${qs}`));
+    const body = await res.json();
+    return { res, body, payload: body.data?.reportDrillDown };
+  };
+
+  it('returns the customReportV2 envelope shape, so one parser handles both', async () => {
+    const { res, payload } = await getDrill('parent=Elbrit%20Chennai');
+    expect(res.status).toBe(200);
+    expect(payload.report_meta[0].columns[0].fieldname).toBe('_meta');
+    expect(payload.edges.length).toBeGreaterThan(0);
+    expect(payload.edges[0].node).toHaveProperty('label');
+  });
+
+  it('echoes the parent path back for the out-of-order guard', async () => {
+    const { payload } = await getDrill('parent=Elbrit%20Chennai');
+    expect(payload.report_meta[0].columns[0].meta_parent_path).toEqual([
+      { dimension: 'DEPARTMENT', value: 'Elbrit Chennai' },
+    ]);
+  });
+
+  it('reports has_children both ways so leaves are reachable', async () => {
+    const { payload } = await getDrill('parent=D1');
+    const flags = payload.edges.map(e => e.node.has_children);
+    expect(flags).toContain(1);
+    expect(flags).toContain(0);
+  });
+
+  it('pages, and stops advertising a next page on the last one', async () => {
+    const first = await getDrill('parent=D1&page=1');
+    expect(first.payload.pageInfo.hasNextPage).toBe(true);
+    const second = await getDrill('parent=D1&page=2');
+    expect(second.payload.pageInfo.hasNextPage).toBe(false);
+    expect(second.payload.edges[0].node.label).not.toBe(first.payload.edges[0].node.label);
   });
 });
