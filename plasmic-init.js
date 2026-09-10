@@ -96,6 +96,12 @@ PLASMIC.registerComponent(CalendarPage, {
       type: "string",
       helpText: "Google Redirect URI",
     },
+    enableGoogleCalendarSync: {
+      type: "boolean",
+      defaultValue: false,
+      helpText:
+        "Off by default. When off, no Google Calendar work happens at all: events are not flagged for Google sync, the Google status is never queried, the Connect Google Calendar button is hidden, and Meet links are not requested. Turn it on only when Google sync is actually wanted.",
+    },
     eventTypes: {
       type: "choice",
       multiSelect: true,
