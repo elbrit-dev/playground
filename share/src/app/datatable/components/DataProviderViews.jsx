@@ -8,6 +8,12 @@ import FilterSortPill from './views/FilterSortPill';
 import ProductSearchBar from './views/ProductSearchBar';
 import StaleDataBridge from './views/StaleDataBridge';
 import SyncPill from './views/SyncPill';
+import {
+  DEFAULT_BOTTOM_GAP,
+  LOAD_MORE_RESERVED_SPACE,
+  LoadMoreBar,
+  PageSizePill,
+} from './views/ViewPaginator';
 import { ViewSwitcher } from '../../../components/ViewSwitcher';
 import { DataViewContext } from '../contexts/ViewContext';
 
@@ -34,9 +40,42 @@ function normalizeViews(views) {
 
 const ALIGN_CLASS = { left: 'justify-start', center: 'justify-center', right: 'justify-end' };
 
+const DEFAULT_PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 200];
+
+/**
+ * Hold an object's identity steady while its contents are unchanged.
+ *
+ * Needed because DataProviderNew derives `variableOverrides` from the
+ * `overrides` prop by identity, and re-runs the query whenever that identity
+ * changes. A caller that builds `overrides` inline (Plasmic Studio does) hands
+ * down a fresh object every render, which would loop: fetch -> state -> render
+ * -> new object -> fetch. Non-serializable values fall through unstabilized.
+ */
+function useStableValue(value) {
+  const ref = useRef({ signature: undefined, value });
+  let signature;
+  try {
+    signature = JSON.stringify(value ?? null);
+  } catch {
+    return value;
+  }
+  if (signature !== ref.current.signature) {
+    ref.current = { signature, value };
+  }
+  return ref.current.value;
+}
+
 // Breathing room around the slot content — the engine's header is shared with the
 // original provider, so the variant adds its own spacing here instead of touching it.
 const DEFAULT_CONTENT_PADDING = 'px-3 pt-3 pb-4 sm:px-4 sm:pt-4';
+
+// Named insets for the slot. `none` hands spacing entirely to the Studio layout
+// inside the slot, which is the right choice when the cards carry their own.
+const CONTENT_PADDING_PRESETS = {
+  default: DEFAULT_CONTENT_PADDING,
+  tight: 'px-1 pt-1 pb-2 sm:px-1.5',
+  none: '',
+};
 // Same reason for the header: the engine wraps it in px-2 (8px on mobile), which
 // reads as cramped, so the variant insets its OWN header slots a little further.
 const HEADER_SLOT_PADDING = 'px-1 sm:px-1.5';
@@ -63,6 +102,9 @@ export default function DataProviderViews({
   keepInactiveMounted = true,
   className,
   // Padding around the slot content (variant-only; the engine header is shared).
+  // `contentPadding` picks a named inset; `contentClassName` overrides it
+  // outright, including with '' for no classes at all.
+  contentPadding = 'default',
   contentClassName,
   // --- search bar (drives the provider's own multi-field searchTerm) ---
   showSearch = false,
@@ -82,6 +124,28 @@ export default function DataProviderViews({
   // Views (by id) where the rail is shown — the table has no letter sections,
   // so it defaults to the cards view only. Empty array = every view.
   letterRailViews = ['cards'],
+  // --- fetch size ("pagination"): the page-size control drives the query's own
+  // limit variable, so the SERVER returns fewer rows — not a client-side slice.
+  // Off by default; requires the query body to declare the variable, e.g.
+  // `query Doctors($first: Int = 10) { Leads(first: $first, ...) }`.
+  enableServerPaging = false,
+  pageSize = 25,
+  pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
+  // GraphQL variable that carries the limit. `first` for the Relay-style ERP
+  // queries; name it differently for a query that uses e.g. `limit`.
+  pageSizeVariable = 'first',
+  showPageSizeControl = true,
+  showLoadMore = true,
+  // 'header' = size pill on the control row, 'bottom' = Load more under the
+  // content, 'both' = each in its place.
+  paginatorPosition = 'both',
+  // How the Load-more bar sits: 'sticky' keeps it visible while scrolling
+  // (default), 'fixed' pins it to the viewport, 'static' scrolls away with the
+  // content. Lifted placements clear the app's bottom navigation by
+  // loadMoreBottomGap + the device's safe-area inset.
+  loadMorePlacement = 'sticky',
+  loadMoreBottomGap = DEFAULT_BOTTOM_GAP,
+  loadMoreVariant = 'floating',
   // --- cache: paint last session's data instantly, refresh behind it.
   // Variant-only (StaleDataBridge): the underlying DataProvider's loading flow
   // is untouched — this only re-provides the published context while it loads. ---
@@ -132,13 +196,67 @@ export default function DataProviderViews({
     ? activeView
     : fallbackView;
 
+  // --- fetch size -----------------------------------------------------------
+  // Normalized once so a Studio-typed string ("25") or a stray 0 can't reach
+  // the query as a bad variable.
+  const initialFetchSize = useMemo(() => {
+    const n = Number(pageSize);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 25;
+  }, [pageSize]);
+
+  const [fetchSize, setFetchSizeState] = useState(initialFetchSize);
+
+  // Follow the prop when it changes (Studio edit, or a page variable driving it).
+  useEffect(() => { setFetchSizeState(initialFetchSize); }, [initialFetchSize]);
+
+  const setFetchSize = useCallback((next) => {
+    const n = Number(next);
+    if (!Number.isFinite(n) || n <= 0) return;
+    setFetchSizeState(Math.floor(n));
+  }, []);
+
+  const loadMore = useCallback(() => {
+    setFetchSizeState((current) => current + initialFetchSize);
+  }, [initialFetchSize]);
+
+  const showPaginatorInHeader = enableServerPaging && showPageSizeControl
+    && (paginatorPosition === 'header' || paginatorPosition === 'both');
+  const showPaginatorAtBottom = enableServerPaging && showLoadMore
+    && (paginatorPosition === 'bottom' || paginatorPosition === 'both');
+
+  // An explicit contentClassName wins outright — '' is a valid value meaning
+  // "no padding from the provider", so this cannot use ?? on the preset.
+  const resolvedContentClass = typeof contentClassName === 'string'
+    ? contentClassName
+    : (CONTENT_PADDING_PRESETS[contentPadding] ?? DEFAULT_CONTENT_PADDING);
+
+  // Stabilized for the same reason as the overrides object: `paging` rides on
+  // viewCtx / $ctx.view, so a fresh array literal from Studio would give the
+  // whole view context a new identity on every render.
+  const stablePageSizeOptions = useStableValue(pageSizeOptions);
+
+  const paging = useMemo(() => ({
+    enabled: enableServerPaging === true,
+    fetchSize,
+    setFetchSize,
+    loadMore,
+    loadMoreStep: initialFetchSize,
+    pageSizeOptions: stablePageSizeOptions,
+    pageSizeVariable,
+    showLoadMore: showPaginatorAtBottom,
+  }), [
+    enableServerPaging, fetchSize, setFetchSize, loadMore, initialFetchSize,
+    stablePageSizeOptions, pageSizeVariable, showPaginatorAtBottom,
+  ]);
+
   const viewCtx = useMemo(() => ({
     views: normalizedViews,
     activeView: resolvedActiveView,
     setActiveView,
     isActive: (id) => id === resolvedActiveView,
     keepInactiveMounted,
-  }), [normalizedViews, resolvedActiveView, setActiveView, keepInactiveMounted]);
+    paging,
+  }), [normalizedViews, resolvedActiveView, setActiveView, keepInactiveMounted, paging]);
 
   // Each header element is memoized so `__internal` keeps a stable identity between
   // renders — inline JSX would change every time and defeat the memo below.
@@ -188,13 +306,26 @@ export default function DataProviderViews({
         <div className="flex min-w-0 flex-nowrap items-center gap-1.5 sm:gap-2">
           <FilterSortPill />
           <SyncPill />
+          {showPaginatorInHeader ? <PageSizePill /> : null}
         </div>
         {inHeader ? switcher : null}
       </div>
     );
-  }, [compact, inHeader, switcher]);
+  }, [compact, inHeader, switcher, showPaginatorInHeader]);
 
-  const headerRight = !compact && inHeader ? switcher : null;
+  // Non-compact: the engine renders its own controls, so the size pill joins the
+  // switcher on the right rather than duplicating a control row.
+  const headerRight = useMemo(() => {
+    if (compact) return null;
+    const pill = showPaginatorInHeader ? <PageSizePill /> : null;
+    if (!pill) return inHeader ? switcher : null;
+    return (
+      <div className="flex shrink-0 flex-nowrap items-center gap-1.5 sm:gap-2">
+        {pill}
+        {inHeader ? switcher : null}
+      </div>
+    );
+  }, [compact, inHeader, switcher, showPaginatorInHeader]);
 
   const internalForProvider = useMemo(() => {
     const next = { ...__internal };
@@ -207,6 +338,24 @@ export default function DataProviderViews({
     return next;
   }, [__internal, headerTop, headerLeft, headerRight, compact, hideNativeFilterSort]);
 
+  // The whole server-paging trick: `overrides.variables` already flows through
+  // DataProvider into the GraphQL request (DataProviderNew builds
+  // variableOverrides from it), so merging the chosen size in limits the fetch
+  // with no engine change. Merged INTO any existing variables so a caller's own
+  // overrides (or a token) survive, and stabilized by content — see
+  // useStableValue for why identity matters here.
+  const overridesWithPaging = useMemo(() => {
+    if (!enableServerPaging || !pageSizeVariable) return overrides;
+    return {
+      ...(overrides && typeof overrides === 'object' ? overrides : {}),
+      variables: {
+        ...(overrides?.variables ?? {}),
+        [pageSizeVariable]: fetchSize,
+      },
+    };
+  }, [enableServerPaging, pageSizeVariable, overrides, fetchSize]);
+  const stableOverrides = useStableValue(overridesWithPaging);
+
   return (
     <DataProvider
       presetDataSource={presetDataSource}
@@ -214,7 +363,7 @@ export default function DataProviderViews({
       offlineData={offlineData}
       onDataChange={onDataChange}
       onError={onError}
-      overrides={overrides}
+      overrides={enableServerPaging ? stableOverrides : overrides}
       __internal={internalForProvider}
     >
       <DataViewContext.Provider value={viewCtx}>
@@ -224,7 +373,7 @@ export default function DataProviderViews({
               <div className={className ?? 'flex flex-col min-h-0 flex-1'}>
                 {viewSwitcherPosition === 'top' ? standaloneSwitcher : null}
                 {showLetterRail ? (
-                  <div className={`flex min-h-0 flex-1 gap-1 ${contentClassName ?? DEFAULT_CONTENT_PADDING}`}>
+                  <div className={`flex min-h-0 flex-1 gap-1 ${resolvedContentClass}`}>
                     <div className="min-w-0 flex-1">{children}</div>
                     {/* Rail only on the views that have letter sections (cards).
                         The wrapper row stays constant so toggling views never
@@ -234,8 +383,23 @@ export default function DataProviderViews({
                     ) : null}
                   </div>
                 ) : (
-                  <div className={contentClassName ?? DEFAULT_CONTENT_PADDING}>{children}</div>
+                  <div className={resolvedContentClass}>{children}</div>
                 )}
+                {showPaginatorAtBottom ? (
+                  <>
+                    {/* A fixed bar is out of flow, so the list needs the space
+                        reserved or its last row hides underneath. Sticky stays
+                        in flow and needs nothing. */}
+                    {loadMorePlacement === 'fixed' ? (
+                      <div aria-hidden="true" style={{ height: LOAD_MORE_RESERVED_SPACE }} />
+                    ) : null}
+                    <LoadMoreBar
+                      placement={loadMorePlacement}
+                      bottomGap={loadMoreBottomGap}
+                      variant={loadMoreVariant}
+                    />
+                  </>
+                ) : null}
                 {viewSwitcherPosition === 'bottom' ? standaloneSwitcher : null}
               </div>
             );
