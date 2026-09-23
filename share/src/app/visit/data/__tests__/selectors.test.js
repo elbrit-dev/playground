@@ -5,22 +5,28 @@ import {
   attainment,
   attendance,
   attendanceOf,
+  attendanceStatesOf,
   byHq,
   callAverage,
   CHART_HOURS,
   doctorPlan,
+  forEmployees,
   geoSplit,
   happened,
+  planned,
   inPeriod,
+  leaveDaysOf,
   monthEnd,
   periodWindow,
   pobGiven,
   pobTotal,
   repsInAttendanceState,
+  resolveSelection,
   rollupFor,
   subtreeOf,
   visitsByHour,
   visitsIn,
+  groupByEvent,
 } from '../selectors';
 import {
   countWorkingDays,
@@ -123,14 +129,44 @@ describe('visitsByHour', () => {
     expect(eleven).toEqual({ hour: 11, verified: 1, force: 1 });
   });
 
-  it('folds out-of-range times into the edge buckets instead of dropping them', () => {
-    // A 7am check-in is real and must not silently vanish from the totals.
+  it('puts an early start and a late finish in their OWN hours', () => {
+    /* This used to FOLD a 7:15am call into the 9am bar and a 9pm one into
+       5pm, so the two shapes anybody actually opens this chart to find --
+       the early start and the long evening -- were the only two it could
+       not draw. */
     const out = visitsByHour([
       row({ visitTime: '2026-09-05 07:15:00' }),
       row({ visitTime: '2026-09-05 21:00:00' }),
     ]);
-    expect(out[0].verified).toBe(1);
-    expect(out[out.length - 1].verified).toBe(1);
+    expect(out.find((b) => b.hour === 7).verified).toBe(1);
+    expect(out.find((b) => b.hour === 21).verified).toBe(1);
+    expect(out.find((b) => b.hour === 9).verified).toBe(0);
+    expect(out.find((b) => b.hour === 17).verified).toBe(0);
+  });
+
+  it('is the whole day, midnight to 11pm, whatever the data does', () => {
+    // A fixed axis is what lets two HQ chips be compared: the 2pm column is
+    // in the same place on both.
+    for (const rows of [[], [row({ visitTime: '2026-09-05 07:15:00' })]]) {
+      const out = visitsByHour(rows);
+      expect(out).toHaveLength(24);
+      expect(out[0].hour).toBe(0);
+      expect(out[23].hour).toBe(23);
+    }
+  });
+
+  it('keeps the empty hours rather than closing the gap', () => {
+    // A chart that omits its empty hours is a chart whose spacing lies.
+    const out = visitsByHour([
+      row({ visitTime: '2026-09-05 07:00:00' }),
+      row({ visitTime: '2026-09-05 09:00:00' }),
+    ]);
+    expect(out.map((b) => b.hour).slice(7, 10)).toEqual([7, 8, 9]);
+    expect(out.find((b) => b.hour === 8).verified).toBe(0);
+  });
+
+  it('ignores an unparseable hour rather than bucketing it at midnight', () => {
+    expect(visitsByHour([row({ visitTime: 'not-a-timestamp' })]).every((b) => b.verified === 0)).toBe(true);
   });
 
   it('ignores rows that never happened', () => {
@@ -149,9 +185,10 @@ describe('visitsIn', () => {
     expect(visitsIn(rows, { hour: 14 }).map((v) => v.doctorName)).toEqual(['Dr Early', 'Dr Late']);
   });
 
-  it('agrees with the bar it was opened from, including the folded edges', () => {
-    // The bar counts a 7am call in the 9am bucket; the sheet behind it has
-    // to do the same or the list contradicts the number that opened it.
+  it('agrees with the bar it was opened from, at the widened edges too', () => {
+    // The sheet reads the same chartHourOf the bar does, so a 7am call is in
+    // the 7am bar AND the 7am list — or the list contradicts the number that
+    // opened it.
     const rows = [
       row({ eventId: 'A', visitTime: '2026-09-05 07:15:00' }),
       row({ eventId: 'B', visitTime: '2026-09-05 09:30:00' }),
@@ -203,6 +240,163 @@ describe('visitsIn', () => {
   });
 });
 
+describe('joint call attribution', () => {
+  /* EV288782, read live from erp.elbrit.org: one doctor, one plan owned by
+     E00869, attended by E00869 and E00102. Before the fix this scored two
+     planned visits against E00869 and none against E00102 -- one doctor
+     counted twice, and the person who went credited nowhere. */
+  const joint = [
+    row({
+      eventId: 'EV288782', planOwnerId: 'E00869', employeeId: 'E00869', participantId: 'E00869',
+      doctorId: 'DR-55992', doctorName: 'Dr G.Narayanan', hq: 'HQ-Erode',
+      visitTime: '2026-09-22 15:27:06',
+    }),
+    row({
+      eventId: 'EV288782', planOwnerId: 'E00869', employeeId: 'E00102', participantId: 'E00102',
+      doctorId: 'DR-55992', doctorName: 'Dr G.Narayanan', hq: 'HQ-Erode',
+      visitTime: '2026-09-22 15:25:36',
+    }),
+  ];
+
+  it('counts one planned visit for each person, not two for one of them', () => {
+    expect(planned(forEmployees(joint, new Set(['E00869'])))).toBe(1);
+    expect(happened(forEmployees(joint, new Set(['E00869'])))).toBe(1);
+  });
+
+  it('credits the colleague who actually attended', () => {
+    // Previously 0: their row carried the plan owner's id.
+    expect(planned(forEmployees(joint, new Set(['E00102'])))).toBe(1);
+    expect(happened(forEmployees(joint, new Set(['E00102'])))).toBe(1);
+  });
+
+  it('still counts the call once per attendee at HQ level, not four times', () => {
+    const team = [
+      { id: 'E00869', name: 'Rep', short: 'BE', reportsTo: 'E00102', hq: 'HQ-Erode' },
+      { id: 'E00102', name: 'Mgr', short: 'ABM', reportsTo: null, hq: 'HQ-Erode' },
+    ];
+    const [hq] = byHq(joint, team);
+    /* TWO visits and TWO people, which is the point: a joint call is one
+       call and two attendances, and both sides of the ratio have to agree
+       about that. The headcount used to be BEs only, so this same call
+       credited two visits against one head. */
+    expect(hq.planned).toBe(2);
+    expect(hq.totalReps).toBe(2);
+    expect(hq.activeReps).toBe(2);
+  });
+
+  it('keeps the money on the plan owner rather than duplicating it', () => {
+    const pob = [{ employeeId: 'E00869', doctorId: 'DR-55992', plannedDate: '2026-09-05', amount: 900 }];
+    const team = [{ id: 'E00869', name: 'Rep', short: 'BE', reportsTo: null, hq: 'HQ-Erode' }];
+    const [call] = groupByEvent(doctorPlan(team[0], team, joint, pob));
+    expect(call.participants).toHaveLength(2);
+    expect(call.pob).toBe(900);
+  });
+});
+
+describe('resolveSelection', () => {
+  const team = [{ id: 'A' }, { id: 'B' }];
+  const fallback = [{ id: 'A', includeSubtree: true }];
+
+  it('falls back when nobody has chosen yet', () => {
+    expect(resolveSelection(null, team, fallback)).toEqual(fallback);
+    expect(resolveSelection(undefined, team, fallback)).toEqual(fallback);
+  });
+
+  it('honours an explicitly empty selection', () => {
+    /* THE POINT OF THIS FUNCTION. Unticking the last node used to snap
+       straight back to the default, so the top could never be cleared and
+       the control fought the reader. */
+    expect(resolveSelection([], team, fallback)).toEqual([]);
+  });
+
+  it('keeps the picks that still exist', () => {
+    const picks = [{ id: 'B', includeSubtree: false }];
+    expect(resolveSelection(picks, team, fallback)).toEqual(picks);
+  });
+
+  it('drops picks the roster no longer contains', () => {
+    const picks = [{ id: 'B' }, { id: 'GONE' }];
+    expect(resolveSelection(picks, team, fallback)).toEqual([{ id: 'B' }]);
+  });
+
+  it('falls back when every pick has gone stale', () => {
+    // A roster change under a saved scope is NOT the same as asking for
+    // nobody, so this one still falls back rather than clearing.
+    expect(resolveSelection([{ id: 'GONE' }], team, fallback)).toEqual(fallback);
+  });
+
+  it('can still be cleared when the fallback is itself empty', () => {
+    expect(resolveSelection([], team, [])).toEqual([]);
+    expect(resolveSelection(null, team, [])).toEqual([]);
+  });
+});
+
+describe('groupByEvent', () => {
+  function visit(over = {}) {
+    return {
+      id: 'EV1#0', eventId: 'EV1', doctorName: 'Dr One', hq: 'HQ-Hubballi',
+      participantName: 'Anil', visitTime: '2026-09-05 10:00:00', forceVisit: false, ...over,
+    };
+  }
+
+  it('puts the two halves of a joint call back into one row', () => {
+    const groups = groupByEvent([
+      visit({ id: 'EV1#0', participantName: 'Anil' }),
+      visit({ id: 'EV1#1', participantName: 'Manager', visitTime: '2026-09-05 10:20:00' }),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].participants.map((p) => p.participantName)).toEqual(['Anil', 'Manager']);
+    expect(groups[0].attended).toBe(2);
+  });
+
+  it('keeps separate events separate', () => {
+    expect(groupByEvent([visit({ eventId: 'A' }), visit({ eventId: 'B' })])).toHaveLength(2);
+  });
+
+  it('takes the earliest arrival as the call time', () => {
+    // A group headed by the LAST arrival sorts a joint call after solo calls
+    // that finished before it even started.
+    const [g] = groupByEvent([
+      visit({ id: 'a', visitTime: '2026-09-05 10:40:00' }),
+      visit({ id: 'b', visitTime: '2026-09-05 10:05:00' }),
+    ]);
+    expect(g.visitTime).toBe('2026-09-05 10:05:00');
+  });
+
+  it('is forced only when every attendee forced it', () => {
+    // One rep at the clinic and their manager in the car park is a call that
+    // happened where it was meant to; red would accuse the rep.
+    const [mixed] = groupByEvent([
+      visit({ id: 'a', forceVisit: false }),
+      visit({ id: 'b', forceVisit: true }),
+    ]);
+    expect(mixed.forceVisit).toBe(false);
+    expect(mixed.mixed).toBe(true);
+
+    const [all] = groupByEvent([
+      visit({ id: 'a', forceVisit: true }),
+      visit({ id: 'b', forceVisit: true }),
+    ]);
+    expect(all.forceVisit).toBe(true);
+    expect(all.mixed).toBe(false);
+  });
+
+  it('is pending when nobody has been yet, and not forced', () => {
+    const [g] = groupByEvent([visit({ visitTime: null, forceVisit: false })]);
+    expect(g.visitTime).toBeNull();
+    expect(g.forceVisit).toBe(false);
+    expect(g.attended).toBe(0);
+  });
+
+  it('does not merge rows that have no event id', () => {
+    const groups = groupByEvent([
+      { id: 'x', eventId: undefined, doctorName: 'Dr A', participants: [] },
+      { id: 'y', eventId: undefined, doctorName: 'Dr B', participants: [] },
+    ]);
+    expect(groups).toHaveLength(2);
+  });
+});
+
 describe('geoSplit', () => {
   it('counts completed visits only', () => {
     expect(
@@ -211,7 +405,27 @@ describe('geoSplit', () => {
         row({ visitTime: '2026-09-05 10:00:00', forceVisit: true }),
         row({ forceVisit: true }), // planned but not done
       ]),
-    ).toEqual({ verified: 1, force: 1 });
+    ).toMatchObject({ verified: 1, force: 1 });
+  });
+
+  it('counts the joint half of each state as a SUBSET, not a fourth state', () => {
+    /* `jointVerified` is part of `verified`, not a peer of it. A caller that
+       adds all six together gets double the visits, which is why the second
+       bar is drawn against `planned` rather than against its own sum. */
+    const split = geoSplit([
+      row({ visitTime: '2026-09-05 10:00:00', participantCount: 2 }),
+      row({ visitTime: '2026-09-05 10:00:00' }),
+      row({ visitTime: '2026-09-05 11:00:00', forceVisit: true, participantCount: 3 }),
+      row({ participantCount: 2 }), // joint and still pending
+    ]);
+    expect(split).toEqual({
+      verified: 2, force: 1, jointVerified: 1, jointForce: 1, jointPending: 1,
+    });
+  });
+
+  it('treats a row with no participant count as solo rather than as joint', () => {
+    // The mock and any older cached payload predate the field.
+    expect(geoSplit([row({ visitTime: '2026-09-05 10:00:00' })]).jointVerified).toBe(0);
   });
 });
 
@@ -232,19 +446,23 @@ describe('attendance', () => {
     expect(attendanceOf(team[3], worked)).toBe('vacant');
   });
 
-  it('counts reps only, never managers', () => {
+  it('counts everyone in scope, managers included', () => {
+    /* It was BEs only. Managers make calls too — a fifth of the plan is
+       joint — and a card counting fewer people than the tree below it lists
+       invites the reader to go looking for the difference. */
     const { counts } = attendance([row({ employeeId: 'A', visitTime: '2026-09-05 10:00:00' })], team);
-    expect(counts.working + counts.notReporting + counts.onLeave + counts.vacant).toBe(4);
+    expect(counts.working + counts.notReporting + counts.onLeave + counts.vacant).toBe(team.length);
   });
 
   it('excludes vacancies from the in-field denominator', () => {
-    // "17 of 19 in field" must not count seats nobody sits in as absentees.
+    // "17 of 19 reported" must not count seats nobody sits in as absentees.
     const { working, inScope } = attendance(
       [row({ employeeId: 'A', visitTime: '2026-09-05 10:00:00' })],
       team,
     );
     expect(working).toBe(1);
-    expect(inScope).toBe(3);
+    // Four people, one of them a vacant seat: the manager is in scope now.
+    expect(inScope).toBe(4);
   });
 
   it('does not count a planned-but-unvisited row as working', () => {
@@ -270,12 +488,30 @@ describe('activeReps', () => {
     ).toBe(1);
   });
 
-  it('excludes a manager even if an Event is mistakenly tagged to one', () => {
+  it('counts a manager who logged a call of their own', () => {
+    /* It used to exclude them, on the reading that a visit against a manager
+       was an Event mis-tagged to one. Since the attribution moved to the
+       PARTICIPANT that is no longer what such a row means: it is a joint call
+       the manager actually attended, and on live September data those are 29%
+       of all completed visits. Counting the visit on top while leaving the
+       person out of the bottom made the call average a ratio between two
+       different populations. */
     expect(
       activeReps([
         row({ employeeId: 'A', visitTime: '2026-09-05 10:00:00' }),
         row({ employeeId: 'M', visitTime: '2026-09-05 10:00:00' }),
       ], team),
+    ).toBe(2);
+  });
+
+  it('never counts a vacant seat, whatever is logged against it', () => {
+    // Nobody sits in it to have reported; dividing by it understates the team.
+    const withVacancy = [...team, { id: 'V', short: 'BE', vacant: true }];
+    expect(
+      activeReps([
+        row({ employeeId: 'A', visitTime: '2026-09-05 10:00:00' }),
+        row({ employeeId: 'V', visitTime: '2026-09-05 10:00:00' }),
+      ], withVacancy),
     ).toBe(1);
   });
 });
@@ -315,12 +551,22 @@ describe('byHq', () => {
     { id: 'M', short: 'ABM', hq: 'HQ-Hubballi', vacant: false },
   ];
 
-  it('counts non-vacant reps, and active ones by their visits', () => {
+  it('counts every non-vacant person in the territory, managers included', () => {
+    /* Three people here — two BEs and their ABM — because the ABM's own
+       joint calls already count toward this card's visits. Counting them on
+       top while leaving them out of the headcount is what made a territory
+       look busier per head than it was. The vacant seat stays out: nobody
+       sits in it to have reported. */
     const [hub] = byHq([row({ employeeId: 'A', visitTime: '2026-09-05 10:00:00' }), row({ employeeId: 'B' })], team);
-    expect(hub.totalReps).toBe(2);
+    expect(hub.totalReps).toBe(3);
     expect(hub.activeReps).toBe(1);
     expect(hub.planned).toBe(2);
     expect(hub.happened).toBe(1);
+  });
+
+  it('counts a manager as active when they logged a call', () => {
+    const [hub] = byHq([row({ employeeId: 'M', visitTime: '2026-09-05 10:00:00' })], team);
+    expect(hub.activeReps).toBe(1);
   });
 
   it('splits completed visits into verified and force', () => {
@@ -448,16 +694,45 @@ describe('rollupFor', () => {
     { id: 'V', reportsTo: 'ABM', short: 'BE', vacant: true, onLeave: false },
   ];
 
-  it('aggregates the whole subtree and excludes vacancies from the rep count', () => {
+  it('counts the PERSON’s own visits, not their branch’s', () => {
+    /* A manager's row used to stack every call under them, so the same visit
+       was counted again at every level above the rep who made it — and no row
+       anywhere said what the manager themselves did. */
+    const roll = rollupFor(team[0], team, [
+      row({ employeeId: 'A', visitTime: '2026-09-05 10:00:00' }),
+      row({ employeeId: 'A' }),
+      row({ employeeId: 'ABM', visitTime: '2026-09-05 11:00:00' }),
+    ]);
+    expect(roll).toMatchObject({ planned: 1, happened: 1, isLeaf: false });
+    expect(roll.attainment).toBe(1);
+  });
+
+  it('counts the people BELOW them in the headcount', () => {
+    /* The two numbers on a manager's row answer two different questions:
+       what they did, and how their people are doing. Asked of one person a
+       headcount can only ever be 0/1 or 1/1, which is not a statistic. */
     const roll = rollupFor(team[0], team, [
       row({ employeeId: 'A', visitTime: '2026-09-05 10:00:00' }),
       row({ employeeId: 'A' }),
     ]);
-    expect(roll).toMatchObject({ planned: 2, happened: 1, workingReps: 1, totalReps: 1, isLeaf: false });
-    expect(roll.attainment).toBe(0.5);
+    /* totalReps is 1 — the one BE under them. Not the ABM themselves, whose
+       own work is the bar beside this; not the vacant seat, since nobody sits
+       in it to have reported. */
+    expect(roll).toMatchObject({ workingReps: 1, totalReps: 1 });
+    // ...and the manager's own bar stays empty while their rep's is not.
+    expect(roll.planned).toBe(0);
   });
 
-  it('sums the subtree POB and ignores money earned outside it', () => {
+  it('counts the person’s own money, not their branch’s', () => {
+    // Same rule as the visit counts: a manager's row is about the manager.
+    const roll = rollupFor(team[0], team, [row({ employeeId: 'ABM' })], [
+      { employeeId: 'ABM', doctorId: 'DR-1', amount: 1000, plannedDate: '2026-09-05' },
+      { employeeId: 'A', doctorId: 'DR-2', amount: 500, plannedDate: '2026-09-05' },
+    ]);
+    expect(roll.pobAmount).toBe(1000);
+  });
+
+  it('keeps a rep’s own POB and ignores money earned outside it', () => {
     const roll = rollupFor(team[1], team, [row({ employeeId: 'A' })], [
       { employeeId: 'A', doctorId: 'DR-1', amount: 1000, plannedDate: '2026-09-05' },
       { employeeId: 'A', doctorId: 'DR-2', amount: 500, plannedDate: '2026-09-05' },
@@ -486,8 +761,9 @@ describe('format', () => {
     expect(formatClock(null)).toBeNull();
   });
 
-  it('abbreviates chart hours', () => {
-    expect([9, 12, 17].map(formatHour)).toEqual(['9a', '12p', '5p']);
+  it('names chart hours in full, including both noons', () => {
+    // Midnight and noon are the two that a naive `hour % 12` gets wrong.
+    expect([0, 9, 12, 17].map(formatHour)).toEqual(['12AM', '9AM', '12PM', '5PM']);
   });
 
   it('renders a missing ratio as an em dash, never 0%', () => {
@@ -540,6 +816,42 @@ describe('mock dataset', () => {
     expect(past.length).toBeGreaterThan(0);
   });
 
+  it('carries joint calls, because the live plan does', () => {
+    /* ~21% of live September events had more than one participant. A fixture
+       of solo calls never exercises the grouping the doctor plan sheet is
+       built on -- which is exactly how it shipped mis-specified once. */
+    const { rows } = buildMockDataset(opts);
+    const perEvent = new Map();
+    for (const r of rows) {
+      const key = `${r.eventId}|${r.plannedDate}`;
+      perEvent.set(key, (perEvent.get(key) ?? 0) + 1);
+    }
+    const joint = [...perEvent.values()].filter((n) => n > 1);
+    expect(joint.length).toBeGreaterThan(0);
+  });
+
+  it('names a participant on every row', () => {
+    // The sheet renders participantName; an undefined is a blank row.
+    const { rows } = buildMockDataset(opts);
+    expect(rows.every((r) => r.participantName && r.participantId)).toBe(true);
+  });
+
+  it('gives a joint call two DIFFERENT attendees on one plan', () => {
+    const { rows } = buildMockDataset(opts);
+    const byEvent = new Map();
+    for (const r of rows) {
+      const key = `${r.eventId}|${r.plannedDate}`;
+      byEvent.set(key, [...(byEvent.get(key) ?? []), r]);
+    }
+    const joint = [...byEvent.values()].find((rs) => rs.length > 1);
+    expect(new Set(joint.map((r) => r.participantId)).size).toBe(joint.length);
+    /* Each attendee is credited to THEMSELVES -- one planned visit each,
+       rather than two against the rep and none against the manager. */
+    expect(new Set(joint.map((r) => r.employeeId)).size).toBe(joint.length);
+    // But the PLAN is still one rep's, which is what makes it one call.
+    expect(new Set(joint.map((r) => r.planOwnerId)).size).toBe(1);
+  });
+
   it('gives vacant seats no plan at all', () => {
     const { rows, team } = buildMockDataset(opts);
     const vacantIds = new Set(team.filter((m) => m.vacant).map((m) => m.id));
@@ -587,11 +899,14 @@ describe('repsInAttendanceState', () => {
     }
   });
 
-  it('never lists a manager', () => {
+  it('lists managers too, because the chip counts them', () => {
+    /* The list and the number that opened it have to be the same population
+       — a chip reading 20 that opens 19 names is worse than no drill-down. */
     const all = ['working', 'notReporting', 'onLeave', 'vacant'].flatMap((s) =>
       repsInAttendanceState(team, rows, s),
     );
-    expect(all.some((p) => p.id === 'M')).toBe(false);
+    expect(all.some((p) => p.id === 'M')).toBe(true);
+    expect(all).toHaveLength(team.length);
   });
 
   it('orders by calls done, descending', () => {
@@ -600,9 +915,13 @@ describe('repsInAttendanceState', () => {
     expect(working.map((p) => p.happened)).toEqual([2, 1]);
   });
 
-  it('carries the plan and the manager for each row', () => {
+  it('carries the plan, the role and the geo split for each row', () => {
+    /* The card draws a bar, not a ratio, so the three segments have to come
+       from here — a card re-deriving its own would be free to disagree with
+       the tree row for the same rep. */
     const [anil] = repsInAttendanceState(team, rows, 'working');
-    expect(anil).toMatchObject({ planned: 3, happened: 2, managerName: 'Manager' });
+    expect(anil).toMatchObject({ planned: 3, happened: 2, short: 'BE' });
+    expect(anil.verified + anil.force).toBe(anil.happened);
   });
 
   it('gives a vacant seat no plan rather than a zero one', () => {
@@ -619,6 +938,9 @@ describe('doctorPlan', () => {
     { id: 'X', name: 'Outsider', short: 'BE', reportsTo: null, hq: 'HQ-Erode' },
   ];
 
+  /* No participantId on these: they are the ordinary single-participant
+     events the live data holds, where the attendee IS the plan owner and the
+     fallback in doctorPlan is what resolves them. */
   const rows = [
     row({ eventId: '1', employeeId: 'A', employeeName: 'Anil', doctorId: 'DR-1', doctorName: 'Dr One' }),
     row({
@@ -632,9 +954,42 @@ describe('doctorPlan', () => {
     row({ eventId: '4', employeeId: 'X', employeeName: 'Outsider', doctorId: 'DR-4', doctorName: 'Dr Four' }),
   ];
 
-  it('covers the whole subtree and nothing outside it', () => {
-    const plan = doctorPlan(team[0], team, rows);
-    expect(plan.map((v) => v.doctorName).sort()).toEqual(['Dr One', 'Dr Three', 'Dr Two']);
+  it('does not roll a report’s calls up to their manager', () => {
+    // The behaviour this replaced: opening Dr plan on an ABM listed every
+    // call in the branch as though the manager had made them.
+    expect(doctorPlan(team[0], team, rows)).toEqual([]);
+  });
+
+  it('lists the joint calls a manager actually attended', () => {
+    const joint = [
+      ...rows,
+      row({
+        eventId: '2', employeeId: 'A', employeeName: 'Anil', doctorId: 'DR-2', doctorName: 'Dr Two',
+        visitTime: '2026-09-05 14:05:00', participantId: 'M', participantName: 'Manager',
+      }),
+    ];
+    const plan = doctorPlan(team[0], team, joint);
+    /* Both attendees come back, not just the manager's own row: the sheet
+       groups them into one call and expands to show who was there. A call
+       listing only the reader would hide the rep they went with. */
+    expect(plan.map((v) => v.doctorName)).toEqual(['Dr Two', 'Dr Two']);
+    expect(groupByEvent(plan)).toHaveLength(1);
+    expect(groupByEvent(plan)[0].participants).toHaveLength(2);
+  });
+
+  it('brings a colleague along only for the calls the member was on', () => {
+    // Anil has three calls; the manager joined one. The manager's plan is
+    // that one call with both names, not all three with both names.
+    const joint = [
+      ...rows,
+      row({
+        eventId: '2', employeeId: 'A', employeeName: 'Anil', doctorId: 'DR-2', doctorName: 'Dr Two',
+        visitTime: '2026-09-05 14:05:00', participantId: 'M', participantName: 'Manager',
+      }),
+    ];
+    const groups = groupByEvent(doctorPlan(team[0], team, joint));
+    expect(groups).toHaveLength(1);
+    expect(groups[0].doctorName).toBe('Dr Two');
   });
 
   it('scopes to one rep when the node is a rep', () => {
@@ -642,9 +997,30 @@ describe('doctorPlan', () => {
     expect(plan.map((v) => v.doctorName).sort()).toEqual(['Dr One', 'Dr Two']);
   });
 
+  it('falls back to the plan owner when the participant did not resolve', () => {
+    // An unresolved participant (ops account, inactive, a schema that does
+    // not return reference_docname) must not empty every plan on the screen.
+    const unresolved = [
+      row({ eventId: '5', employeeId: 'A', employeeName: 'Anil', doctorName: 'Dr Five', participantId: null }),
+    ];
+    expect(doctorPlan(team[1], team, unresolved)).toHaveLength(1);
+  });
+
+  it('prefers the participant over the plan owner when both are present', () => {
+    // A's plan, attended by B. It is B's call, not A's.
+    const lent = [
+      row({
+        eventId: '6', employeeId: 'A', employeeName: 'Anil', doctorName: 'Dr Six',
+        participantId: 'B', participantName: 'Bala',
+      }),
+    ];
+    expect(doctorPlan(team[1], team, lent)).toEqual([]);
+    expect(doctorPlan(team[2], team, lent).map((v) => v.doctorName)).toEqual(['Dr Six']);
+  });
+
   it('puts completed calls first, in the order they happened', () => {
-    const plan = doctorPlan(team[0], team, rows);
-    expect(plan.map((v) => v.doctorName)).toEqual(['Dr Three', 'Dr Two', 'Dr One']);
+    const plan = doctorPlan(team[1], team, rows);
+    expect(plan.map((v) => v.doctorName)).toEqual(['Dr Two', 'Dr One']);
   });
 
   it('sums POB per (rep, doctor, day) rather than taking the first', () => {
@@ -653,7 +1029,7 @@ describe('doctorPlan', () => {
       { employeeId: 'A', doctorId: 'DR-2', plannedDate: '2026-09-05', amount: 600 },
       { employeeId: 'X', doctorId: 'DR-2', plannedDate: '2026-09-05', amount: 999 },
     ];
-    const plan = doctorPlan(team[0], team, rows, pob);
+    const plan = doctorPlan(team[1], team, rows, pob);
     expect(plan.find((v) => v.doctorName === 'Dr Two').pob).toBe(1000);
   });
 
@@ -661,16 +1037,19 @@ describe('doctorPlan', () => {
     // An Event with two participants flattens to two rows sharing an
     // eventId -- React saw duplicate keys and dropped a visit from the list.
     const shared = [
-      row({ eventId: 'SAME', employeeId: 'A', employeeName: 'Anil', doctorId: 'DR-9', doctorName: 'Dr Nine' }),
-      row({ eventId: 'SAME', employeeId: 'B', employeeName: 'Bala', doctorId: 'DR-9', doctorName: 'Dr Nine' }),
+      row({ eventId: 'SAME', employeeId: 'A', employeeName: 'Anil', doctorName: 'Dr Nine' }),
+      row({
+        eventId: 'SAME', employeeId: 'A', employeeName: 'Anil', doctorName: 'Dr Nine',
+        participantId: 'A', participantName: 'Anil',
+      }),
     ];
-    const plan = doctorPlan(team[0], team, shared);
+    const plan = doctorPlan(team[1], team, shared);
     expect(plan).toHaveLength(2);
     expect(new Set(plan.map((v) => v.id)).size).toBe(2);
   });
 
   it('leaves POB null on a call no quotation matched', () => {
-    const plan = doctorPlan(team[0], team, rows, []);
+    const plan = doctorPlan(team[1], team, rows, []);
     expect(plan.every((v) => v.pob === null)).toBe(true);
   });
 
@@ -681,7 +1060,7 @@ describe('doctorPlan', () => {
         visitTime: '2026-09-05 10:00:00', forceVisit: true, forceVisitReason: 'Camp duty at a nearby PHC',
       }),
     ];
-    expect(doctorPlan(team[0], team, forced)[0].forceVisitReason).toBe('Camp duty at a nearby PHC');
+    expect(doctorPlan(team[1], team, forced)[0].forceVisitReason).toBe('Camp duty at a nearby PHC');
   });
 
   it('drops a reason left on a row whose force flag is off', () => {
@@ -693,7 +1072,7 @@ describe('doctorPlan', () => {
         visitTime: '2026-09-05 10:00:00', forceVisit: false, forceVisitReason: 'Clinic closed',
       }),
     ];
-    expect(doctorPlan(team[0], team, stale)[0].forceVisitReason).toBe('');
+    expect(doctorPlan(team[1], team, stale)[0].forceVisitReason).toBe('');
   });
 
   it('gives a forced call with no reason an empty string, not undefined', () => {
@@ -705,7 +1084,7 @@ describe('doctorPlan', () => {
         visitTime: '2026-09-05 10:00:00', forceVisit: true,
       }),
     ];
-    expect(doctorPlan(team[0], team, bare)[0].forceVisitReason).toBe('');
+    expect(doctorPlan(team[1], team, bare)[0].forceVisitReason).toBe('');
   });
 });
 
@@ -752,5 +1131,260 @@ describe('periodSuffix over a range', () => {
 
   it('drops MTD once the range is entirely in the past', () => {
     expect(periodSuffix('month', '2026-06', '2026-09-05', '2026-07')).toBe('Jun–Jul');
+  });
+});
+
+describe('byHq only counts real HQs', () => {
+  const team = [
+    { id: 'A', name: 'Anil', short: 'BE', hq: 'HQ-Hubballi', reportsTo: null },
+    { id: 'B', name: 'Bala', short: 'BE', hq: 'Tn-Coimbatore', reportsTo: null },
+    { id: 'C', name: 'Chandra', short: 'BE', hq: '', reportsTo: null },
+  ];
+
+  it('drops a territory that is not an HQ', () => {
+    /* The Territory tree carries states, zones and countries alongside the
+       HQs. Counted as HQs they become cards for places nobody works in. */
+    const out = byHq([
+      row({ employeeId: 'A', hq: 'HQ-Hubballi', visitTime: '2026-09-05 10:00:00' }),
+      row({ employeeId: 'B', hq: 'Tn-Coimbatore', visitTime: '2026-09-05 10:00:00' }),
+    ], team);
+    expect(out.map((h) => h.hq)).toEqual(['HQ-Hubballi']);
+  });
+
+  it('drops an unset territory rather than making a nameless card', () => {
+    // Empty team, so the only thing that could create a card is the row.
+    const out = byHq([row({ employeeId: 'C', hq: '', visitTime: '2026-09-05 10:00:00' })], []);
+    expect(out).toEqual([]);
+  });
+
+  it('still shows a real HQ that has reps but no visits yet', () => {
+    // The card is the territory, not the activity: an HQ whose reps have
+    // not started is 0/12, not absent.
+    const out = byHq([], team);
+    expect(out.map((h) => h.hq)).toEqual(['HQ-Hubballi']);
+    expect(out[0].totalReps).toBe(1);
+  });
+
+  it('does not count a rep outside an HQ in any headcount', () => {
+    // Otherwise a denominator appears under a card for a place that does
+    // not exist, or worse, under the wrong one.
+    const out = byHq([row({ employeeId: 'A', hq: 'HQ-Hubballi', visitTime: '2026-09-05 10:00:00' })], team);
+    expect(out[0].totalReps).toBe(1);
+    expect(out[0].activeReps).toBe(1);
+  });
+
+  it('is case sensitive: hq- is not HQ-', () => {
+    // The naming series is uppercase; anything else is a different scheme
+    // and guessing at it is how a typo becomes a territory.
+    expect(byHq([row({ hq: 'hq-hubballi', visitTime: '2026-09-05 10:00:00' })], [])).toEqual([]);
+  });
+});
+
+/* Attendance follows the period now. Over a range the question changes from
+   "who is out right now" to "who reported at any point in it", and only
+   VACANCY stays an as-of-now fact. */
+describe('attendance over a range', () => {
+  const at = (over) => ({ id: 'X', name: 'X', short: 'BE', vacant: false, onLeave: false, ...over });
+  const worked = new Set(['X']);
+  const none = new Set();
+
+  it('counts a rep who reported as reported, even if they are out today', () => {
+    /* Twenty days in the field and one afternoon off is not "Absent" for the
+       month — and the call count beside the chip is the proof. */
+    expect(attendanceOf(at({ onLeave: true, onLeaveInWindow: true }), worked, true)).toBe('working');
+    // On a single day the old order stands: out today means out today.
+    expect(attendanceOf(at({ onLeave: true }), worked, false)).toBe('onLeave');
+  });
+
+  it('uses the WINDOW leave flag, not today\'s, over a range', () => {
+    // Away on the 4th, at a desk today: absent for August, reported nothing.
+    expect(attendanceOf(at({ onLeave: false, onLeaveInWindow: true }), none, true)).toBe('onLeave');
+    // The mirror: out today, but no leave anywhere in the window.
+    expect(attendanceOf(at({ onLeave: true, onLeaveInWindow: false }), none, true)).toBe('notReporting');
+  });
+
+  it('falls back to today\'s flag when the source has no windowed one', () => {
+    /* The mock, and any caller still on the old shape. A missing field has to
+       degrade to the old behaviour, not to "nobody was ever away". */
+    expect(attendanceOf(at({ onLeave: true }), none, true)).toBe('onLeave');
+  });
+
+  it('keeps a vacant seat vacant in both', () => {
+    // A seat is empty or it is not; there is no having been vacant last week.
+    expect(attendanceOf(at({ vacant: true, onLeaveInWindow: true }), worked, true)).toBe('vacant');
+  });
+
+  it('opens a drill-down that agrees with the chip that opened it', () => {
+    /* The one invariant that matters here: same rows, same flag, same
+       classification. A chip reading 2 must never open a list of 3. */
+    const team = [
+      at({ id: 'A' }),
+      at({ id: 'B', onLeaveInWindow: true }),
+      at({ id: 'C', onLeaveInWindow: true }),
+      at({ id: 'V', vacant: true }),
+    ];
+    const rows = [row({ employeeId: 'C', visitTime: '2026-09-05 10:00:00' })];
+    const { counts } = attendance(rows, team, true);
+
+    /* A and B have no plan at all, so both are Not reported; B and C carry
+       leave in the window, so both are Absent; C reported. The buckets
+       overlap by design — C is Reported AND Absent — so these no longer sum
+       to the headcount. */
+    expect(counts).toEqual({ working: 1, notReporting: 2, onLeave: 2, vacant: 1 });
+    for (const state of Object.keys(counts)) {
+      expect(repsInAttendanceState(team, rows, state, true)).toHaveLength(counts[state]);
+    }
+  });
+});
+
+/* The attendance card and the team tree draw from the same roster now. These
+   pin the population, which is the thing that used to differ. */
+describe('attendance counts the whole sales roster', () => {
+  const p = (id, short, over = {}) => ({
+    id, short, name: id, reportsTo: short === 'ABM' ? null : 'M',
+    vacant: false, onLeave: false, hq: 'HQ-Hubballi', ...over,
+  });
+  const team = [p('M', 'ABM'), p('A', 'BE'), p('B', 'BE')];
+  const did = (id) => row({ employeeId: id, visitTime: '2026-09-05 10:00:00' });
+
+  it('counts a manager who made a call as reported', () => {
+    /* A fifth of the plan is joint, and since the attribution fix those
+       calls land on the manager's own id — they were being counted nowhere. */
+    const { counts, inScope } = attendance([did('M')], team);
+    expect(counts.working).toBe(1);
+    expect(inScope).toBe(3);
+  });
+
+  it('counts a manager’s PEOPLE on their row, never themselves', () => {
+    /* The card counts everyone in scope, the manager included — it is a
+       population. A row is not: "5/5 reported" above four visible children is
+       a number the rows underneath contradict, and the manager's own work is
+       already the bar beside it. So the two differ by exactly one person,
+       deliberately, and that person is counted on their own row. */
+    const roll = rollupFor(team[0], team, [did('M'), did('A')]);
+    expect(roll).toMatchObject({ workingReps: 1, totalReps: 2 });
+
+    const { inScope } = attendance([did('M'), did('A')], team);
+    expect(inScope).toBe(3);
+  });
+
+  it('classifies a manager by the same range rule the card used', () => {
+    /* rollupFor took no `overRange` and always judged as-of-today, so in the
+       month view a tree row could contradict the card above it. */
+    const onLeave = [p('M', 'ABM', { onLeave: true, onLeaveInWindow: true }), p('A', 'BE')];
+    expect(rollupFor(onLeave[0], onLeave, [did('M')], [], false).attendance).toBe('onLeave');
+    // Over a range, a manager who logged a call reported — leave comes second.
+    expect(rollupFor(onLeave[0], onLeave, [did('M')], [], true).attendance).toBe('working');
+  });
+});
+
+/* Day-based states: the same person can be in two buckets, because over a
+   month "did they report" is not one question. */
+describe('attendanceStatesOf', () => {
+  const who = (over = {}) => ({ id: 'X', name: 'X', short: 'BE', vacant: false, onLeave: false, ...over });
+  const d = (date, planned, happened) => ({ date, planned, happened });
+
+  it('puts a rep who worked some days and missed others in BOTH buckets', () => {
+    /* The whole point of the change: "Reported" for August used to mean one
+       visit in twenty-two days, so a rep who worked the 4th and vanished
+       scored the same as one who worked every day. */
+    const states = attendanceStatesOf(who(), [d('2026-09-04', 4, 4), d('2026-09-11', 3, 0)], true);
+    expect(states).toContain('working');
+    expect(states).toContain('notReporting');
+  });
+
+  it('keeps a rep who never missed a day out of Not reported', () => {
+    expect(attendanceStatesOf(who(), [d('2026-09-04', 4, 4)], true)).toEqual(['working']);
+  });
+
+  it('counts leave alongside whatever else is true', () => {
+    // Away on the 4th, working the rest: both facts, both buckets.
+    const states = attendanceStatesOf(who({ onLeaveInWindow: true }), [d('2026-09-11', 2, 2)], true);
+    expect(states).toEqual(['working', 'onLeave']);
+  });
+
+  it('never loses a person with no plan at all', () => {
+    /* No day can speak for them, so the range does — a body in none of the
+       four buckets is a person the screen has quietly dropped. */
+    expect(attendanceStatesOf(who(), [], true)).toEqual(['notReporting']);
+  });
+
+  it('gives a vacant seat one state and no other', () => {
+    expect(attendanceStatesOf(who({ vacant: true }), [d('2026-09-04', 1, 0)], true)).toEqual(['vacant']);
+  });
+
+  it('still returns exactly one state on a single day', () => {
+    // The buckets only overlap once there are days to disagree about.
+    for (const days of [[], [d('2026-09-04', 2, 0)], [d('2026-09-04', 2, 2)]]) {
+      expect(attendanceStatesOf(who(), days, false)).toHaveLength(1);
+    }
+  });
+
+  it('counts each person once per state, never twice', () => {
+    // Two silent days must not make somebody "Not reported" twice over.
+    const team = [who({ id: 'A', name: 'A' })];
+    const rows = [
+      row({ employeeId: 'A', plannedDate: '2026-09-04' }),
+      row({ employeeId: 'A', plannedDate: '2026-09-11' }),
+    ];
+    expect(attendance(rows, team, true).counts.notReporting).toBe(1);
+  });
+
+  it('reports a headcount that is people, not the sum of the buckets', () => {
+    /* inScope used to be working + notReporting + onLeave. Overlapping
+       buckets make that larger than the roster, which would print "26 of 31
+       reported" for a team of nineteen. */
+    const team = [who({ id: 'A', name: 'A', onLeaveInWindow: true }), who({ id: 'V', name: 'V', vacant: true })];
+    const rows = [
+      row({ employeeId: 'A', plannedDate: '2026-09-04', visitTime: '2026-09-04 10:00:00' }),
+      row({ employeeId: 'A', plannedDate: '2026-09-11' }),
+    ];
+    const { counts, inScope } = attendance(rows, team, true);
+    expect(inScope).toBe(1);
+    expect(counts.working + counts.notReporting + counts.onLeave).toBe(3);
+  });
+});
+
+/* The Absent list needs the days themselves and the kind of leave each was —
+   "away six days" is a fact nobody can act on. */
+describe('leaveDaysOf', () => {
+  const week = ['2026-09-04', '2026-09-05', '2026-09-07', '2026-09-08'];
+  const on = (spells) => ({ id: 'X', name: 'X', short: 'BE', leave: spells });
+
+  it('expands a spell into the working days it covers', () => {
+    const out = leaveDaysOf(on([{ from: '2026-09-04', to: '2026-09-07', type: 'Casual Leave' }]), week);
+    expect(out).toEqual([
+      { date: '2026-09-04', type: 'Casual Leave' },
+      { date: '2026-09-05', type: 'Casual Leave' },
+      { date: '2026-09-07', type: 'Casual Leave' },
+    ]);
+  });
+
+  it('never counts a day the window does not', () => {
+    /* Sunday the 6th is inside that spell and absent from the calendar, so
+       "3 of 4 days" stays a fraction of the same denominator the rest of the
+       card uses. A leave day outside the window is the same story. */
+    const out = leaveDaysOf(on([{ from: '2026-08-01', to: '2026-12-31', type: 'Sick Leave' }]), week);
+    expect(out.map((d) => d.date)).toEqual(week);
+  });
+
+  it('keeps each spell its own type', () => {
+    // Two spells in one month are routinely two different kinds of leave.
+    const out = leaveDaysOf(
+      on([
+        { from: '2026-09-04', to: '2026-09-04', type: 'Casual Leave' },
+        { from: '2026-09-08', to: '2026-09-08', type: 'Sick Leave' },
+      ]),
+      week,
+    );
+    expect(out).toEqual([
+      { date: '2026-09-04', type: 'Casual Leave' },
+      { date: '2026-09-08', type: 'Sick Leave' },
+    ]);
+  });
+
+  it('is empty for somebody with no leave at all', () => {
+    expect(leaveDaysOf(on([]), week)).toEqual([]);
+    expect(leaveDaysOf({ id: 'X' }, week)).toEqual([]);
   });
 });

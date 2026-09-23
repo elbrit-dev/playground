@@ -1,70 +1,67 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { SHEET_ROW_LIMIT, VisitListRow, limitNote } from '../VisitListRow';
+import { forceNote, visitStatus } from '../VisitListRow';
+import { VISIT_STATUS_LABEL } from '../../data/shape';
 
-/* This row is now the only place the screen decides what green, red and grey
-   MEAN, so the mapping is pinned here rather than re-asserted through each
-   sheet that uses it. */
+/* These two functions are the only place the screen decides what green, red
+   and grey MEAN, and how a forced call is worded. Pinned here rather than
+   re-asserted through each sheet that renders them.
+
+   The flat row component these used to test is gone — both sheets render the
+   doctor card now, and its behaviour is covered by DoctorCard and
+   DoctorPlanSheet. */
 
 function visit(over = {}) {
-  return {
-    id: 'EV1#0',
-    doctorName: 'Dr One',
-    employeeName: 'Anil',
-    visitTime: '2026-09-05 14:10:00',
-    distanceKm: null,
-    forceVisit: false,
-    forceVisitReason: '',
-    ...over,
-  };
+  return { visitTime: '2026-09-05 14:10:00', forceVisit: false, distanceKm: null, forceVisitReason: '', ...over };
 }
 
-describe('VisitListRow', () => {
+describe('visitStatus', () => {
   it('calls a completed, on-location visit geo verified', () => {
-    render(<VisitListRow visit={visit()} />);
-    expect(screen.getByText('Geo verified')).toBeInTheDocument();
+    expect(visitStatus(visit())).toEqual({ tone: 'success', label: 'Geo' });
   });
 
   it('calls a forced visit a force visit, even though it is done', () => {
     // A force visit IS completed. The pill must not read as "not done".
-    render(<VisitListRow visit={visit({ forceVisit: true, distanceKm: 8.2 })} />);
-    expect(screen.getByText('Force visit')).toBeInTheDocument();
+    expect(visitStatus(visit({ forceVisit: true }))).toEqual({ tone: 'danger', label: 'Force' });
   });
 
   it('calls a visit with no time pending', () => {
-    render(<VisitListRow visit={visit({ visitTime: null })} />);
-    expect(screen.getByText('Pending')).toBeInTheDocument();
+    expect(visitStatus(visit({ visitTime: null }))).toEqual({ tone: 'neutral', label: 'Pending' });
   });
 
-  it('lets a caller soften green without changing what it means', () => {
-    render(<VisitListRow visit={visit()} verifiedLabel="Visited" />);
-    expect(screen.getByText('Visited')).toBeInTheDocument();
-  });
-
-  it('puts the distance before the reason', () => {
-    render(
-      <VisitListRow visit={visit({ forceVisit: true, distanceKm: 8.2, forceVisitReason: 'Camp duty' })} />,
-    );
-    expect(screen.getByText('8.2 km away · Camp duty')).toBeInTheDocument();
-  });
-
-  it('renders no force line at all on an ordinary call', () => {
-    render(<VisitListRow visit={visit()} facts={['2:10 PM']} />);
-    expect(screen.queryByText(/away/)).not.toBeInTheDocument();
-  });
-
-  it('drops empty facts rather than rendering a bare separator', () => {
-    render(<VisitListRow visit={visit()} facts={['2:10 PM', null, undefined, '']} />);
-    expect(screen.getByText('2:10 PM')).toBeInTheDocument();
+  it('takes its words from the screen lexicon, and offers no override', () => {
+    /* There used to be a `verifiedLabel` argument, so the doctor plan sheet
+       could soften green to "Visited". What it produced was a card whose
+       header said "Visited" and whose attendee rows said "Geo verified" —
+       one call, one colour, two words. Any extra argument is ignored now. */
+    expect(visitStatus(visit(), 'Visited').label).toBe(VISIT_STATUS_LABEL.verified);
+    expect(visitStatus(visit({ forceVisit: true })).label).toBe(VISIT_STATUS_LABEL.force);
+    expect(visitStatus(visit({ visitTime: null })).label).toBe(VISIT_STATUS_LABEL.pending);
   });
 });
 
-describe('limitNote', () => {
-  it('says nothing when the cap did not bite', () => {
-    expect(limitNote(SHEET_ROW_LIMIT)).toBeNull();
+describe('forceNote', () => {
+  it('puts the distance before the reason', () => {
+    // The distance is what TRIPPED the flag; the reason is the rep's account
+    // of it, so the measurement leads.
+    expect(forceNote(visit({ forceVisit: true, distanceKm: 8.2, forceVisitReason: 'Camp duty' })))
+      .toBe('8.2 km away · Camp duty');
   });
 
-  it('admits to the cap out loud once it does', () => {
-    expect(limitNote(SHEET_ROW_LIMIT + 1)).toBe(`showing first ${SHEET_ROW_LIMIT}`);
+  it('gives metres under a kilometre', () => {
+    expect(forceNote(visit({ forceVisit: true, distanceKm: 0.612 }))).toBe('612 m away');
+  });
+
+  it('carries the distance alone when no reason was typed', () => {
+    // The field is not mandatory and most forced calls carry nothing.
+    expect(forceNote(visit({ forceVisit: true, distanceKm: 8.2 }))).toBe('8.2 km away');
+  });
+
+  it('carries the reason alone when the distance is missing', () => {
+    expect(forceNote(visit({ forceVisit: true, forceVisitReason: 'Clinic closed' }))).toBe('Clinic closed');
+  });
+
+  it('says nothing at all on an ordinary call', () => {
+    // '' is also the render condition: there is no line to draw.
+    expect(forceNote(visit({ distanceKm: 0.2 }))).toBe('');
   });
 });
