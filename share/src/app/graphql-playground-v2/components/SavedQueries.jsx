@@ -83,29 +83,29 @@ function TooltipContent({ query, formatRelativeTime }) {
     query.writeTransformerCodeUpdatedAt;
 
   return (
-    <div style={{ padding: '0.5rem', lineHeight: '1.6', maxWidth: '250px' }}>
-      <div style={{ fontWeight: 600, marginBottom: '0.5rem', paddingBottom: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.2)' }}>
+    <div style={{ padding: 'var(--space-8)', lineHeight: '1.6', maxWidth: '250px' }}>
+      <div style={{ fontWeight: 600, marginBottom: 'var(--space-8)', paddingBottom: 'var(--space-8)', borderBottom: 'var(--border-w) solid var(--border-on-brand)' }}>
         Query Details
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', fontSize: '0.75rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)', fontSize: 'var(--fs-12)' }}>
         <div>
-          <span style={{ color: '#9ca3af' }}>Body updated:</span>
-          <span style={{ color: '#ffffff', marginLeft: '0.25rem' }}>{formatRelativeTime(query.bodyUpdatedAt)}</span>
+          <span style={{ color: 'var(--ds-text-muted)' }}>Body updated:</span>
+          <span style={{ color: 'var(--surface-card)', marginLeft: 'var(--space-4)' }}>{formatRelativeTime(query.bodyUpdatedAt)}</span>
         </div>
         <div>
-          <span style={{ color: '#9ca3af' }}>Variables:</span>
-          <span style={{ color: '#ffffff', marginLeft: '0.25rem' }}>{formatRelativeTime(query.variablesUpdatedAt)}</span>
+          <span style={{ color: 'var(--ds-text-muted)' }}>Variables:</span>
+          <span style={{ color: 'var(--surface-card)', marginLeft: 'var(--space-4)' }}>{formatRelativeTime(query.variablesUpdatedAt)}</span>
         </div>
         {transformerUpdatedAt && (
           <div>
-            <span style={{ color: '#9ca3af' }}>Transformer:</span>
-            <span style={{ color: '#ffffff', marginLeft: '0.25rem' }}>{formatRelativeTime(transformerUpdatedAt)}</span>
+            <span style={{ color: 'var(--ds-text-muted)' }}>Transformer:</span>
+            <span style={{ color: 'var(--surface-card)', marginLeft: 'var(--space-4)' }}>{formatRelativeTime(transformerUpdatedAt)}</span>
           </div>
         )}
         {query.lastUpdatedBy && (
           <div>
-            <span style={{ color: '#9ca3af' }}>Last updated by:</span>
-            <span style={{ color: '#ffffff', marginLeft: '0.25rem', wordBreak: 'break-word', display: 'block', marginTop: '0.25rem' }}>
+            <span style={{ color: 'var(--ds-text-muted)' }}>Last updated by:</span>
+            <span style={{ color: 'var(--surface-card)', marginLeft: 'var(--space-4)', wordBreak: 'break-word', display: 'block', marginTop: 'var(--space-4)' }}>
               {query.lastUpdatedBy}
             </span>
           </div>
@@ -161,31 +161,32 @@ function QueryItem({ query, isSelected, onQueryClick, onDelete, formatRelativeTi
   return (
     <>
       {hasTimestampData && (
-        <Tooltip target={`.${tooltipTargetId}`}>
+        <Tooltip unstyled target={`.${tooltipTargetId}`}>
           <TooltipContent query={query} formatRelativeTime={formatRelativeTime} />
         </Tooltip>
       )}
       <Card
+unstyled
         data-query-id={query.id}
         className={`saved-query-card group mb-2 mx-2 cursor-pointer transition-all duration-200 ${isSelected
-            ? 'border-blue-200 shadow-sm'
-            : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
+            ? 'border-info-border shadow-card'
+            : 'border-line-subtle hover:border-line hover:shadow-card'
           }`}
         style={{
-          backgroundColor: isSelected ? '#eff6ff' : '#ffffff',
+          backgroundColor: isSelected ? 'var(--intent-info-wash)' : 'var(--surface-card)',
         }}
         onClick={(e) => onQueryClick(query, e)}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1.5">
-              <h3 className={`text-sm font-semibold truncate ${isSelected ? 'text-blue-900' : 'text-gray-900'
+              <h3 className={`text-sm font-semibold truncate ${isSelected ? 'text-brand-active' : 'text-body'
                 }`}>
                 {query.name}
               </h3>
             </div>
             {mostRecentUpdate && (
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-ds-secondary">
                 Updated {formatRelativeTime(mostRecentUpdate)}
               </p>
             )}
@@ -193,22 +194,24 @@ function QueryItem({ query, isSelected, onQueryClick, onDelete, formatRelativeTi
           <div className="flex items-center gap-2 flex-shrink-0">
             <div className="flex items-center gap-1.5">
               <Tag
+unstyled
                 value={query.clientSave ? 'Client' : 'Live'}
                 severity={query.clientSave ? 'success' : 'warning'}
-                style={{ fontSize: '10px', padding: '2px 6px', minWidth: '3rem', textAlign: 'center' }}
+                style={{ fontSize: 'var(--fs-10)', padding: 'var(--space-2) var(--space-6)', minWidth: '3rem', textAlign: 'center' }}
               />
             </div>
             {hasTimestampData && (
               <span
-                className={`${tooltipTargetId} inline-flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors cursor-help flex-shrink-0`}
+                className={`${tooltipTargetId} inline-flex items-center justify-center text-ds-muted hover:text-ds-secondary transition-colors cursor-help flex-shrink-0`}
                 onClick={handleInfoIconClick}
               >
                 <i className="pi pi-info-circle text-xs"></i>
               </span>
             )}
             <Button
+unstyled
               icon="pi pi-trash"
-              className="p-button-text p-button-sm p-button-danger"
+              className="ds-button-text ds-button-sm ds-button-danger"
               onClick={(e) => onDelete(query.id, query.name, e)}
               tooltip="Delete query"
               tooltipOptions={{ position: 'top' }}
@@ -298,29 +301,29 @@ export function SavedQueries() {
     confirmDialog({
       message: (
         <div>
-          <p style={{ marginBottom: '0.5rem' }}>
+          <p style={{ marginBottom: 'var(--space-8)' }}>
             Are you sure you want to delete this query?
           </p>
           <p style={{
-            fontSize: '0.875rem',
-            color: '#6b7280',
+            fontSize: 'var(--fs-14)',
+            color: 'var(--ds-text-secondary)',
             fontStyle: 'italic',
             wordBreak: 'break-word'
           }}>
             "{queryName}"
           </p>
           <p style={{
-            marginTop: '0.75rem',
-            fontSize: '0.8125rem',
-            color: '#9ca3af'
+            marginTop: 'var(--space-12)',
+            fontSize: 'var(--fs-13)',
+            color: 'var(--ds-text-muted)'
           }}>
             This action cannot be undone.
           </p>
         </div>
       ),
       header: (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <i className="pi pi-exclamation-triangle" style={{ color: '#ef4444', fontSize: '1.25rem' }}></i>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-12)' }}>
+          <i className="pi pi-exclamation-triangle" style={{ color: 'var(--intent-danger)', fontSize: 'var(--fs-20)' }}></i>
           <span>Delete Query</span>
         </div>
       ),
@@ -339,33 +342,34 @@ export function SavedQueries() {
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 border-r border-gray-200">
+    <div className="h-full flex flex-col bg-sunken border-r border-line-subtle">
       <style dangerouslySetInnerHTML={{
         __html: `
         .saved-query-card .p-card-body {
-          padding: 0.5rem 1rem !important;
+          padding: var(--space-8) var(--space-16) !important;
         }
         .saved-query-card .p-card-content {
-          padding: 0.5rem 1rem !important;
+          padding: var(--space-8) var(--space-16) !important;
         }
-        .saved-query-card .p-button-text {
-          padding: 0.125rem 0.25rem !important;
+        .saved-query-card .ds-button-text {
+          padding: var(--space-2) var(--space-4) !important;
           width: fit-content !important;
           min-width: auto !important;
         }
-        .saved-query-card .p-button-text.p-button-icon-only {
+        .saved-query-card .ds-button-text.ds-button-icon-only {
           width: fit-content !important;
           min-width: auto !important;
         }
-        .saved-query-card .p-button-text .p-button-icon {
+        .saved-query-card .ds-button-text .ds-button-icon {
           margin: 0 !important;
         }
       `}} />
       {/* Search Bar */}
-      <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-200 bg-gray-50">
-        <IconField iconPosition="right" className="w-full">
-          <InputIcon className="pi pi-search text-gray-400" />
+      <div className="flex-shrink-0 px-3 py-1.5 border-b border-line-subtle bg-sunken">
+        <IconField unstyled iconPosition="right" className="w-full">
+          <InputIcon unstyled className="pi pi-search text-ds-muted" />
           <InputText
+unstyled
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search queries..."
@@ -378,29 +382,29 @@ export function SavedQueries() {
       <div className="flex-1 overflow-y-auto overflow-x-hidden p-2">
         {loading ? (
           <div className="flex flex-col items-center gap-2 py-8 px-2">
-            <Skeleton shape="circle" size="2rem" />
-            <Skeleton width="10rem" height="1rem" />
+            <Skeleton unstyled shape="circle" size="2rem" />
+            <Skeleton unstyled width="10rem" height="1rem" />
             <div className="mt-2 w-full px-2 space-y-1.5">
-              <Skeleton width="100%" height="4rem" />
-              <Skeleton width="100%" height="4rem" />
-              <Skeleton width="100%" height="4rem" />
+              <Skeleton unstyled width="100%" height="4rem" />
+              <Skeleton unstyled width="100%" height="4rem" />
+              <Skeleton unstyled width="100%" height="4rem" />
             </div>
           </div>
         ) : filteredQueries.length === 0 ? (
           <div className="py-8 px-2 text-center">
             {searchTerm ? (
               <>
-                <i className="pi pi-search text-2xl text-gray-300 mb-2"></i>
-                <div className="text-sm text-gray-500 mb-1">No queries found</div>
-                <div className="text-xs text-gray-400">
+                <i className="pi pi-search text-24 text-ds-muted mb-2"></i>
+                <div className="text-sm text-ds-secondary mb-1">No queries found</div>
+                <div className="text-xs text-ds-muted">
                   Try a different search term
                 </div>
               </>
             ) : (
               <>
-                <i className="pi pi-inbox text-2xl text-gray-300 mb-2"></i>
-                <div className="text-sm text-gray-500 mb-1">No saved queries found</div>
-                <div className="text-xs text-gray-400 mt-1">
+                <i className="pi pi-inbox text-24 text-ds-muted mb-2"></i>
+                <div className="text-sm text-ds-secondary mb-1">No saved queries found</div>
+                <div className="text-xs text-ds-muted mt-1">
                   Save queries using the Save button in Controls tab
                 </div>
               </>

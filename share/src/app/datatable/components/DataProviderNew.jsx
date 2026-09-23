@@ -2,7 +2,7 @@
 import { indexedDBService } from '@/app/datatable/utils/indexedDBService';
 import RangePicker from '@/components/RangePicker';
 import { DataProvider as PlasmicDataProvider } from "@plasmicapp/loader-nextjs";
-import { Switch } from 'antd';
+import { Button, Switch } from '@/design-system';
 import * as Comlink from 'comlink';
 import {
     isFinite as _isFinite,
@@ -28,7 +28,6 @@ import {
     toNumber,
     uniq
 } from 'lodash';
-import { Button } from 'primereact/button';
 import { Calendar } from 'primereact/calendar';
 import { Checkbox } from 'primereact/checkbox';
 import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
@@ -166,7 +165,7 @@ function FormSelectOptionsField({ col, value, label, handleChange, getOptions, c
   }, [getOptions, ctx.columnName, cachedOptions]);
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium text-gray-700">{label}</label>
+      <label className="text-xs font-medium text-body">{label}</label>
       <SingleSelectFilter
         value={value != null ? String(value) : null}
         options={options}
@@ -196,7 +195,7 @@ function FormUploadField({ fieldId, docname, value, label, onFilePending }) {
 
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium text-gray-700">{label}</label>
+      <label className="text-xs font-medium text-body">{label}</label>
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center gap-2 flex-wrap">
           <input
@@ -209,15 +208,15 @@ function FormUploadField({ fieldId, docname, value, label, onFilePending }) {
           />
           <label
             htmlFor={`upload-${fieldId}`}
-            className={`px-3 py-1.5 text-sm border rounded cursor-pointer select-none ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+            className={`px-3 py-1.5 text-sm border rounded cursor-pointer select-none ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-brand-tint-weak'}`}
           >
             {pendingFile ? 'Change File' : 'Choose File'}
           </label>
           {pendingFile && (
-            <span className="text-xs text-amber-600 font-medium">⏳ {pendingFile.name} — will upload on save</span>
+            <span className="text-xs text-warning font-medium">⏳ {pendingFile.name} — will upload on save</span>
           )}
           {!docname && (
-            <span className="text-xs text-red-400">docname not available</span>
+            <span className="text-xs text-danger">docname not available</span>
           )}
         </div>
         {value && !pendingFile && (
@@ -225,7 +224,7 @@ function FormUploadField({ fieldId, docname, value, label, onFilePending }) {
             href={value}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-blue-500 hover:underline truncate"
+            className="text-xs text-brand hover:underline truncate"
             title={value}
           >
             {value.split('/').pop() || value}
@@ -4995,7 +4994,7 @@ export default function DataProviderNew({
         message: 'You have unsaved changes. Reload data for the new date range? Your changes will be discarded.',
         acceptLabel: 'Reload',
         rejectLabel: 'Cancel',
-        acceptClassName: 'p-button-warning',
+        acceptClassName: 'ds-button-warning',
         accept: applyChange,
       });
     } else {
@@ -5026,7 +5025,7 @@ export default function DataProviderNew({
         {/* Breakdown Toggle - Only show when report is enabled */}
         {showBreakdownToggle && (
           <div className="flex items-center gap-2">
-            <label className="block text-xs sm:text-sm font-medium text-gray-700 whitespace-nowrap">
+            <label className="block text-xs sm:text-sm font-medium text-body whitespace-nowrap">
               Report
             </label>
             <Switch
@@ -5034,7 +5033,7 @@ export default function DataProviderNew({
               onChange={(checked) => {
                 setEnableBreakdown(checked);
               }}
-              size={isMobile ? 'small' : 'default'}
+              size={isMobile ? 'default' : 'lg'}
               disabled={isComputingReport}
             />
           </div>
@@ -5044,6 +5043,7 @@ export default function DataProviderNew({
         {showBreakdownControls && (
           <div className="w-auto min-w-[120px]">
             <Dropdown
+unstyled
               value={breakdownType}
               onChange={(e) => setBreakdownType(e.value)}
               options={[
@@ -5058,8 +5058,8 @@ export default function DataProviderNew({
               className="w-full items-center"
               disabled={executingQuery}
               style={{
-                fontSize: '0.875rem',
-                height: '2rem',
+                fontSize: 'var(--fs-14)',
+                height: 'var(--control-h)',
               }}
             />
           </div>
@@ -5069,6 +5069,7 @@ export default function DataProviderNew({
         {showBreakdownControls && (
           <div className="w-auto min-w-[120px]">
             <Dropdown
+unstyled
               value={columnGroupBy}
               onChange={(e) => setColumnGroupBy(e.value)}
               options={[
@@ -5081,8 +5082,8 @@ export default function DataProviderNew({
               className="w-full items-center"
               disabled={executingQuery}
               style={{
-                fontSize: '0.875rem',
-                height: '2rem',
+                fontSize: 'var(--fs-14)',
+                height: 'var(--control-h)',
               }}
             />
           </div>
@@ -5093,17 +5094,10 @@ export default function DataProviderNew({
           (Object.keys(currentQueryDoc?.searchFields || {}).length > 0 || currentQueryDoc?.sortFields) && (
             <>
               {!hideNativeFilterSort && (
-              <Button
-                icon="pi pi-sliders-h"
-                label="Filter / Sort"
-                onClick={() => {
+              <Button type="default" icon={<i className="pi pi-sliders-h" />} onClick={() => {
                   setFilterSortSidebarSortOnly(false);
                   setFilterSortSidebarVisible(true);
-                }}
-                className="p-button-outlined shrink-0 whitespace-nowrap"
-                severity="secondary"
-                style={{ height: '2rem', fontSize: '0.875rem' }}
-              >
+                }} className="shrink-0 whitespace-nowrap" style={{ height: 'var(--control-h)', fontSize: 'var(--fs-14)' }}>
                 {(() => {
                   // Calculate active filter count
                   let count = 0;
@@ -5113,7 +5107,7 @@ export default function DataProviderNew({
                       count += vals.length;
                     }
                   });
-                  return count > 0 ? <span className="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs rounded-full">{count}</span> : null;
+                  return count > 0 ? <span className="ml-2 px-2 py-0.5 bg-brand text-on-brand text-xs rounded-full">{count}</span> : null;
                 })()}
               </Button>
               )}
@@ -5140,10 +5134,10 @@ export default function DataProviderNew({
                     }}
                     className="inline-flex items-center gap-2 px-3 py-1.5 text-xs rounded-md hover:opacity-80 transition-opacity border"
                     style={{
-                      height: '2rem',
-                      backgroundColor: '#db2d27',
+                      height: 'var(--control-h)',
+                      backgroundColor: 'var(--brand-mark)',
                       color: 'white',
-                      borderColor: '#db2d27'
+                      borderColor: 'var(--brand-mark)'
                     }}
                     title="Remove sort"
                   >
@@ -5180,10 +5174,10 @@ export default function DataProviderNew({
                     }}
                     className="inline-flex items-center gap-2 px-3 py-1.5 text-xs rounded-md hover:opacity-80 transition-opacity border"
                     style={{
-                      height: '2rem',
-                      backgroundColor: '#db2d27',
+                      height: 'var(--control-h)',
+                      backgroundColor: 'var(--brand-mark)',
                       color: 'white',
-                      borderColor: '#db2d27'
+                      borderColor: 'var(--brand-mark)'
                     }}
                     title="Remove filter"
                   >
@@ -5210,8 +5204,8 @@ export default function DataProviderNew({
               className="w-full"
               style={{
                 width: '100%',
-                fontSize: '0.875rem',
-                height: '2rem',
+                fontSize: 'var(--fs-14)',
+                height: 'var(--control-h)',
               }}
             />
           </div>
@@ -5221,14 +5215,15 @@ export default function DataProviderNew({
         {showSyncButton && (
           <div className="flex-1 min-w-[140px] max-w-full sm:flex-none sm:w-auto">
             <SplitButton
+unstyled
               outlined
               severity="secondary"
-              label={<span style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{lastUpdatedText}</span>}
+              label={<span style={{ fontSize: 'var(--fs-12)', whiteSpace: 'nowrap' }}>{lastUpdatedText}</span>}
               icon={syncIconClass}
               onClick={handleSync}
               model={syncButtonModel}
               disabled={isSyncDisabled}
-              style={{ height: '2rem', minWidth: 'fit-content' }}
+              style={{ height: 'var(--control-h)', minWidth: 'fit-content' }}
             />
           </div>
         )}
@@ -5260,9 +5255,9 @@ export default function DataProviderNew({
   // Empty state component for drawer
   const DrawerEmptyState = ({ icon, title, subtitle }) => (
     <div className="flex flex-col items-center justify-center h-full text-center">
-      <i className={`pi ${icon} text-4xl text-gray-400 mb-4`}></i>
-      <p className="text-gray-600 font-medium">{title}</p>
-      <p className="text-sm text-gray-500 mt-1">{subtitle}</p>
+      <i className={`pi ${icon} text-32 text-ds-muted mb-4`}></i>
+      <p className="text-ds-secondary font-medium">{title}</p>
+      <p className="text-sm text-ds-secondary mt-1">{subtitle}</p>
     </div>
   );
 
@@ -5304,8 +5299,8 @@ export default function DataProviderNew({
       })();
       return wrapShell(
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-700">{label}</label>
-          <div className="text-sm text-gray-600 min-h-[1.25rem] whitespace-pre-wrap break-words">{displayText}</div>
+          <label className="text-xs font-medium text-body">{label}</label>
+          <div className="text-sm text-ds-secondary min-h-[1.25rem] whitespace-pre-wrap break-words">{displayText}</div>
         </div>,
       );
     }
@@ -5313,8 +5308,9 @@ export default function DataProviderNew({
     if (overrideType === 'Calendar' || (!overrideType && resolvedType === 'date')) {
       return wrapShell(
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-700">{label}</label>
+          <label className="text-xs font-medium text-body">{label}</label>
           <Calendar
+unstyled
             value={value ? (value instanceof Date ? value : new Date(value)) : null}
             onChange={(e) => handleChange(e.value)}
             dateFormat="M d, yy"
@@ -5327,14 +5323,15 @@ export default function DataProviderNew({
     if (overrideType === 'Checkbox' || (!overrideType && resolvedType === 'boolean')) {
       return wrapShell(
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-700">{label}</label>
+          <label className="text-xs font-medium text-body">{label}</label>
           <div className="flex items-center pt-1">
             <Checkbox
+              unstyled
               inputId={`sidebar-edit-${fieldId}`}
               checked={!!value}
               onChange={(e) => handleChange(e.checked)}
             />
-            <label htmlFor={`sidebar-edit-${fieldId}`} className="ml-2 text-sm text-gray-600">{value ? 'Yes' : 'No'}</label>
+            <label htmlFor={`sidebar-edit-${fieldId}`} className="ml-2 text-sm text-ds-secondary">{value ? 'Yes' : 'No'}</label>
           </div>
         </div>,
       );
@@ -5342,8 +5339,9 @@ export default function DataProviderNew({
     if (overrideType === 'InputNumber' || (!overrideType && resolvedType === 'number')) {
       return wrapShell(
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-700">{label}</label>
+          <label className="text-xs font-medium text-body">{label}</label>
           <InputNumber
+unstyled
             value={value != null && value !== '' ? toNumber(value) : null}
             onValueChange={(e) => handleChange(e.value)}
             className="w-full text-sm"
@@ -5416,7 +5414,7 @@ export default function DataProviderNew({
           className={quillInnerClass}
           style={Object.keys(quillInnerStyle).length ? quillInnerStyle : undefined}
         >
-          <label className="text-xs font-medium text-gray-700">{label}</label>
+          <label className="text-xs font-medium text-body">{label}</label>
           <Editor
             value={value != null ? String(value) : ''}
             onTextChange={(e) => handleChange(e.htmlValue)}
@@ -5429,8 +5427,9 @@ export default function DataProviderNew({
     }
     return wrapShell(
       <div className="flex flex-col gap-1">
-        <label className="text-xs font-medium text-gray-700">{label}</label>
+        <label className="text-xs font-medium text-body">{label}</label>
         <InputText
+unstyled
           value={value != null ? String(value) : ''}
           onChange={(e) => handleChange(e.target.value)}
           className="w-full text-sm"
@@ -5449,7 +5448,7 @@ export default function DataProviderNew({
       <TableOperationsContext.Provider value={contextValue || {}}>
         {/* Header Controls - Responsive container */}
         {(hasHeaderContent || headerSlotTop || headerSlotLeft || headerSlotRight) && (
-          <div className="px-2 sm:px-3 md:px-4 lg:px-6 xl:px-8 py-2 sm:py-3 md:py-4 border-b border-gray-200 shrink-0 bg-white min-w-0 overflow-x-auto">
+          <div className="px-2 sm:px-3 md:px-4 lg:px-6 xl:px-8 py-2 sm:py-3 md:py-4 border-b border-line-subtle shrink-0 bg-surface min-w-0 overflow-x-auto">
             {headerSlotTop ? <div className="w-full min-w-0 mb-2 sm:mb-3">{headerSlotTop}</div> : null}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-3 md:gap-4 min-w-0 w-full">
               <div className={`flex-1 min-w-0 w-full${headerSlotLeft ? ' flex flex-wrap items-center gap-2 sm:gap-3' : ''}`}>
@@ -5580,6 +5579,7 @@ export default function DataProviderNew({
         ) : null;
         return (
         <Sidebar
+unstyled
           position="bottom"
           blockScroll
           visible={drawerVisible}
@@ -5590,7 +5590,7 @@ export default function DataProviderNew({
                 message: 'You have unsaved changes. Discard?',
                 acceptLabel: 'Discard',
                 rejectLabel: 'Keep editing',
-                acceptClassName: 'p-button-danger',
+                acceptClassName: 'ds-button-danger',
                 accept: closeDrawer,
               });
             } else {
@@ -5601,7 +5601,7 @@ export default function DataProviderNew({
           className="p-sidebar-sm"
           icons={drawerHeaderIcons}
           header={
-            <h2 className="text-lg font-semibold text-gray-800 m-0">
+            <h2 className="text-lg font-semibold text-body m-0">
               {drawerHeaderTitle}
             </h2>
           }
@@ -5609,7 +5609,7 @@ export default function DataProviderNew({
           <div className="flex flex-col h-full dynamic-form-container">
             {/* Scalar section - part of dynamic form (root provider only) */}
             {!parentColumnName && drawerVisible && enableCellEdit && hasDrawerFormFields && (
-              <section className="shrink-0 p-3 pb-2 border-b border-gray-200 drawer-form-inputs">
+              <section className="shrink-0 p-3 pb-2 border-b border-line-subtle drawer-form-inputs">
                 {(formEditingRow ?? selectedRowData) && (
                   (() => {
                     const formRow = formEditingRow ?? selectedRowData;
@@ -5766,6 +5766,7 @@ export default function DataProviderNew({
             <div className="flex-1 min-h-0">
               {hasDrawerTabs ? (
                 <TabView
+unstyled
                   activeIndex={drawerActiveIndex}
                   onTabChange={(e) => setActiveDrawerTabIndex(e.index)}
                   className="h-full flex flex-col"
@@ -5858,6 +5859,7 @@ export default function DataProviderNew({
                       : hasDrawerData;
                     return (
                       <TabPanel
+unstyled
                         key={tabId}
                         header={tab.name || `Tab ${index + 1}`}
                         className="h-full flex flex-col"
@@ -5954,9 +5956,10 @@ export default function DataProviderNew({
         </Sidebar>
         );
       })()}
-      {!parentColumnName && !skipConfirmDialog && <ConfirmDialog />}
+      {!parentColumnName && !skipConfirmDialog && <ConfirmDialog unstyled />}
       {!parentColumnName && (
         <Dialog
+unstyled
           header="Save – Create & Update Payloads"
           visible={saveDiffDialogVisible}
           style={{ width: '90vw', maxWidth: '720px' }}
@@ -5968,44 +5971,39 @@ export default function DataProviderNew({
             skipNextInitFromSortedDataRef.current = true;
           }}
           footer={
-            <Button
-              label={saveDiffDialogSaving ? 'Saving...' : 'Save'}
-              icon={saveDiffDialogSaving ? 'pi pi-spin pi-spinner' : undefined}
-              onClick={handleSaveDiffDialogOk}
-              disabled={saveDiffDialogSaving}
-            />
+            <Button icon={<i className={saveDiffDialogSaving ? 'pi pi-spin pi-spinner' : undefined} />} onClick={handleSaveDiffDialogOk} disabled={saveDiffDialogSaving}>{saveDiffDialogSaving ? 'Saving...' : 'Save'}</Button>
           }
         >
           <div style={{ maxHeight: '60vh', overflow: 'auto' }} className="space-y-4">
             {savePayloadContent.doctype && (
-              <p style={{ margin: 0, fontSize: '0.875rem', color: '#6b7280' }}>
+              <p style={{ margin: 0, fontSize: 'var(--fs-14)', color: 'var(--ds-text-secondary)' }}>
                 Doctype: <strong>{savePayloadContent.doctype}</strong>
               </p>
             )}
             {savePayloadContent.createPayload ? (
               <div>
-                <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.875rem', fontWeight: 600 }}>Create (bulkCreate)</h4>
-                <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.75rem', color: '#6b7280' }}>Query</p>
-                <pre style={{ margin: '0 0 0.5rem 0', padding: '0.75rem', background: '#f3f4f6', borderRadius: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.8125rem' }}>
+                <h4 style={{ margin: '0 0 var(--space-8) 0', fontSize: 'var(--fs-14)', fontWeight: 600 }}>Create (bulkCreate)</h4>
+                <p style={{ margin: '0 0 var(--space-4) 0', fontSize: 'var(--fs-12)', color: 'var(--ds-text-secondary)' }}>Query</p>
+                <pre style={{ margin: '0 0 var(--space-8) 0', padding: 'var(--space-12)', background: 'var(--elbrit-surface-mute)', borderRadius: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 'var(--fs-13)' }}>
                   {savePayloadDisplayQueries.bulkCreate?.trim() || 'Loading query...'}
                 </pre>
-                <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.75rem', color: '#6b7280' }}>Variables</p>
-                <pre style={{ margin: 0, padding: '0.75rem', background: '#f9fafb', borderRadius: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.875rem' }}>
+                <p style={{ margin: '0 0 var(--space-4) 0', fontSize: 'var(--fs-12)', color: 'var(--ds-text-secondary)' }}>Variables</p>
+                <pre style={{ margin: 0, padding: 'var(--space-12)', background: 'var(--elbrit-surface-grey)', borderRadius: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 'var(--fs-14)' }}>
                   {JSON.stringify(savePayloadContent.createPayload, null, 2)}
                 </pre>
               </div>
             ) : (
-              <p style={{ margin: 0, fontSize: '0.875rem', color: '#9ca3af' }}>No new rows</p>
+              <p style={{ margin: 0, fontSize: 'var(--fs-14)', color: 'var(--ds-text-muted)' }}>No new rows</p>
             )}
             {savePayloadContent.updatePayload ? (
               <div>
-                <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.875rem', fontWeight: 600 }}>Update (bulkUpdate)</h4>
-                <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.75rem', color: '#6b7280' }}>Query</p>
-                <pre style={{ margin: '0 0 0.5rem 0', padding: '0.75rem', background: '#f3f4f6', borderRadius: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.8125rem' }}>
+                <h4 style={{ margin: '0 0 var(--space-8) 0', fontSize: 'var(--fs-14)', fontWeight: 600 }}>Update (bulkUpdate)</h4>
+                <p style={{ margin: '0 0 var(--space-4) 0', fontSize: 'var(--fs-12)', color: 'var(--ds-text-secondary)' }}>Query</p>
+                <pre style={{ margin: '0 0 var(--space-8) 0', padding: 'var(--space-12)', background: 'var(--elbrit-surface-mute)', borderRadius: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 'var(--fs-13)' }}>
                   {savePayloadDisplayQueries.bulkUpdate?.trim() || 'Loading query...'}
                 </pre>
-                <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.75rem', color: '#6b7280' }}>Variables</p>
-                <pre style={{ margin: 0, padding: '0.75rem', background: '#f9fafb', borderRadius: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.875rem' }}>
+                <p style={{ margin: '0 0 var(--space-4) 0', fontSize: 'var(--fs-12)', color: 'var(--ds-text-secondary)' }}>Variables</p>
+                <pre style={{ margin: 0, padding: 'var(--space-12)', background: 'var(--elbrit-surface-grey)', borderRadius: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 'var(--fs-14)' }}>
                   {JSON.stringify(
                     savePayloadContent.bulkUpdateVariablesPreview ?? savePayloadContent.updatePayload,
                     null,
@@ -6014,19 +6012,19 @@ export default function DataProviderNew({
                 </pre>
               </div>
             ) : (
-              <p style={{ margin: 0, fontSize: '0.875rem', color: '#9ca3af' }}>No updated rows</p>
+              <p style={{ margin: 0, fontSize: 'var(--fs-14)', color: 'var(--ds-text-muted)' }}>No updated rows</p>
             )}
             {savePayloadContent.removedRows?.length > 0 ? (
               <div>
-                <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.875rem', fontWeight: 600 }}>Removed rows</h4>
-                <pre style={{ margin: 0, padding: '0.75rem', background: '#fef2f2', borderRadius: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.875rem' }}>
+                <h4 style={{ margin: '0 0 var(--space-8) 0', fontSize: 'var(--fs-14)', fontWeight: 600 }}>Removed rows</h4>
+                <pre style={{ margin: 0, padding: 'var(--space-12)', background: 'var(--intent-danger-wash)', borderRadius: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 'var(--fs-14)' }}>
                   {JSON.stringify(savePayloadContent.removedRows, null, 2)}
                 </pre>
               </div>
             ) : null}
             {pendingUploadsRef.current.size > 0 && (
               <div>
-                <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.875rem', fontWeight: 600 }}>File Uploads (upload_to_field)</h4>
+                <h4 style={{ margin: '0 0 var(--space-8) 0', fontSize: 'var(--fs-14)', fontWeight: 600 }}>File Uploads (upload_to_field)</h4>
                 <div className="space-y-2">
                   {Array.from(pendingUploadsRef.current.entries()).map(([fieldId, { file, params, docnameCol }]) => {
                     const formRow = formEditingRowRef.current ?? selectedRowData;
@@ -6034,7 +6032,7 @@ export default function DataProviderNew({
                     const doctype = currentQueryDoc?.writeDocTypeName ?? currentQueryDoc?.writeDocType ?? '';
                     const fd = { doctype, docname, fieldname: fieldId, file: file.name, ...(params || {}) };
                     return (
-                      <pre key={fieldId} style={{ margin: 0, padding: '0.75rem', background: '#f0fdf4', borderRadius: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.875rem' }}>
+                      <pre key={fieldId} style={{ margin: 0, padding: 'var(--space-12)', background: 'var(--intent-success-wash)', borderRadius: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 'var(--fs-14)' }}>
                         {JSON.stringify(fd, null, 2)}
                       </pre>
                     );
@@ -6047,6 +6045,7 @@ export default function DataProviderNew({
       )}
       {!parentColumnName && (
         <Dialog
+unstyled
           header={enableBreakdown ? 'Export report by group level' : 'Export grouped data'}
           visible={exportGroupSelectorVisible}
           style={{ width: '90vw', maxWidth: '480px' }}
@@ -6056,28 +6055,19 @@ export default function DataProviderNew({
           }}
           footer={
             <>
-              <Button
-                label="Cancel"
-                severity="secondary"
-                onClick={() => {
+              <Button type="default" onClick={() => {
                   setExportGroupSelectorVisible(false);
                   exportGroupOverridesRef.current = null;
-                }}
-              />
-              <Button
-                label="Export"
-                icon="pi pi-download"
-                onClick={() => {
+                }}>Cancel</Button>
+              <Button icon={<i className="pi pi-download" />} onClick={() => {
                   if (exportGroupSelectorSelectedLevels?.length > 0) {
                     runExportToXLSX(exportGroupSelectorSelectedLevels, exportGroupOverridesRef.current);
                   }
-                }}
-                disabled={!exportGroupSelectorSelectedLevels?.length}
-              />
+                }} disabled={!exportGroupSelectorSelectedLevels?.length}>Export</Button>
             </>
           }
         >
-          <p className="mb-3 text-gray-600">
+          <p className="mb-3 text-ds-secondary">
             {enableBreakdown
               ? 'Select which group levels to export. Each selected level becomes a separate sheet with the same breakdown columns, rolled up to that nesting depth.'
               : 'Select which group levels to export. Each selected level becomes a separate sheet in the Excel file.'}

@@ -13,6 +13,12 @@
       // share-only modules are aliased explicitly below.
       "@/lib/graphqlErrorReport": ["./share/src/lib/graphqlErrorReport.js"],
       "@/lib/safeRedirect": ["./share/src/lib/safeRedirect.js"],
+      // The design system lives at ./share/src/design-system and has no root
+      // counterpart, so without these it falls through "@/*" -> ./design-system
+      // and fails to resolve. Both forms are in use: the package entry point
+      // ("@/design-system") and subpaths ("@/design-system/primereact/...").
+      "@/design-system": ["./share/src/design-system"],
+      "@/design-system/*": ["./share/src/design-system/*"],
       "@/*": ["./*"],
       "@shared/*": ["./shared/components/src/*"],
       "@calendar/*": ["./shared/calendar/*"]

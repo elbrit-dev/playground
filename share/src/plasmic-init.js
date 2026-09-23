@@ -12,6 +12,34 @@ import { SmartDataProvider } from './components/SmartDataTable/SmartDataProvider
 import { SmartDataTable } from './components/SmartDataTable/SmartDataTable.jsx';
 import { ReportControls } from './app/report-table/components/ReportControls.jsx';
 import { ViewSwitcher } from './components/ViewSwitcher.jsx';
+import { VisitReport } from './app/visit/components/VisitReport.jsx';
+import { registerDesignSystem } from './design-system/plasmic';
+
+/* Registered HERE rather than hand-written in each consuming app, which is
+   the whole point of this file: an app gets it by calling
+   registerElbritCoreComponents, the same way it gets DataProvider. The
+   alternative -- a second copy of the component and a second copy of this
+   metadata in the app -- is a fork, and it drifts. */
+const visitReportMeta = {
+  name: 'VisitReport',
+  displayName: 'Visit Report',
+  section: 'ElbritCoreLib',
+  description:
+    'Mobile-first field-force visit KPI report: attendance, planned vs happened calls, POB, geo-verified vs force visits, an HQ strip with hourly chart, and the manager team tree. The period is today or any month back through the picker; the scope picker takes several branches at once, each either the manager alone or their whole subtree. Attendance chips and per-node Dr plan buttons open the rows behind the numbers. Reads live from ERPNext (Events, Employees, LeaveApplications, Quotations) as the SIGNED-IN user, so the default my-team scope and every permission-scoped row reflect who is actually looking. Bind gqlToken to the same user credential the other ERP-reading components on this canvas use -- there is no shared/service-token fallback.',
+  props: {
+    gqlEnvironment: {
+      type: 'string',
+      defaultValue: 'ERP',
+      helpText:
+        "The /tokens registry row NAME this resolves the ERP HOST from ('ERP' vs a UAT/sandbox row). Never used for a credential -- gqlToken is the only source of that.",
+    },
+    gqlToken: {
+      type: 'string',
+      helpText:
+        "REQUIRED. The signed-in user's own ERP token ('key:secret' or already-prefixed 'token key:secret'). There is no fallback: leaving this empty means the report has nothing to authenticate with and throws rather than silently using a shared credential.",
+    },
+  },
+};
 
 const dataProviderMeta = {
   name: 'DataProvider',
@@ -366,6 +394,38 @@ const navigationMeta = {
       description:
         'Optional map of iconKey → { active, inactive, defaultProps, … }. Defaults to built-in icon map when omitted.',
     },
+    confirmOnExit: {
+      type: 'boolean',
+      defaultValue: true,
+      displayName: 'confirmOnExit',
+      description:
+        'Ask before a back press closes the app. Guarded on the root tab only; back elsewhere still goes back.',
+    },
+    exitPaths: {
+      type: 'object',
+      displayName: 'exitPaths',
+      description:
+        'Array of routes the back press is guarded on. Defaults to the item marked isDefault (the home tab).',
+    },
+    exitConfirmTitle: { type: 'string', defaultValue: 'Leave the app?' },
+    exitConfirmMessage: {
+      type: 'string',
+      defaultValue: 'You are about to close Elbrit. Anything unsaved on this screen will be lost.',
+    },
+    exitConfirmLabel: { type: 'string', defaultValue: 'Quit' },
+    exitCancelLabel: { type: 'string', defaultValue: 'Stay' },
+    exitConfirmSurface: {
+      type: 'string',
+      displayName: 'exitConfirmSurface',
+      description:
+        'data-surface value for the confirmation sheet, so it renders at the screen’s density.',
+    },
+    onExit: {
+      type: 'eventHandler',
+      description:
+        'Fired when the user confirms quitting. Handle it to close the app yourself (native shell); left unset, the app steps back out of its own history.',
+      argTypes: [],
+    },
   },
 };
 
@@ -519,8 +579,8 @@ const viewSwitcherMeta = {
     height: {
       type: 'string',
       displayName: 'height',
-      defaultValue: '1.75rem',
-      description: 'CSS height of the control, e.g. "1.75rem" or "32px". Defaults to 1.75rem to line up with SmartDataProvider\'s other toolbar controls.',
+      description:
+        'Escape hatch only — leave it empty. The control now follows the design system control scale (22px on an app surface, 32px on a console one), which is what lines it up with the other toolbar controls. The old 1.75rem/28px default was not on that scale.',
     },
     className: { type: 'string' },
   },
@@ -549,6 +609,8 @@ export function registerElbritCoreComponents(loader) {
   loader.registerComponent(SmartDataTable, smartDataTableMeta);
   loader.registerComponent(ReportControls, reportControlsMeta);
   loader.registerComponent(ViewSwitcher, viewSwitcherMeta);
+  loader.registerComponent(VisitReport, visitReportMeta);
+  registerDesignSystem(loader);
 }
 
 const ElbritCoreLib = initPlasmicLoader({

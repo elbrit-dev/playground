@@ -14,13 +14,21 @@ import React, {
 import { createPortal } from 'react-dom';
 import { DataTable } from 'primereact/datatable';
 import { Column } from 'primereact/column';
+import { dsDataTableProps } from '@/design-system/primereact/dataTableProps';
+
+/* The DataTable's scroll container, for the infinite-scroll listeners below.
+   This used to be `.p-datatable-wrapper` with `.p-datatable-scrollable-body` as
+   a fallback — two theme classes, neither of which survives `unstyled`, so both
+   queries would have returned null and infinite scroll would have silently
+   stopped firing. The design-system pt hook is emitted in both modes.
+   See design-system/primereact/dataTableHooks.js. */
+const DT_WRAPPER = '[data-table-part="wrapper"]';
 import { InputText } from 'primereact/inputtext';
 import { InputNumber } from 'primereact/inputnumber';
 import { Checkbox } from 'primereact/checkbox';
 import { Calendar } from 'primereact/calendar';
 import { Paginator } from 'primereact/paginator';
 import { Dialog } from 'primereact/dialog';
-import { Button } from 'primereact/button';
 import {
   isNil,
   isNumber,
@@ -133,6 +141,7 @@ const ColumnFilterTextInput = memo(function ColumnFilterTextInput({
 
   return (
     <InputText
+unstyled
       value={draft}
       onChange={(e) => {
         const raw = e.target.value;
@@ -151,8 +160,7 @@ const ColumnFilterTextInput = memo(function ColumnFilterTextInput({
       }}
       placeholder={placeholder}
       title={title}
-      className="p-column-filter"
-      style={{ width: '100%' }}
+            style={{ width: '100%' }}
     />
   );
 });
@@ -216,11 +224,11 @@ const BreakdownChips = React.memo(function BreakdownChips({
       title={`${cellValue} (Click to view grouped counts)`}
     >
       <button type="button" className="shrink-0" onClick={onOpen}>
-        <Chip label={primary} className="text-[10px] py-0 px-1.5 h-5 shrink-0 cursor-pointer hover:bg-gray-100 [&_.p-chip-text]:text-[10px]" removable={false} />
+        <Chip unstyled label={primary} className="text-10 py-0 px-1.5 h-5 shrink-0 cursor-pointer hover:bg-brand-tint-weak [&_.p-chip-text]:text-10" removable={false} />
       </button>
       {moreCount != null && moreCount > 0 && (
         <button type="button" className="shrink-0" onClick={onOpen}>
-          <Chip label={`+${moreCount} more`} className="text-[10px] py-0 px-1.5 h-5 shrink-0 bg-gray-100 text-gray-700 cursor-pointer hover:bg-gray-200 [&_.p-chip-text]:text-[10px]" removable={false} />
+          <Chip unstyled label={`+${moreCount} more`} className="text-10 py-0 px-1.5 h-5 shrink-0 bg-sunken border border-line-subtle text-body cursor-pointer hover:bg-brand-tint [&_.p-chip-text]:text-10" removable={false} />
         </button>
       )}
     </div>
@@ -260,6 +268,7 @@ const BreakdownDialogHost = forwardRef(function BreakdownDialogHost(_props, ref)
 
   return (
     <Dialog
+unstyled
       visible={dialogState.visible}
       header={`${dialogState.columnLabel} grouped counts`}
       modal
@@ -268,18 +277,19 @@ const BreakdownDialogHost = forwardRef(function BreakdownDialogHost(_props, ref)
     >
       <div className="space-y-3">
         {dialogState.summaryValue && (
-          <div className="text-sm text-gray-700">
+          <div className="text-sm text-body">
             Summary: <span className="font-medium">{dialogState.summaryValue}</span>
           </div>
         )}
-        <div className="text-xs text-gray-500">
+        <div className="text-xs text-ds-secondary">
           Total values: {dialogState.totalCount}
         </div>
         <DataTable
+          {...dsDataTableProps({ size: 'small' })}
           value={dialogState.rows}
           showGridlines
           stripedRows
-          className="p-datatable-sm"
+          size="small"
           sortMode="single"
         >
           <Column field="value" header="Value" sortable />
@@ -294,8 +304,9 @@ const ObjectFieldChip = React.memo(function ObjectFieldChip({ fieldCount, onOpen
   return (
     <button type="button" className="shrink-0" onClick={onOpen}>
       <Chip
+unstyled
         label={`${fieldCount} Field${fieldCount === 1 ? '' : 's'}`}
-        className="text-[10px] py-0 px-1.5 h-5 shrink-0 bg-blue-50 text-blue-700 cursor-pointer hover:bg-blue-100 [&_.p-chip-text]:text-[10px]"
+        className="text-10 py-0 px-1.5 h-5 shrink-0 bg-info-wash text-brand cursor-pointer hover:bg-brand-tint [&_.p-chip-text]:text-10"
         removable={false}
       />
     </button>
@@ -331,6 +342,7 @@ const ObjectDetailsDialogHost = forwardRef(function ObjectDetailsDialogHost(_pro
 
   return (
     <Dialog
+unstyled
       visible={dialogState.visible}
       header={`${dialogState.columnLabel} fields`}
       modal
@@ -338,10 +350,11 @@ const ObjectDetailsDialogHost = forwardRef(function ObjectDetailsDialogHost(_pro
       onHide={() => setDialogState((prev) => ({ ...prev, visible: false }))}
     >
       <DataTable
+        {...dsDataTableProps({ size: 'small' })}
         value={dialogState.rows}
         showGridlines
         stripedRows
-        className="p-datatable-sm"
+        size="small"
         sortMode="single"
       >
         <Column field="key" header="Key" sortable />
@@ -658,19 +671,19 @@ function CustomTriStateCheckbox({ value, onChange }) {
       onClick={handleClick}
       className="w-5 h-5 border-2 rounded cursor-pointer flex items-center justify-center transition-colors"
       style={{
-        borderColor: value === null ? '#9ca3af' : value ? '#22c55e' : '#ef4444',
-        backgroundColor: value === null ? 'transparent' : value ? '#22c55e' : '#ef4444',
+        borderColor: value === null ? 'var(--ds-text-muted)' : value ? 'var(--intent-success)' : 'var(--intent-danger)',
+        backgroundColor: value === null ? 'transparent' : value ? 'var(--intent-success)' : 'var(--intent-danger)',
       }}
       title={value === null ? 'All' : value ? 'Yes only' : 'No only'}
     >
       {value === true && (
-        <i className="pi pi-check text-white text-xs" />
+        <i className="pi pi-check text-on-brand text-xs" />
       )}
       {value === false && (
-        <i className="pi pi-times text-white text-xs" />
+        <i className="pi pi-times text-on-brand text-xs" />
       )}
       {value === null && (
-        <i className="pi pi-minus text-gray-400 text-xs" />
+        <i className="pi pi-minus text-ds-muted text-xs" />
       )}
     </div>
   );
@@ -809,7 +822,7 @@ function IconOnlyMultiselectFilter({ value, options, onChange, placeholder = "Se
   const dropdownContent = isOpen && mounted ? (
     <div
       ref={dropdownRef}
-      className="fixed z-[9999] bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
+      className="fixed z-[9999] bg-surface border border-line-subtle rounded-lg shadow-pop overflow-hidden"
       style={{
         top: `${position.top}px`,
         left: `${position.left}px`,
@@ -819,15 +832,15 @@ function IconOnlyMultiselectFilter({ value, options, onChange, placeholder = "Se
       }}
     >
       {/* Search Input */}
-      <div className="p-2 border-b border-gray-100">
+      <div className="p-2 border-b border-line-subtle">
         <div className="relative">
-          <i className="pi pi-search absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-[10px]"></i>
+          <i className="pi pi-search absolute left-2 top-1/2 -translate-y-1/2 text-ds-muted text-10"></i>
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search..."
-            className="w-full pl-7 pr-7 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            className="w-full pl-7 pr-7 py-1 text-xs border border-line-subtle rounded focus:outline-none focus:ring-1 focus:ring-focus focus:border-brand"
             autoFocus
             onClick={(e) => e.stopPropagation()}
           />
@@ -835,35 +848,35 @@ function IconOnlyMultiselectFilter({ value, options, onChange, placeholder = "Se
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setSearchTerm(''); }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-ds-muted hover:text-ds-secondary"
             >
-              <i className="pi pi-times text-[10px]"></i>
+              <i className="pi pi-times text-10"></i>
             </button>
           )}
         </div>
       </div>
 
       {/* Quick Actions */}
-      <div className="px-2 py-1 border-b border-gray-100 flex gap-2 text-[10px]">
+      <div className="px-2 py-1 border-b border-line-subtle flex gap-2 text-10">
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); selectAll(); }}
-          className="text-blue-600 hover:text-blue-800 transition-colors"
+          className="text-brand hover:text-brand-hover transition-colors"
         >
           All
         </button>
-        <span className="text-gray-300">|</span>
+        <span className="text-ds-muted">|</span>
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); clearAll(); }}
-          className="text-gray-500 hover:text-red-600 transition-colors"
+          className="text-ds-secondary hover:text-danger transition-colors"
         >
           Clear
         </button>
         {!isEmpty(localSelectedValues) && (
           <>
-            <span className="text-gray-300">|</span>
-            <span className="text-gray-500">{localSelectedValues.length} selected</span>
+            <span className="text-ds-muted">|</span>
+            <span className="text-ds-secondary">{localSelectedValues.length} selected</span>
           </>
         )}
       </div>
@@ -871,7 +884,7 @@ function IconOnlyMultiselectFilter({ value, options, onChange, placeholder = "Se
       {/* Options List */}
       <div className="max-h-40 overflow-y-auto">
         {isEmpty(filteredOptions) ? (
-          <div className="px-3 py-3 text-center text-xs text-gray-500">
+          <div className="px-3 py-3 text-center text-xs text-ds-secondary">
             No matches
           </div>
         ) : (
@@ -880,7 +893,7 @@ function IconOnlyMultiselectFilter({ value, options, onChange, placeholder = "Se
             return (
               <label
                 key={opt.value}
-                className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-colors text-xs ${isSelected ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-gray-50'
+                className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer transition-colors text-xs ${isSelected ? 'bg-info-wash hover:bg-brand-tint' : 'hover:bg-brand-tint-weak'
                   }`}
                 onClick={(e) => e.stopPropagation()}
               >
@@ -888,9 +901,9 @@ function IconOnlyMultiselectFilter({ value, options, onChange, placeholder = "Se
                   type="checkbox"
                   checked={isSelected}
                   onChange={() => toggleValue(opt.value)}
-                  className="w-3.5 h-3.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  className="w-3.5 h-3.5 text-brand border-line rounded focus:ring-focus"
                 />
-                <span className={`truncate ${isSelected ? 'text-blue-900 font-medium' : 'text-gray-700'}`}>
+                <span className={`truncate ${isSelected ? 'text-brand-active font-medium' : 'text-body'}`}>
                   {opt.label}
                 </span>
               </label>
@@ -900,7 +913,7 @@ function IconOnlyMultiselectFilter({ value, options, onChange, placeholder = "Se
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-2 bg-gray-50 border-t border-gray-100 text-xs text-gray-500">
+      <div className="px-3 py-2 bg-sunken border-t border-line-subtle text-xs text-ds-secondary">
         Total {fieldName || 'fields'}: {options.length}
       </div>
     </div>
@@ -914,15 +927,15 @@ function IconOnlyMultiselectFilter({ value, options, onChange, placeholder = "Se
           ref={triggerRef}
           type="button"
           onClick={() => setIsOpen(!isOpen)}
-          className={`relative p-2 rounded-lg transition-colors flex items-center justify-center ${hasSelection
-            ? 'bg-blue-600 text-white hover:bg-blue-700'
-            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          className={`relative h-control aspect-square rounded-md border transition-colors flex items-center justify-center ${hasSelection
+            ? 'bg-brand border-transparent text-on-brand hover:bg-brand-hover'
+            : 'bg-surface border-line-subtle text-body hover:border-brand-hover hover:text-brand-hover'
             }`}
           title={hasSelection ? `${selectedCount} ${itemLabel}${selectedCount !== 1 ? 's' : ''} selected` : placeholder}
         >
           <i className={`pi ${icon} text-base`}></i>
           {hasSelection && (
-            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center leading-none">
+            <span className="absolute -top-1 -right-1 bg-danger text-on-brand text-10 font-bold rounded-full w-5 h-5 flex items-center justify-center leading-none">
               {selectedCount > 99 ? '99+' : selectedCount}
             </span>
           )}
@@ -985,9 +998,9 @@ function TableControlsBar({
         )}
         <button
           onClick={() => setFreezeFirstColumn(!freezeFirstColumn)}
-          className={`p-2 rounded-lg transition-colors flex items-center justify-center ${freezeFirstColumn
-            ? 'bg-blue-600 text-white hover:bg-blue-700'
-            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          className={`h-control aspect-square rounded-md border transition-colors flex items-center justify-center ${freezeFirstColumn
+            ? 'bg-brand border-transparent text-on-brand hover:bg-brand-hover'
+            : 'bg-surface border-line-subtle text-body hover:border-brand-hover hover:text-brand-hover'
             }`}
           title={freezeFirstColumn ? 'Unlock first column' : 'Lock first column'}
         >
@@ -1004,7 +1017,7 @@ function TableControlsBar({
                 openDrawerForNewRow?.();
               }
             }}
-            className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
+            className="p-2 bg-brand text-on-brand rounded-lg hover:bg-brand-hover transition-colors flex items-center justify-center"
             title={contextNestedTableTabId ? "Add row at top" : "Add new row"}
           >
             <i className="pi pi-plus"></i>
@@ -1013,7 +1026,7 @@ function TableControlsBar({
         {tableName !== 'sidebar' && enableWrite && writeOpsAllowed && (handleMainSave) && (
           <button
             onClick={() => handleMainSave?.()}
-            className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
+            className="p-2 bg-brand text-on-brand rounded-lg hover:bg-brand-hover transition-colors flex items-center justify-center"
             title="Save all nested table changes"
           >
             <i className="pi pi-save"></i>
@@ -1022,7 +1035,7 @@ function TableControlsBar({
         {tableName !== 'sidebar' && enableWrite && writeOpsAllowed && (handleMainCancel && hasMainTableChanges) && (
           <button
             onClick={handleMainCancel}
-            className="p-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center justify-center"
+            className="p-2 bg-surface border border-line-subtle text-body hover:border-brand-hover hover:text-brand-hover rounded-lg transition-colors flex items-center justify-center"
             title="Discard all unsaved changes"
           >
             <i className="pi pi-times"></i>
@@ -1031,7 +1044,7 @@ function TableControlsBar({
         <button
           onClick={exportToXLSX}
           disabled={isEmpty(sortedData)}
-          className="p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+          className="p-2 bg-surface border border-line-subtle text-body hover:border-brand-hover hover:text-brand-hover rounded-lg disabled:bg-surface-disabled disabled:cursor-not-allowed transition-colors flex items-center justify-center"
           title="Export to Excel"
         >
           <i className="pi pi-file-excel"></i>
@@ -1042,7 +1055,7 @@ function TableControlsBar({
               setIsFullscreen(true);
               setIsMaximized(true);
             }}
-            className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center"
+            className="p-2 bg-brand text-on-brand rounded-lg hover:bg-brand-hover transition-colors flex items-center justify-center"
             title="View table in fullscreen"
           >
             <i className="pi pi-window-maximize"></i>
@@ -1051,7 +1064,7 @@ function TableControlsBar({
         {onMaximizeToggle && (
           <button
             onClick={onMaximizeToggle}
-            className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center"
+            className="p-2 bg-brand text-on-brand rounded-lg hover:bg-brand-hover transition-colors flex items-center justify-center"
             title={maximized ? 'Minimize' : 'Maximize'}
           >
             <i className={`pi ${maximized ? 'pi-window-minimize' : 'pi-window-maximize'}`}></i>
@@ -1060,7 +1073,7 @@ function TableControlsBar({
         {onClose && (
           <button
             onClick={onClose}
-            className="p-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center"
+            className="p-2 bg-danger text-on-brand rounded-lg hover:bg-danger-hover transition-colors flex items-center justify-center"
             title="Close"
           >
             <i className="pi pi-times"></i>
@@ -1085,6 +1098,7 @@ function DateRangeFilter({ value, onChange }) {
   return (
     <div className="date-range-filter flex items-center gap-1">
       <Calendar
+unstyled
         value={value}
         onChange={handleChange}
         selectionMode="range"
@@ -1093,7 +1107,7 @@ function DateRangeFilter({ value, onChange }) {
         showIcon
         iconPos="left"
         dateFormat="M d, yy"
-        className="p-column-filter date-range-calendar"
+        className="date-range-calendar"
         inputClassName="text-xs"
         showButtonBar
         numberOfMonths={1}
@@ -1103,7 +1117,7 @@ function DateRangeFilter({ value, onChange }) {
         <button
           type="button"
           onClick={handleClear}
-          className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+          className="p-1 text-ds-muted hover:text-ds-secondary transition-colors"
           title="Clear filter"
         >
           <i className="pi pi-times text-xs" />
@@ -1201,11 +1215,12 @@ function DataTableNewScrollableTableView({
   return (
     <div
       ref={tableContainerRef}
-      className={`border border-gray-200 rounded-lg w-full responsive-table-container ${containerClassName}`}
+      className={`border border-line-subtle rounded-lg w-full responsive-table-container ${containerClassName}`}
       style={{ position: 'relative', ...containerStyle }}
     >
       <div ref={tableRef}>
         <DataTable
+          {...dsDataTableProps({ size: 'small' })}
           resizableColumns
           columnResizeMode="expand"
           value={useMemo(() => {
@@ -1236,7 +1251,7 @@ function DataTableNewScrollableTableView({
           }}
           showGridlines
           stripedRows
-          className="p-datatable-sm w-full"
+          className="w-full" size="small"
           style={{ minWidth: '100%' }}
           filterDisplay={enableFilter ? 'row' : undefined}
           expandedRows={expandedRows}
@@ -1771,15 +1786,13 @@ export default function DataTableNew({
       if (isFullscreen && dialogRef.current) {
         const dialogElement = dialogRef.current.getElement();
         if (dialogElement) {
-          scrollableContainer = dialogElement.querySelector('.p-datatable-wrapper') || 
-                               dialogElement.querySelector('.p-datatable-scrollable-body');
+          scrollableContainer = dialogElement.querySelector(DT_WRAPPER);
         }
       }
       
       // Fallback to document if not found in dialog
       if (!scrollableContainer) {
-        scrollableContainer = document.querySelector('.p-datatable-wrapper') || 
-                             document.querySelector('.p-datatable-scrollable-body');
+        scrollableContainer = document.querySelector(DT_WRAPPER);
       }
       
       if (scrollableContainer && scrollPositionRef.current > 0) {
@@ -1822,7 +1835,7 @@ export default function DataTableNew({
     // Determine color based on field lists
     const isRedField = includes(redFields, column);
     const isGreenField = includes(greenFields, column);
-    const colorClass = isRedField ? 'text-red-600' : isGreenField ? 'text-green-600' : '';
+    const colorClass = isRedField ? 'text-danger' : isGreenField ? 'text-success' : '';
 
     if (isFirstColumn) {
       if (hasSum) {
@@ -1864,7 +1877,7 @@ export default function DataTableNew({
   const getColumnColorClass = useCallback((column) => {
     const isRedField = includes(redFields, column);
     const isGreenField = includes(greenFields, column);
-    return isRedField ? 'text-red-600' : isGreenField ? 'text-green-600' : '';
+    return isRedField ? 'text-danger' : isGreenField ? 'text-success' : '';
   }, [redFields, greenFields]);
 
   // Row/column styling from rowColumnStyles
@@ -1937,9 +1950,9 @@ export default function DataTableNew({
     return (
       <div className={`flex items-center justify-center ${colorClass}`}>
         {isTruthy ? (
-          <i className="pi pi-check-circle text-green-600 text-lg" title="Yes" />
+          <i className="pi pi-check-circle text-success text-lg" title="Yes" />
         ) : (
-          <i className="pi pi-times-circle text-red-500 text-lg" title="No" />
+          <i className="pi pi-times-circle text-danger text-lg" title="No" />
         )}
       </div>
     );
@@ -1965,15 +1978,13 @@ export default function DataTableNew({
     if (isFullscreen && dialogRef.current) {
       const dialogElement = dialogRef.current.getElement();
       if (dialogElement) {
-        container = dialogElement.querySelector('.p-datatable-wrapper') || 
-                   dialogElement.querySelector('.p-datatable-scrollable-body');
+        container = dialogElement.querySelector(DT_WRAPPER);
       }
     }
     
     // Fallback to document if not found in dialog
     if (!container) {
-      container = document.querySelector('.p-datatable-wrapper') || 
-                 document.querySelector('.p-datatable-scrollable-body');
+      container = document.querySelector(DT_WRAPPER);
     }
     
     if (container) {
@@ -2287,7 +2298,7 @@ export default function DataTableNew({
 
         return (
           <div className={`text-xs sm:text-sm text-right ${colorClass}`}>
-            <div className={`font-semibold ${colorClass || 'text-blue-700'}`}>{formatPercentage(percentage)}</div>
+            <div className={`font-semibold ${colorClass || 'text-brand'}`}>{formatPercentage(percentage)}</div>
           </div>
         );
       };
@@ -2321,10 +2332,10 @@ export default function DataTableNew({
         
         // Determine hover color based on level
         const hoverColorClass = groupFieldIndex === 0 
-          ? 'hover:bg-blue-50' 
+          ? 'hover:bg-brand-tint-weak' 
           : groupFieldIndex === 1 
-          ? 'hover:bg-green-50' 
-          : 'hover:bg-purple-50';
+          ? 'hover:bg-success-wash' 
+          : 'hover:bg-brand-tint-weak';
         
         const isNestedInDrawer = !!finalParentColumnName;
         const drawerAccessAllowed = typeof groupDrawerAccess === 'function'
@@ -2412,7 +2423,7 @@ export default function DataTableNew({
         const title = canOpenJsonTables ? `${cellValue} (Click to view nested tables)` : cellValue;
         return (
           <div
-            className={`text-xs sm:text-sm truncate cursor-pointer underline hover:bg-blue-50 px-1 py-0.5 rounded transition-colors ${isNumericCol ? 'text-right' : 'text-left'} ${colorClass}`}
+            className={`text-xs sm:text-sm truncate cursor-pointer underline hover:bg-brand-tint-weak px-1 py-0.5 rounded transition-colors ${isNumericCol ? 'text-right' : 'text-left'} ${colorClass}`}
             title={title}
             onClick={(e) => {
               e.stopPropagation();
@@ -2542,6 +2553,7 @@ export default function DataTableNew({
       if (overrideType === 'Checkbox' || override?.type === 'Checkbox' || isBooleanCol) {
         return (
           <Checkbox
+            unstyled
             checked={!!options.value}
             onChange={(e) => options.editorCallback(e.checked)}
             onKeyDown={(e) => e.stopPropagation()}
@@ -2577,6 +2589,7 @@ export default function DataTableNew({
       if (isNumericCol) {
         return (
           <InputNumber
+unstyled
             value={options.value}
             onValueChange={(e) => options.editorCallback(e.value)}
             onKeyDown={(e) => e.stopPropagation()}
@@ -2587,6 +2600,7 @@ export default function DataTableNew({
 
       return (
         <InputText
+unstyled
           type="text"
           value={options.value || ''}
           onChange={(e) => options.editorCallback(e.target.value)}
@@ -2858,6 +2872,7 @@ export default function DataTableNew({
       const value = isNil(get(filterState, 'value')) ? '' : filterState.value;
       return () => (
         <InputText
+unstyled
           defaultValue={value}
           onChange={(e) => nestedDebouncedUpdateFilter(tableKey, col, e.target.value === '' ? null : e.target.value)}
           onKeyDown={(e) => {
@@ -2871,8 +2886,7 @@ export default function DataTableNew({
             updateNestedFilter(tableKey, col, e.currentTarget.value === '' ? null : e.currentTarget.value);
           }}
           placeholder="<, >, <=, >=, =, <>"
-          className="p-column-filter"
-          style={{ width: '100%' }}
+                    style={{ width: '100%' }}
           title="Numeric filters: <10, >10, <=10, >=10, =10, 10<>20 (range)"
         />
       );
@@ -2882,6 +2896,7 @@ export default function DataTableNew({
     const value = isNil(get(filterState, 'value')) ? '' : filterState.value;
     return () => (
       <InputText
+unstyled
         defaultValue={value}
         onChange={(e) => nestedDebouncedUpdateFilter(tableKey, col, e.target.value === '' ? null : e.target.value)}
         onKeyDown={(e) => {
@@ -2895,8 +2910,7 @@ export default function DataTableNew({
           updateNestedFilter(tableKey, col, e.currentTarget.value === '' ? null : e.currentTarget.value);
         }}
         placeholder="Search..."
-        className="p-column-filter"
-        style={{ width: '100%' }}
+                style={{ width: '100%' }}
       />
     );
   }, [nestedFiltersMap, multiselectColumns, updateNestedFilter, nestedDebouncedUpdateFilter, nestedCancelDebounced, formatHeaderName, isPercentageColumn]);
@@ -2937,10 +2951,11 @@ export default function DataTableNew({
 
     return (
       <DataTable
+        {...dsDataTableProps({ size: 'small' })}
         value={value}
         showGridlines
         stripedRows
-        className="p-datatable-sm"
+        size="small"
         style={{ minWidth: '100%' }}
         sortMode={enableSort ? 'multiple' : undefined}
         removableSort={enableSort}
@@ -2952,7 +2967,7 @@ export default function DataTableNew({
         rowExpansionTemplate={hasNestedTablesInRows ? (rowData) => {
           if (!rowData.__nestedTables__ || rowData.__nestedTables__.length === 0) return null;
           return (
-            <div className="p-3 bg-gray-50 space-y-4">
+            <div className="p-3 bg-sunken space-y-4">
               {rowData.__nestedTables__.map((nestedTable, nestedIndex) => {
                 const nestedTableKey = `${tableKey}_json_${nestedIndex}`;
                 return (
@@ -3026,8 +3041,8 @@ export default function DataTableNew({
     const { fieldName, data, title } = nestedTable;
     if (!data || data.length === 0) {
       return (
-        <div className="border border-gray-200 rounded-lg p-3">
-          <div className="text-sm font-semibold text-gray-700 mb-2">
+        <div className="border border-line-subtle rounded-lg p-3">
+          <div className="text-sm font-semibold text-body mb-2">
             {title} (No data)
           </div>
         </div>
@@ -3037,8 +3052,8 @@ export default function DataTableNew({
     // Ensure data is an array
     if (!isArray(data)) {
       return (
-        <div className="border border-gray-200 rounded-lg p-3">
-          <div className="text-sm font-semibold text-gray-700 mb-2">
+        <div className="border border-line-subtle rounded-lg p-3">
+          <div className="text-sm font-semibold text-body mb-2">
             {title} (Invalid data format)
           </div>
         </div>
@@ -3149,8 +3164,8 @@ export default function DataTableNew({
     
     
     return (
-      <div className="border border-gray-200 rounded-lg overflow-hidden bg-white" style={{ marginLeft: `${depth * 20}px` }}>
-        <div className="text-sm font-semibold text-gray-700 mb-2 p-2 bg-gray-100 border-b">
+      <div className="border border-line-subtle rounded-lg overflow-hidden bg-surface" style={{ marginLeft: `${depth * 20}px` }}>
+        <div className="text-sm font-semibold text-body mb-2 p-2 bg-sunken border-b">
           {title} ({safeFilteredData.length} {safeFilteredData.length === 1 ? 'row' : 'rows'})
         </div>
         <NestedTableDataTable
@@ -3391,6 +3406,7 @@ export default function DataTableNew({
         const value = isNil(get(filterState, 'value')) ? '' : filterState.value;
         return () => (
           <InputText
+unstyled
             defaultValue={value}
             onChange={(e) => nestedDebouncedUpdateFilter(groupKey, col, e.target.value === '' ? null : e.target.value)}
             onKeyDown={(e) => {
@@ -3404,8 +3420,7 @@ export default function DataTableNew({
               updateNestedFilter(groupKey, col, e.currentTarget.value === '' ? null : e.currentTarget.value);
             }}
             placeholder="<, >, <=, >=, =, <>"
-            className="p-column-filter"
-            style={{ width: '100%' }}
+                        style={{ width: '100%' }}
             title="Numeric filters: <10, >10, <=10, >=10, =10, 10<>20 (range)"
           />
         );
@@ -3416,6 +3431,7 @@ export default function DataTableNew({
       const value = isNil(get(filterState, 'value')) ? '' : filterState.value;
       return () => (
         <InputText
+unstyled
           defaultValue={value}
           onChange={(e) => nestedDebouncedUpdateFilter(groupKey, col, e.target.value === '' ? null : e.target.value)}
           onKeyDown={(e) => {
@@ -3429,8 +3445,7 @@ export default function DataTableNew({
             updateNestedFilter(groupKey, col, e.currentTarget.value === '' ? null : e.currentTarget.value);
           }}
           placeholder="Search..."
-          className="p-column-filter"
-          style={{ width: '100%' }}
+                    style={{ width: '100%' }}
         />
       );
     };
@@ -3461,14 +3476,15 @@ export default function DataTableNew({
       const nonReportDataKey = hasNestedGroups ? '__uniqueId__' : undefined;
 
       groupTableContent = (
-        <div className="p-3 bg-gray-50">
-          <div className="text-xs font-semibold text-gray-700 mb-2">
+        <div className="p-3 bg-sunken">
+          <div className="text-xs font-semibold text-body mb-2">
             {actualNextField
               ? `Aggregated by ${formatHeaderName(actualNextField)}`
               : `${safeNestedFilteredData.length} row${safeNestedFilteredData.length !== 1 ? 's' : ''}`}
           </div>
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
+          <div className="border border-line-subtle rounded-lg overflow-hidden">
             <DataTable
+              {...dsDataTableProps({ size: 'small' })}
               resizableColumns
               columnResizeMode="expand"
               value={nonReportNestedValue}
@@ -3477,7 +3493,7 @@ export default function DataTableNew({
               filterDisplay={enableFilter ? 'row' : undefined}
               showGridlines
               stripedRows
-              className="p-datatable-sm"
+              size="small"
               style={{ minWidth: '100%' }}
               expandedRows={expandedRows}
               onRowToggle={(e) => updateExpandedRows(e.data)}
@@ -3541,7 +3557,7 @@ export default function DataTableNew({
     }
 
     return (
-      <div className="p-3 bg-gray-50 space-y-4">
+      <div className="p-3 bg-sunken space-y-4">
         {groupTableContent}
         {jsonTablesContent}
       </div>
@@ -3882,6 +3898,7 @@ export default function DataTableNew({
             {formatHeaderName(nextField)} Breakdown for {getDataValue(rowData, currentField)}
           </h5>
           <DataTable 
+            {...dsDataTableProps({ size: 'small' })}
             value={(() => {
               const prefix = `${compositeKey}_`;
               const mapped = nestedRows.map((row, index) => {
@@ -3960,7 +3977,7 @@ export default function DataTableNew({
                 
                 return (
                   <div
-                    className={`text-xs sm:text-sm truncate px-1 py-0.5 rounded transition-colors ${isNumericCol ? 'text-right' : 'text-left'} ${colorClass || ''} ${allowReportWriteDrawer ? 'cursor-pointer hover:bg-green-50' : ''}`}
+                    className={`text-xs sm:text-sm truncate px-1 py-0.5 rounded transition-colors ${isNumericCol ? 'text-right' : 'text-left'} ${colorClass || ''} ${allowReportWriteDrawer ? 'cursor-pointer hover:bg-success-wash' : ''}`}
                     title={cellValue}
                     onClick={allowReportWriteDrawer ? (e) => {
                       e.stopPropagation();
@@ -4226,7 +4243,7 @@ export default function DataTableNew({
           
           return (
             <div
-              className={`text-xs sm:text-sm truncate px-1 py-0.5 rounded transition-colors ${isInnerNumericCol ? 'text-right' : 'text-left'} ${innerColorClass || ''} ${allowReportWriteDrawer ? 'cursor-pointer hover:bg-green-50' : ''}`}
+              className={`text-xs sm:text-sm truncate px-1 py-0.5 rounded transition-colors ${isInnerNumericCol ? 'text-right' : 'text-left'} ${innerColorClass || ''} ${allowReportWriteDrawer ? 'cursor-pointer hover:bg-success-wash' : ''}`}
               title={cellValue}
               onClick={allowReportWriteDrawer ? (e) => {
                 e.stopPropagation();
@@ -4330,6 +4347,7 @@ export default function DataTableNew({
           {formatHeaderName(nextField || innerGroupField)} Breakdown for {getDataValue(rowData, currentField || outerGroupField)}
         </h5>
         <DataTable 
+          {...dsDataTableProps({ size: 'small' })}
           value={(() => {
             const prefix = `${structureKey}_`;
             const mapped = nestedRows.map((row, index) => ({
@@ -4385,30 +4403,30 @@ export default function DataTableNew({
     if (!enableFilter || isEmpty(activeFilters)) return null;
 
     return (
-      <div className={`mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg ${className}`}>
+      <div className={`mb-4 p-3 bg-sunken border border-line-subtle rounded-lg ${className}`}>
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-medium text-gray-600 mr-1">Active Filters:</span>
+          <span className="text-xs font-medium text-ds-secondary mr-1">Active Filters:</span>
           {activeFilters.map(({ column, formattedValue }) => (
             <div
               key={column}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 text-blue-800 rounded-full text-xs font-medium"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-tint text-brand-active rounded-full text-xs font-medium"
             >
               <span>
                 {formatHeaderName(column)}: {formattedValue}
               </span>
               <button
                 onClick={() => clearFilter(column)}
-                className="ml-1 hover:bg-blue-200 rounded-full p-0.5 transition-colors"
+                className="ml-1 hover:bg-brand-tint-strong rounded-full p-0.5 transition-colors"
                 title="Remove filter"
                 type="button"
               >
-                <i className="pi pi-times text-[10px]"></i>
+                <i className="pi pi-times text-10"></i>
               </button>
             </div>
           ))}
           <button
             onClick={clearAllFilters}
-            className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-100 text-red-700 rounded-full text-xs font-medium hover:bg-red-200 transition-colors"
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-danger rounded-full text-xs font-medium hover:bg-danger-wash transition-colors"
             title="Clear all filters"
             type="button"
           >
@@ -4479,6 +4497,11 @@ export default function DataTableNew({
     return (
       <div className={`mt-4 flex items-center justify-center gap-4 flex-wrap ${className}`}>
         <Paginator
+          /* Styling comes from the global registry
+             (design-system/primereact/registry.js); this only opts the
+             component out of the lara theme. Nested paginators inherit
+             `unstyled` from their DataTable, but this one is standalone. */
+          unstyled
           first={first}
           rows={rows}
           totalRecords={totalRecords}
@@ -4486,7 +4509,7 @@ export default function DataTableNew({
           onPageChange={onPageChange}
           template="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
         />
-        <div className="text-sm text-gray-600 font-medium">
+        <div className="text-sm text-ds-secondary font-medium">
           out of {totalRecords.toLocaleString('en-US')}
         </div>
       </div>
@@ -4500,19 +4523,19 @@ export default function DataTableNew({
     return (
       <div className={`mb-3 flex flex-wrap gap-2 text-xs ${className}`}>
         {!enableSort && (
-          <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-md">
+          <span className="px-2 py-1 bg-sunken text-ds-secondary rounded-md">
             <i className="pi pi-info-circle mr-1"></i>
             Sorting disabled
           </span>
         )}
         {!enableFilter && (
-          <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-md">
+          <span className="px-2 py-1 bg-sunken text-ds-secondary rounded-md">
             <i className="pi pi-info-circle mr-1"></i>
             Filtering disabled
           </span>
         )}
         {!enableSummation && (
-          <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-md">
+          <span className="px-2 py-1 bg-sunken text-ds-secondary rounded-md">
             <i className="pi pi-info-circle mr-1"></i>
             Summation disabled
           </span>
@@ -4525,20 +4548,20 @@ export default function DataTableNew({
     // Show loading state if any loading is in progress
     if (isLoading) {
       return (
-        <div className="bg-white border border-gray-200 rounded-lg p-8 text-center relative" style={{ minHeight: '400px' }}>
+        <div className="bg-surface border border-line-subtle rounded-lg p-8 text-center relative" style={{ minHeight: '400px' }}>
           <div className="flex flex-col items-center justify-center h-full">
             {isComputingReport ? (
               <>
-                <i className="pi pi-spin pi-spinner text-4xl text-blue-500 mb-4"></i>
-                <p className="text-gray-600 font-medium">{loadingText}</p>
-                <p className="text-sm text-gray-500 mt-1">Please wait while we process your data</p>
+                <i className="pi pi-spin pi-spinner text-32 text-brand mb-4"></i>
+                <p className="text-ds-secondary font-medium">{loadingText}</p>
+                <p className="text-sm text-ds-secondary mt-1">Please wait while we process your data</p>
               </>
             ) : (
               <>
                 <div className="mb-4">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-gray-200 border-t-blue-600"></div>
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-line-subtle border-t-brand"></div>
                 </div>
-                <p className="text-sm text-gray-500">{loadingText}</p>
+                <p className="text-sm text-ds-secondary">{loadingText}</p>
               </>
             )}
           </div>
@@ -4550,10 +4573,10 @@ export default function DataTableNew({
       // Fall through to render full table UI with controls (+ button) and empty table
     } else {
       return (
-        <div className="bg-white border border-gray-200 rounded-lg p-8 text-center">
-          <i className="pi pi-inbox text-4xl text-gray-400 mb-4"></i>
-          <p className="text-gray-600 font-medium">No data available</p>
-          <p className="text-sm text-gray-500 mt-1">Please check your data source</p>
+        <div className="bg-surface border border-line-subtle rounded-lg p-8 text-center">
+          <i className="pi pi-inbox text-32 text-ds-muted mb-4"></i>
+          <p className="text-ds-secondary font-medium">No data available</p>
+          <p className="text-sm text-ds-secondary mt-1">Please check your data source</p>
         </div>
       );
     }
@@ -4562,12 +4585,12 @@ export default function DataTableNew({
   const content = (
     <div className="w-full relative">
       {isLoading && (
-        <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
+        <div className="absolute inset-0 bg-surface bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
           <div className="flex flex-col items-center justify-center">
             <div className="mb-4">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-gray-200 border-t-blue-600"></div>
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-line-subtle border-t-brand"></div>
             </div>
-            <p className="text-sm text-gray-500">{loadingText}</p>
+            <p className="text-sm text-ds-secondary">{loadingText}</p>
           </div>
         </div>
       )}
@@ -4584,6 +4607,7 @@ export default function DataTableNew({
       {/* Fullscreen Dialog */}
       {enableFullscreenDialog && (
       <Dialog
+unstyled
         ref={dialogRef}
         visible={isFullscreen}
         showHeader={false}
@@ -4591,7 +4615,7 @@ export default function DataTableNew({
         maximized={isMaximized}
         modal
         style={{ width: '70vw', height: '90vh' }}
-        contentStyle={{ padding: '1rem', paddingBottom: '0', overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '100%', maxHeight: '100%' }}
+        contentStyle={{ padding: 'var(--space-16)', paddingBottom: '0', overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '100%', maxHeight: '100%' }}
         onHide={(e) => {
           if (!isFullscreen) return;
           setIsFullscreen(false);

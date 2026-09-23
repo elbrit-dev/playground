@@ -439,15 +439,17 @@ PLASMIC.registerComponent(SummaryCard, {
       type: "object",
       displayName: "Trend (day-wise)",
       description:
-        "Day-wise points for the trend strip, meant for the total card but honoured on any card it is given to: [{ date: \"2026-09-01\", value: 235000, breakdown: [{ name: \"Aura & Proxima Chennai - ELPL\", value: 45000 }] }]. `date` also accepts day/label, `value` also accepts total/Incentive/qty, and `breakdown` also accepts departments/items - each row is hovered to show that day's department split. Leave it empty and no chart renders at all; there is never an empty frame. On the primary variant the strip sits inside the card's opened body, on the secondary one under the figures.",
+        "Total card only - switch \"Total card\" on and this appears. Day-wise points for the trend strip: [{ date: \"2026-09-01\", value: 235000, breakdown: [{ name: \"Aura & Proxima Chennai - ELPL\", value: 45000 }] }]. `date` also accepts day/label, `value` also accepts total/Incentive/qty, and `breakdown` also accepts departments/items - each row is hovered to show that day's department split. Leave it empty and no chart renders at all; there is never an empty frame. On the primary variant the strip sits inside the card's opened body, on the secondary one under the figures.",
+      hidden: (props) => !props.total,
     },
     trendType: {
       type: "choice",
       displayName: "Trend shape",
       options: ["wave", "line", "bars", "lollipop", "stacked", "multiples"],
       defaultValue: "wave",
+      hidden: (props) => !props.total,
       description:
-        "wave - smooth filled area, the shape of the month at a glance. line - the same curve without the fill, better for comparing small day-to-day differences. bars - one bar per day on a zero baseline. lollipop - stem and dot, the lightest of the discrete forms. stacked - each day split by department, with a legend; the only shape that puts the breakdown in the plot rather than only in the tooltip. multiples - only for days that carry Sales / Returns / Offers: one small chart per measure, each on its own scale, which is the readable way to show figures an order of magnitude apart. All of them carry the same per-day tooltip and all of them disappear when there is no data.",
+        "Total card only, alongside Trend. wave - smooth filled area, the shape of the month at a glance. line - the same curve without the fill, better for comparing small day-to-day differences. bars - one bar per day on a zero baseline. lollipop - stem and dot, the lightest of the discrete forms. stacked - each day split by department, with a legend; the only shape that puts the breakdown in the plot rather than only in the tooltip. multiples - only for days that carry Sales / Returns / Offers: one small chart per measure, each on its own scale, which is the readable way to show figures an order of magnitude apart. All of them carry the same per-day tooltip and all of them disappear when there is no data.",
     },
     defaultExpanded: {
       type: "boolean",

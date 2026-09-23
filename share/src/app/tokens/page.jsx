@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button } from 'primereact/button';
+import { Button } from '@/design-system';
 import { Checkbox } from 'primereact/checkbox';
 import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
 import { Dialog } from 'primereact/dialog';
@@ -119,7 +119,7 @@ function TokensPageInner() {
       header: 'Delete Token',
       message: `Delete token "${row?.name || 'this token'}"?`,
       icon: 'pi pi-exclamation-triangle',
-      acceptClassName: 'p-button-danger',
+      acceptClassName: 'ds-button-danger',
       acceptLabel: 'Delete',
       rejectLabel: 'Cancel',
       accept: () => {
@@ -149,24 +149,24 @@ function TokensPageInner() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-sunken">
       <main className="max-w-6xl mx-auto px-4 py-6">
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+        <div className="bg-surface rounded-lg border border-line-subtle shadow-card p-5">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-xl font-semibold text-gray-900">Global Tokens</h1>
-              <p className="text-sm text-gray-600">Manage GraphQL endpoint tokens stored in `#__GLOBAL__#`.</p>
+              <h1 className="text-xl font-semibold text-body">Global Tokens</h1>
+              <p className="text-sm text-ds-secondary">Manage GraphQL endpoint tokens stored in `#__GLOBAL__#`.</p>
             </div>
             <div className="flex gap-2">
-              <Button label="Refresh" severity="secondary" icon="pi pi-refresh" onClick={loadRows} loading={loading} />
-              <Button label="Add Token" icon="pi pi-plus" onClick={openAdd} />
+              <Button type="default" icon={<i className="pi pi-refresh" />} onClick={loadRows} loading={loading}>Refresh</Button>
+              <Button icon={<i className="pi pi-plus" />} onClick={openAdd}>Add Token</Button>
             </div>
           </div>
 
           <div className="overflow-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left border-b border-gray-200">
+                <tr className="text-left border-b border-line-subtle">
                   <th className="py-2">Default</th>
                   <th className="py-2">Name</th>
                   <th className="py-2">Endpoint</th>
@@ -176,9 +176,9 @@ function TokensPageInner() {
               </thead>
               <tbody>
                 {rows.map((row, index) => (
-                  <tr key={`${row.name}-${index}`} className="border-b border-gray-100">
+                  <tr key={`${row.name}-${index}`} className="border-b border-line-subtle">
                     <td className="py-2">
-                      <Checkbox checked={Boolean(row.isDefault)} onChange={() => setDefault(index)} />
+                      <Checkbox unstyled checked={Boolean(row.isDefault)} onChange={() => setDefault(index)} />
                     </td>
                     <td className="py-2 font-medium">{row.name}</td>
                     <td className="py-2">{row.endpoint}</td>
@@ -190,29 +190,21 @@ function TokensPageInner() {
                             : (row.token ? `${'*'.repeat(Math.min(12, row.token.length))}` : '-')}
                         </span>
                         {row.token ? (
-                          <Button
-                            type="button"
-                            text
-                            rounded
-                            className="p-0"
-                            icon={`pi ${revealedTokenRows[index] ? 'pi-eye-slash' : 'pi-eye'}`}
-                            onClick={() => toggleRowTokenVisibility(index)}
-                            aria-label={revealedTokenRows[index] ? 'Hide token' : 'Show token'}
-                          />
+                          <Button type="text" shape="round" className="p-0" icon={<i className={`pi ${revealedTokenRows[index] ? 'pi-eye-slash' : 'pi-eye'}`} />} onClick={() => toggleRowTokenVisibility(index)} aria-label={revealedTokenRows[index] ? 'Hide token' : 'Show token'}/>
                         ) : null}
                       </div>
                     </td>
                     <td className="py-2">
                       <div className="flex gap-2">
-                        <Button label="Edit" text onClick={() => openEdit(index)} />
-                        <Button label="Delete" text severity="danger" onClick={() => confirmRemoveRow(index)} />
+                        <Button type="text" onClick={() => openEdit(index)}>Edit</Button>
+                        <Button type="text" danger onClick={() => confirmRemoveRow(index)}>Delete</Button>
                       </div>
                     </td>
                   </tr>
                 ))}
                 {rows.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-6 text-center text-gray-500">No token rows yet. Add one to start.</td>
+                    <td colSpan={5} className="py-6 text-center text-ds-secondary">No token rows yet. Add one to start.</td>
                   </tr>
                 )}
               </tbody>
@@ -221,45 +213,41 @@ function TokensPageInner() {
         </div>
       </main>
 
-      <Dialog header={editingIndex >= 0 ? 'Edit Token' : 'Add Token'} visible={dialogVisible} onHide={() => setDialogVisible(false)} style={{ width: '34rem' }}>
+      <Dialog unstyled header={editingIndex >= 0 ? 'Edit Token' : 'Add Token'} visible={dialogVisible} onHide={() => setDialogVisible(false)} style={{ width: '34rem' }}>
         <div className="flex flex-col gap-3">
           <div>
             <label className="block text-sm mb-1">Name</label>
-            <InputText value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} className="w-full" placeholder="ERP / UAT / DEV" />
+            <InputText unstyled value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} className="w-full" placeholder="ERP / UAT / DEV" />
           </div>
           <div>
             <label className="block text-sm mb-1">Endpoint</label>
-            <InputText value={form.endpoint} onChange={(e) => setForm((prev) => ({ ...prev, endpoint: e.target.value }))} className="w-full" placeholder="https://.../api/method/graphql" />
+            <InputText unstyled value={form.endpoint} onChange={(e) => setForm((prev) => ({ ...prev, endpoint: e.target.value }))} className="w-full" placeholder="https://.../api/method/graphql" />
           </div>
           <div>
             <label className="block text-sm mb-1">Token</label>
             <div className="p-inputgroup flex-1 w-full">
               <InputText
+unstyled
                 type={showToken ? 'text' : 'password'}
                 value={form.token}
                 onChange={(e) => setForm((prev) => ({ ...prev, token: e.target.value }))}
                 className="w-full"
               />
-              <Button
-                type="button"
-                icon={`pi ${showToken ? 'pi-eye-slash' : 'pi-eye'}`}
-                className="p-button-secondary"
-                onClick={() => setShowToken((prev) => !prev)}
-              />
+              <Button type="default" icon={<i className={`pi ${showToken ? 'pi-eye-slash' : 'pi-eye'}`} />} onClick={() => setShowToken((prev) => !prev)}/>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Checkbox checked={Boolean(form.isDefault)} onChange={(e) => setForm((prev) => ({ ...prev, isDefault: e.checked }))} />
+            <Checkbox unstyled checked={Boolean(form.isDefault)} onChange={(e) => setForm((prev) => ({ ...prev, isDefault: e.checked }))} />
             <span>Set as default</span>
           </div>
           <div className="flex justify-end gap-2 mt-2">
-            <Button label="Cancel" severity="secondary" onClick={() => setDialogVisible(false)} />
-            <Button label={editingIndex >= 0 ? 'Update' : 'Add'} onClick={upsertRow} />
+            <Button type="default" onClick={() => setDialogVisible(false)}>Cancel</Button>
+            <Button onClick={upsertRow}>{editingIndex >= 0 ? 'Update' : 'Add'}</Button>
           </div>
         </div>
       </Dialog>
-      <ConfirmDialog />
-      <Toast ref={toastRef} />
+      <ConfirmDialog unstyled />
+      <Toast unstyled ref={toastRef} />
     </div>
   );
 }

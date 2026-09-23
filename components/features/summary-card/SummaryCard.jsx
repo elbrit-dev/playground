@@ -156,9 +156,15 @@ const CSS = `
 /* Each card sizes itself off ITS OWN width, not the viewport's: the same card
    has to work full-bleed, in a narrow dashboard column, and nested inside a
    department, and only a container query can tell those apart. */
+/* Same clip as the secondary card, and for the same reason: the trend
+   tooltip's wrapper keeps its box at the cursor while the transform draws the
+   tip higher, and that leftover box would otherwise extend the page. The
+   margin is what keeps this honest - the legend badge sits at top: -9px on
+   purpose, so the clip region has to reach past the border before it bites. */
 .esc-card { position: relative; width: 100%; background: #fff;
   border: 1px solid var(--esc-border, #e5e7eb); border-radius: 12px;
   padding: 16px 16px 14px; transition: box-shadow .18s ease;
+  overflow: clip; overflow-clip-margin: 14px;
   container-type: inline-size; container-name: esc; }
 .esc-card[data-open="true"] { box-shadow: 0 1px 3px rgba(16,24,40,.08); }
 .esc-card[data-clickable="true"] { cursor: pointer; }
@@ -615,6 +621,14 @@ export default function SummaryCard({
 
   if (!data) return null;
 
+  // The trend strip belongs to the total card and nowhere else: a department, an
+  // HQ or a team card is about that one row, and a day-wise chart of the whole
+  // month sitting inside it reads as if it were that row's own history. Plasmic
+  // hides the prop unless "Total card" is on; this is the same rule at runtime,
+  // so a trend left over from toggling the switch cannot render under a card it
+  // does not describe.
+  const trendPoints = total ? trend : undefined;
+
   // The secondary variant is a different card over a different payload - sales
   // and closing rather than incentive against target - so it has its own
   // renderer, and shares only the props that mean the same thing in both.
@@ -629,7 +643,7 @@ export default function SummaryCard({
         defaultExpanded={defaultExpanded ?? true}
         currency={currency}
         accentColor={accentColor}
-        trend={trend}
+        trend={trendPoints}
         trendType={trendType}
         onToggle={onToggle}
         onHqClick={onHqClick}
@@ -657,7 +671,7 @@ export default function SummaryCard({
         startOpen={Boolean(defaultExpanded)}
         isTotal={total}
         autoColor={autoColor}
-        trend={trend}
+        trend={trendPoints}
         trendType={trendType}
         onToggle={onToggle}
         sectionHandlers={sectionHandlers}

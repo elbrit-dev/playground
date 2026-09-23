@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { Sidebar } from 'primereact/sidebar';
-import { Button } from 'primereact/button';
+import { Button } from '@/design-system';
 import { InputText } from 'primereact/inputtext';
 import { Checkbox } from 'primereact/checkbox';
 import { startCase, uniq, filter as lodashFilter, toLower, isNil } from 'lodash';
@@ -287,6 +287,7 @@ export default function FilterSortSidebar({
 
   return (
     <Sidebar
+unstyled
       visible={visible}
       onHide={onHide}
       position={isMobile ? 'bottom' : 'left'}
@@ -294,26 +295,26 @@ export default function FilterSortSidebar({
       className={isMobile ? 'w-full' : ''}
       style={isMobile ? { height: '80vh' } : { width: '600px', maxWidth: '90vw' }}
       header={
-        <h2 className="text-lg font-semibold text-gray-800 m-0">{sortOnly ? 'Sort' : 'Filter and Sort'}</h2>
+        <h2 className="text-lg font-semibold text-body m-0">{sortOnly ? 'Sort' : 'Filter and Sort'}</h2>
       }
     >
       <div className="flex flex-col h-full">
         <div className="flex-1 overflow-hidden flex min-h-0">
           {/* Left Sidebar - Tab Navigation (hidden in sort-only mode: single pane) */}
           {!sortOnly && (
-          <div className="w-32 border-r border-gray-200 bg-gray-50 overflow-y-auto overflow-x-hidden flex-shrink-0">
+          <div className="w-32 border-r border-line-subtle bg-sunken overflow-y-auto overflow-x-hidden flex-shrink-0">
             <div className="p-2">
               <button
                 onClick={() => setActiveTabIndex(0)}
                 className={`w-full text-left px-2 py-2 rounded-md mb-1 transition-colors relative text-sm ${activeTabIndex === 0
-                    ? 'bg-blue-100 text-blue-700 font-medium'
-                    : 'text-gray-700 hover:bg-gray-100'
+                    ? 'bg-brand-tint text-brand font-medium'
+                    : 'text-body hover:bg-brand-tint-weak'
                   }`}
               >
                 <span className="flex items-start justify-between gap-1 min-w-0">
                   <span className="text-xs break-words">Sort by</span>
                   {selectedSortField && (
-                    <span className="w-2 h-2 mt-1 bg-blue-600 rounded-full flex-shrink-0"></span>
+                    <span className="w-2 h-2 mt-1 bg-brand rounded-full flex-shrink-0"></span>
                   )}
                 </span>
               </button>
@@ -345,14 +346,14 @@ export default function FilterSortSidebar({
                         key={tabKey}
                         onClick={() => setActiveTabIndex(currentTabIndex)}
                         className={`w-full text-left px-2 py-2 rounded-md mb-1 transition-colors relative text-sm ${activeTabIndex === currentTabIndex
-                            ? 'bg-blue-100 text-blue-700 font-medium'
-                            : 'text-gray-700 hover:bg-gray-100'
+                            ? 'bg-brand-tint text-brand font-medium'
+                            : 'text-body hover:bg-brand-tint-weak'
                           }`}
                       >
                         <span className="flex items-start justify-between gap-1 min-w-0">
                           <span className="text-xs break-words">{displayName}</span>
                           {selectedCount > 0 && (
-                            <span className="ml-1 px-1.5 py-0.5 text-xs font-medium bg-blue-600 text-white rounded-full min-w-[1.25rem] text-center flex-shrink-0">
+                            <span className="ml-1 px-1.5 py-0.5 text-xs font-medium bg-brand text-on-brand rounded-full min-w-[1.25rem] text-center flex-shrink-0">
                               {selectedCount}
                             </span>
                           )}
@@ -367,7 +368,7 @@ export default function FilterSortSidebar({
           )}
 
           {/* Right Content Area - Full Height */}
-          <div className="flex-1 overflow-hidden bg-white min-h-0 min-w-0 flex flex-col">
+          <div className="flex-1 overflow-hidden bg-surface min-h-0 min-w-0 flex flex-col">
             {activeTabIndex === 0 && (
               <div className="pl-4 flex-1 overflow-y-auto min-h-0">
                 <div className="space-y-1">
@@ -414,7 +415,7 @@ export default function FilterSortSidebar({
                     return (
                       <label
                         key={idx}
-                        className="flex items-center cursor-pointer p-2 rounded hover:bg-gray-50"
+                        className="flex items-center cursor-pointer p-2 rounded hover:bg-brand-tint-weak"
                       >
                         <input
                           type="radio"
@@ -424,14 +425,14 @@ export default function FilterSortSidebar({
                             setSelectedSortField(sortOption.value);
                             setSelectedSortDirection(sortOption.direction);
                           }}
-                          className="mr-3 w-4 h-4 text-blue-600"
+                          className="mr-3 w-4 h-4 text-brand"
                         />
-                        <span className="text-sm text-gray-700 flex-1">{sortOption.label}</span>
+                        <span className="text-sm text-body flex-1">{sortOption.label}</span>
                       </label>
                     );
                   })}
                   {sortFieldOptions.length === 0 && (
-                    <p className="text-sm text-gray-500">No sort fields available</p>
+                    <p className="text-sm text-ds-secondary">No sort fields available</p>
                   )}
                 </div>
               </div>
@@ -504,7 +505,7 @@ export default function FilterSortSidebar({
                     <>
                       <div className="mb-3 flex items-center gap-2 flex-shrink-0 min-w-0">
                         <div className="p-inputgroup flex-1 min-w-0">
-                          <span style={{ height: '2rem' }} className="p-inputgroup-addon flex-shrink-0">
+                          <span style={{ height: 'var(--control-h)' }} className="p-inputgroup-addon flex-shrink-0">
                             <input
                               type="checkbox"
                               title="Select all"
@@ -516,18 +517,19 @@ export default function FilterSortSidebar({
                                   clearAll();
                                 }
                               }}
-                              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                              className="w-4 h-4 text-brand border-line rounded focus:ring-focus"
                             />
                           </span>
                           <InputText
+unstyled
                             value={searchTerm}
                             onChange={(e) => handleSearchChange(e.target.value)}
                             placeholder="Search"
-                            style={{ height: '2rem', minWidth: 0 }}
+                            style={{ height: 'var(--control-h)', minWidth: 0 }}
                             className="w-full"
                           />
                         </div>
-                        <span className="text-xs text-gray-500 ml-auto whitespace-nowrap flex-shrink-0">
+                        <span className="text-xs text-ds-secondary ml-auto whitespace-nowrap flex-shrink-0">
                           {selectedValues.length}/{filteredValues.length}
                         </span>
                       </div>
@@ -539,27 +541,27 @@ export default function FilterSortSidebar({
                             return (
                               <label
                                 key={idx}
-                                className="flex items-start cursor-pointer p-2 rounded hover:bg-gray-50 min-w-0 gap-2"
+                                className="flex items-start cursor-pointer p-2 rounded hover:bg-brand-tint-weak min-w-0 gap-2"
                               >
                                 <input
                                   type="checkbox"
                                   checked={isSelected}
                                   onChange={() => toggleValue(value)}
-                                  className="mt-0.5 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 flex-shrink-0"
+                                  className="mt-0.5 w-4 h-4 text-brand border-line rounded focus:ring-focus flex-shrink-0"
                                 />
-                                <span className="text-sm text-gray-700 flex-1 break-words min-w-0">{value}</span>
-                                <span className="text-xs text-gray-500 text-right min-w-[2rem] flex-shrink-0">{count}</span>
+                                <span className="text-sm text-body flex-1 break-words min-w-0">{value}</span>
+                                <span className="text-xs text-ds-secondary text-right min-w-[2rem] flex-shrink-0">{count}</span>
                               </label>
                             );
                           })
                         ) : (
-                          <p className="text-sm text-gray-500">No values match your search</p>
+                          <p className="text-sm text-ds-secondary">No values match your search</p>
                         )}
                       </div>
                     </>
                   )}
                   {uniqueValues.length === 0 && (
-                    <p className="text-sm text-gray-500">No values available</p>
+                    <p className="text-sm text-ds-secondary">No values available</p>
                   )}
                 </div>
               );
@@ -568,22 +570,10 @@ export default function FilterSortSidebar({
         </div>
 
         {/* Footer with Apply and Clear buttons */}
-        <div className="border-t border-gray-200 p-4 bg-gray-50">
+        <div className="border-t border-line-subtle p-4 bg-sunken">
           <div className="flex gap-2">
-            <Button
-              label="Clear"
-              icon="pi pi-times"
-              onClick={handleClear}
-              className="p-button-outlined flex-1"
-              disabled={!hasActiveFilters}
-            />
-            <Button
-              label="Apply"
-              icon="pi pi-check"
-              onClick={handleApply}
-              className="flex-1"
-              disabled={!hasActiveFilters}
-            />
+            <Button type="default" icon={<i className="pi pi-times" />} onClick={handleClear} className="flex-1" disabled={!hasActiveFilters}>Clear</Button>
+            <Button icon={<i className="pi pi-check" />} onClick={handleApply} className="flex-1" disabled={!hasActiveFilters}>Apply</Button>
           </div>
         </div>
       </div>

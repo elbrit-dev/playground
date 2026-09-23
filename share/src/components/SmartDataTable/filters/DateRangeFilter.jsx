@@ -26,6 +26,7 @@ export function DateRangeFilter({ field, value, onFilter }) {
   return (
     <div className="date-range-filter flex items-center gap-1">
       <Calendar
+unstyled
         value={dates}
         onChange={handleChange}
         selectionMode="range"
@@ -34,7 +35,7 @@ export function DateRangeFilter({ field, value, onFilter }) {
         showIcon
         iconPos="left"
         dateFormat="M d, yy"
-        className="p-column-filter date-range-calendar"
+        className="date-range-calendar"
         inputClassName="text-xs"
         showButtonBar
         numberOfMonths={1}
@@ -44,7 +45,7 @@ export function DateRangeFilter({ field, value, onFilter }) {
         <button
           type="button"
           onClick={handleClear}
-          className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+          className="p-1 text-ds-muted hover:text-ds-secondary transition-colors"
           title="Clear filter"
         >
           <i className="pi pi-times text-xs" />

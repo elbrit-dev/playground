@@ -73,7 +73,7 @@ export default function SyncPill({ className }) {
   return (
     <div ref={wrapRef} className={`relative inline-flex shrink-0 ${className ?? ''}`}>
       <div
-        className="inline-flex items-stretch overflow-hidden rounded-lg border border-gray-200 bg-white"
+        className="inline-flex items-stretch overflow-hidden rounded-lg border border-line-subtle bg-surface"
         style={{ height: '1.75rem' }}
       >
         <button
@@ -81,10 +81,10 @@ export default function SyncPill({ className }) {
           onClick={() => handleSync()}
           disabled={busy}
           title="Refresh data"
-          className="inline-flex items-center gap-1 whitespace-nowrap px-2 text-[11px] font-semibold text-slate-800 hover:bg-gray-50 disabled:opacity-60 sm:gap-1.5 sm:px-2.5 sm:text-xs"
+          className="inline-flex items-center gap-1 whitespace-nowrap px-2 text-11 font-semibold text-body hover:bg-brand-tint-weak disabled:opacity-60 sm:gap-1.5 sm:px-2.5 sm:text-xs"
         >
           <i
-            className={`${busy ? 'pi pi-spin pi-spinner' : 'pi pi-refresh'} text-[10px] text-gray-500`}
+            className={`${busy ? 'pi pi-spin pi-spinner' : 'pi pi-refresh'} text-10 text-ds-secondary`}
             aria-hidden="true"
           />
           {label}
@@ -97,9 +97,9 @@ export default function SyncPill({ className }) {
             aria-haspopup="menu"
             aria-expanded={menuOpen}
             aria-label="More refresh options"
-            className="inline-flex items-center border-l border-gray-200 px-1 text-gray-500 hover:bg-gray-50 disabled:opacity-60"
+            className="inline-flex items-center border-l border-line-subtle px-1 text-ds-secondary hover:bg-brand-tint-weak disabled:opacity-60"
           >
-            <i className="pi pi-chevron-down text-[9px]" aria-hidden="true" />
+            <i className="pi pi-chevron-down text-10" aria-hidden="true" />
           </button>
         ) : null}
       </div>
@@ -108,15 +108,15 @@ export default function SyncPill({ className }) {
         <div
           role="menu"
           style={{ position: 'fixed', top: anchor.top, right: anchor.right, zIndex: 2000 }}
-          className="min-w-[11rem] overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl"
+          className="min-w-[11rem] overflow-hidden rounded-lg border border-line-subtle bg-surface py-1 shadow-pop"
         >
           <button
             type="button"
             role="menuitem"
             onClick={runHardRefresh}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-gray-50"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-body hover:bg-brand-tint-weak"
           >
-            <i className="pi pi-sync text-xs text-gray-500" aria-hidden="true" />
+            <i className="pi pi-sync text-xs text-ds-secondary" aria-hidden="true" />
             Hard Refresh
           </button>
         </div>
