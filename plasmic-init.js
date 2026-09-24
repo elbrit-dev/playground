@@ -455,7 +455,7 @@ PLASMIC.registerComponent(SummaryCard, {
       type: "boolean",
       displayName: "Open by default",
       description:
-        "Unset, a primary card starts closed and a secondary card starts with its HQ shelf open - each variant's natural state. Set it to override that.",
+        "Off (the default) both variants start closed: a primary card shows only its headline, and a secondary card keeps its HQ tiles behind the Show HQ button. On, they start open.",
     },
     currency: {
       type: "string",
