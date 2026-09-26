@@ -34,11 +34,35 @@ export default function AppHeader() {
      as a nav demo page and a timeline demo. */
   const otherItems = [
     {
+      label: 'Dev harness',
+      icon: 'pi pi-sliders-h',
+      url: '/dev/harness',
+      command: () => {
+        router.push('/dev/harness');
+      }
+    },
+    {
       label: 'Visit',
       icon: 'pi pi-map-marker',
       url: '/visit',
       command: () => {
         router.push('/visit');
+      }
+    },
+    {
+      label: 'Secondary Entry',
+      icon: 'pi pi-box',
+      url: '/dev/secondary-entry',
+      command: () => {
+        router.push('/dev/secondary-entry');
+      }
+    },
+    {
+      label: 'Secondary Approval',
+      icon: 'pi pi-check-square',
+      url: '/dev/secondary-approval',
+      command: () => {
+        router.push('/dev/secondary-approval');
       }
     },
     {
@@ -55,6 +79,14 @@ export default function AppHeader() {
       url: '/timeline',
       command: () => {
         router.push('/timeline');
+      }
+    },
+    {
+      label: 'Ring Nav',
+      icon: 'pi pi-circle',
+      url: '/ring-nav',
+      command: () => {
+        router.push('/ring-nav');
       }
     }
   ];

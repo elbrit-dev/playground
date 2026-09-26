@@ -11,7 +11,9 @@ import { useTableOperations } from '../../contexts/TableOperationsContext';
  * the chevron menu, just smaller and with a short date. Spins while a query
  * (or a stale-while-revalidate background refresh) is running.
  */
-export default function SyncPill({ className }) {
+// `height` defaults to the Views header's compact pill row; the provider's own
+// header passes var(--control-h) so it lines up with the range picker and selects.
+export default function SyncPill({ className, height = '1.75rem' }) {
   const {
     handleSync,
     handleHardRefresh,
@@ -74,7 +76,7 @@ export default function SyncPill({ className }) {
     <div ref={wrapRef} className={`relative inline-flex shrink-0 ${className ?? ''}`}>
       <div
         className="inline-flex items-stretch overflow-hidden rounded-lg border border-line-subtle bg-surface"
-        style={{ height: '1.75rem' }}
+        style={{ height }}
       >
         <button
           type="button"

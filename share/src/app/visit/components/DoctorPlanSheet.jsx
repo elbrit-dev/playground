@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Sheet } from '@/design-system';
-import { doctorPlan, filterPlan, groupByEvent } from '../data/selectors';
+import { doctorPlan, filterPlan, groupByDoctor, groupByEvent } from '../data/selectors';
 import { PlanControls } from './PlanControls';
 import { useIncrementalList } from './useIncrementalList';
 import { VisitEventGroup } from './VisitEventGroup';
@@ -31,7 +31,7 @@ const BLANK_FILTERS = { values: {}, sorts: {}, query: '' };
  * every group stay open turns it into the flat list this replaced, and the
  * reader loses the doctor-per-line shape that makes it skimmable. */
 
-export function DoctorPlanSheet({ member, team, rows, pob, periodLabel, showDate = false, onClose }) {
+export function DoctorPlanSheet({ member, team, rows, pob, periodLabel, showDate = false, loading = false, onClose }) {
   /* Keyed by event id rather than an index, so it survives the list
      re-sorting or the period changing under it. */
   const [openId, setOpenId] = useState(null);
@@ -53,9 +53,21 @@ export function DoctorPlanSheet({ member, team, rows, pob, periodLabel, showDate
     setFilters(BLANK_FILTERS);
   }
 
-  const calls = useMemo(
+  /* ONE CARD PER CALL, and over a month ONE CARD PER DOCTOR.
+
+     A month of a rep's plan lists the same doctor once per visit — same name,
+     same code, same specialty, three times over — and that repetition IS the
+     fact worth reading, so groupByDoctor turns it into a count with the
+     visits kept inside it. The day view keeps one card per call: every row
+     there is the same date, and merging would hide a doctor seen twice in one
+     morning behind the number two. */
+  const events = useMemo(
     () => (member ? groupByEvent(doctorPlan(member, team, rows, pob)) : []),
     [member, team, rows, pob],
+  );
+  const calls = useMemo(
+    () => (showDate ? groupByDoctor(events) : events),
+    [events, showDate],
   );
 
   /* THE CONTROLS RUN OVER THE WHOLE PLAN, not over the page on screen. Every
@@ -65,7 +77,10 @@ export function DoctorPlanSheet({ member, team, rows, pob, periodLabel, showDate
      past yet, which is what makes a half-wired search worse than none. */
   const shownCalls = useMemo(() => filterPlan(calls, filters), [calls, filters]);
 
-  const done = shownCalls.filter((c) => c.visitTime).length;
+  /* COUNTED IN VISITS, not in cards. The subtitle reports the plan, and a
+     month in which one doctor was seen three times is three visits however
+     many cards the list below draws them as. */
+  const done = events.filter((c) => c.visitTime).length;
   /* Paged, not capped -- see useIncrementalList. Reset on the member AND on
      the controls: a reader who searches after scrolling to row 120 should
      land at the top of the answer, not 120 rows into it. */
@@ -76,7 +91,7 @@ export function DoctorPlanSheet({ member, team, rows, pob, periodLabel, showDate
 
   const subtitle = [
     periodLabel,
-    `${calls.length} ${calls.length === 1 ? 'visit' : 'visits'} planned`,
+    `${events.length} ${events.length === 1 ? 'visit' : 'visits'} planned`,
     `${done} done`,
     /* Against what the FILTERS left, not against the whole plan: with a
        search applied, "showing 30 of 237" counts a list that is not on
@@ -110,7 +125,11 @@ export function DoctorPlanSheet({ member, team, rows, pob, periodLabel, showDate
         ) : null
       }
     >
-      {calls.length === 0 ? (
+      {loading ? (
+        /* The plan is fetched when the sheet opens (the report's numbers are
+           counts, not rows) — "no visits" before it lands would be a lie. */
+        <p className="py-4 text-12 text-ds-secondary">Loading visits…</p>
+      ) : calls.length === 0 ? (
         /* Says whose plan is empty and why it can be. A manager who joined no
            calls this period is the normal case now, not a broken screen, and
            the old "No visits planned in this period." read as the latter. */

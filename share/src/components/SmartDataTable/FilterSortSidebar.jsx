@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Sidebar } from 'primereact/sidebar';
-import { Button } from '@/design-system';
-import { InputText } from 'primereact/inputtext';
+import { Button, Field, Icon } from '@/design-system';
 import { LoadingOverlay } from './TableSkeleton';
 import { logSmartDataEvent } from './smartDataLogger.js';
 
@@ -401,25 +400,27 @@ unstyled
 
                   {/* Search row */}
                   <div className="mb-3 flex items-center gap-2 flex-shrink-0 pr-3">
-                    <div className="p-inputgroup flex-1">
-                      <InputText
-unstyled
-                        value={search}
-                        onChange={e => setTabSearch(prev => ({ ...prev, [key]: e.target.value }))}
-                        onKeyDown={e => { if (e.key === 'Enter') { clearTimeout(debounceRef.current); loadValues(key, 1, searchTerm, true); } }}
-                        placeholder="Search…"
-                        style={{ height: 'var(--control-h)' }}
-                      />
-                      {search && (
-                        <span
-                          className="p-inputgroup-addon cursor-pointer hover:bg-brand-tint-weak"
-                          style={{ height: 'var(--control-h)' }}
+                    {/* A DS Field with the clear button as its suffix. This was a
+                        lara `p-inputgroup`, whose CSS `unstyled` drops — the ×
+                        addon lost its frame and sat loose beside the input. */}
+                    <Field
+                      value={search}
+                      onChange={v => setTabSearch(prev => ({ ...prev, [key]: v }))}
+                      onKeyDown={e => { if (e.key === 'Enter') { clearTimeout(debounceRef.current); loadValues(key, 1, searchTerm, true); } }}
+                      placeholder="Search…"
+                      aria-label="Search values"
+                      className="min-w-0 flex-1"
+                      suffix={search ? (
+                        <button
+                          type="button"
                           onClick={() => setTabSearch(prev => ({ ...prev, [key]: '' }))}
+                          aria-label="Clear search"
+                          className="flex items-center text-ds-secondary hover:text-body"
                         >
-                          <i className="pi pi-times text-xs text-ds-secondary" />
-                        </span>
-                      )}
-                    </div>
+                          <Icon name="times" size="sm" />
+                        </button>
+                      ) : null}
+                    />
                     <span className="text-xs text-ds-secondary whitespace-nowrap">
                       {selectedValues.length} selected
                     </span>

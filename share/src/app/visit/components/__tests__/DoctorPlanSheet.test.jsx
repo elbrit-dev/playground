@@ -332,3 +332,114 @@ describe('DoctorPlanSheet filter reset', () => {
     expect(screen.getByText('Dr Anil')).toBeInTheDocument();
   });
 });
+
+/* Over a month the sheet merges a doctor's visits into one card. These pin
+   what that card says that three separate cards did not. */
+describe('DoctorPlanSheet over a month', () => {
+  const twice = [
+    visit({ eventId: 'EV1', plannedDate: '2026-09-05', visitTime: '2026-09-05 10:00:00' }),
+    visit({ eventId: 'EV2', plannedDate: '2026-09-11', visitTime: '2026-09-11 15:30:00' }),
+  ];
+
+  function monthSheet(rows, showDate = true) {
+    render(
+      <DoctorPlanSheet
+        member={TEAM[1]} team={TEAM} rows={rows} pob={[]}
+        periodLabel="Sep 2026" showDate={showDate} onClose={vi.fn()}
+      />,
+    );
+  }
+
+  it('shows one card for a doctor seen twice, and says how many days', () => {
+    monthSheet(twice);
+    expect(screen.getAllByRole('button', { name: /Dr One/ })).toHaveLength(1);
+    expect(screen.getByText(/2 day visits/)).toBeInTheDocument();
+  });
+
+  it('still counts the VISITS in the subtitle, not the cards', () => {
+    // One card, two visits: the plan is what the subtitle reports.
+    monthSheet(twice);
+    expect(screen.getByText(/2 visits planned · 2 done/)).toBeInTheDocument();
+  });
+
+  it('names each rung once, however many times they went', () => {
+    /* "BE BE" said nothing the day count does not say better. */
+    monthSheet(twice);
+    expect(screen.getAllByText(/BE Geo/)).toHaveLength(1);
+  });
+
+  it('gives every visit its own date and time once opened', async () => {
+    const user = userEvent.setup();
+    monthSheet(twice);
+    await user.click(screen.getByRole('button', { name: /Dr One/ }));
+
+    expect(screen.getByText('5 Sep')).toBeInTheDocument();
+    expect(screen.getByText('11 Sep')).toBeInTheDocument();
+    expect(screen.getByText('10:00 AM')).toBeInTheDocument();
+    expect(screen.getByText('3:30 PM')).toBeInTheDocument();
+  });
+
+  it('does not merge in the day view, where every row is the same date', () => {
+    // A doctor seen twice before lunch is two calls, and the day says so.
+    monthSheet(twice, false);
+    expect(screen.getAllByRole('button', { name: /Dr One/ })).toHaveLength(2);
+    expect(screen.queryByText(/day visits/)).not.toBeInTheDocument();
+  });
+});
+
+describe('DoctorPlanSheet merged card detail', () => {
+  const sameDay = [
+    visit({ eventId: 'EV1', plannedDate: '2026-09-05', visitTime: '2026-09-05 10:00:00' }),
+    visit({ eventId: 'EV2', plannedDate: '2026-09-05', visitTime: '2026-09-05 16:30:00' }),
+  ];
+  const spread = [
+    visit({ eventId: 'EV1', plannedDate: '2026-09-05', visitTime: '2026-09-05 10:00:00' }),
+    visit({ eventId: 'EV2', plannedDate: '2026-09-11', visitTime: '2026-09-11 15:30:00' }),
+  ];
+
+  function monthSheet(rows) {
+    render(
+      <DoctorPlanSheet
+        member={TEAM[1]} team={TEAM} rows={rows} pob={[]}
+        periodLabel="Sep 2026" showDate onClose={vi.fn()}
+      />,
+    );
+  }
+
+  it('heads each day in the table, so the rows below need no date', async () => {
+    const user = userEvent.setup();
+    monthSheet(spread);
+    await user.click(screen.getByRole('button', { name: /Dr One/ }));
+
+    const headings = screen.getAllByRole('columnheader');
+    expect(headings.map((h) => h.textContent)).toEqual(['5 Sep', '11 Sep']);
+  });
+
+  it('says how many visits when they all fall on ONE day', () => {
+    /* "1 day visit" is what every other card would read, so the day count
+       cannot tell a doctor seen twice before dinner from one seen once. */
+    monthSheet(sameDay);
+    expect(screen.getByText(/2 visits · 5 Sep/)).toBeInTheDocument();
+    expect(screen.queryByText(/day visits/)).not.toBeInTheDocument();
+  });
+
+  it('drops the single clock time once a card holds more than one', async () => {
+    // The earliest of two arrivals is a fact about one of them.
+    monthSheet(sameDay);
+    expect(screen.queryByText(/10:00 AM/)).not.toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /Dr One/ }));
+    expect(screen.getByText('10:00 AM')).toBeInTheDocument();
+    expect(screen.getByText('4:30 PM')).toBeInTheDocument();
+  });
+
+  it('leaves a single visit with its date and time, and no heading', async () => {
+    const user = userEvent.setup();
+    monthSheet([spread[0]]);
+    expect(screen.getByText(/5 Sep · 10:00 AM/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Dr One/ }));
+    expect(screen.queryAllByRole('columnheader')).toHaveLength(0);
+  });
+});

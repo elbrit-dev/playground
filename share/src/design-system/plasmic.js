@@ -39,6 +39,9 @@ import { Tabs } from './components/Tabs';
 import { Switch } from './components/Switch';
 import { Tag } from './components/Tag';
 import { TreeSelect } from './components/TreeSelect';
+import { CountBadge } from './components/CountBadge';
+import { ProgressRing } from './components/ProgressRing';
+import { RingNav } from './components/RingNav';
 
 const SECTION = 'Elbrit Design System';
 
@@ -355,7 +358,8 @@ const stackedBarMeta = {
         { key: 'absent', value: 2, tone: 'danger', label: 'Not reporting' },
       ],
       description:
-        'Percentages are of the segment TOTAL. For a partly-filled track add a '
+        'Any number of [{ key, value, tone, color, label }]. Percentages are of the segment TOTAL. '
+        + 'color (any CSS colour) overrides tone. For a partly-filled track add a '
         + 'trailing neutral segment for the remainder.',
     },
     size: { type: 'choice', options: ['sm', 'md', 'lg'], defaultValue: 'lg' },
@@ -583,6 +587,85 @@ const sheetMeta = {
   },
 };
 
+/* ---- The task strip ----------------------------------------------------
+   RingNav is the bare strip of links, rendering plain anchors. In a Next app
+   use "Elbrit Ring Nav" from ElbritCoreLib, which routes through next/link. */
+
+const progressRingMeta = {
+  name: 'DsProgressRing',
+  displayName: 'DS Progress Ring',
+  section: SECTION,
+  importPath: './src/design-system/components/ProgressRing',
+  importName: 'ProgressRing',
+  defaultStyles: { width: 'hug' },
+  props: {
+    segments: {
+      type: 'object',
+      defaultValue: [
+        { key: 'done', value: 6, tone: 'success', label: 'Done' },
+        { key: 'owed', value: 14, tone: 'danger', label: 'Pending' },
+      ],
+      description:
+        'Same contract as DS Stacked Bar: any number of [{ key, value, tone, color, label }] — color '
+        + '(any CSS colour) overrides tone. Shares of the TOTAL; '
+        + 'a zero segment draws nothing. Pass the remainder as its own segment.',
+    },
+    label: { type: 'string', description: 'Accessible name. Defaults to the segment list.' },
+    children: { type: 'slot', hidePlaceholder: true, description: 'Centred inside the ring.' },
+  },
+};
+
+const countBadgeMeta = {
+  name: 'DsCountBadge',
+  displayName: 'DS Count Badge',
+  section: SECTION,
+  importPath: './src/design-system/components/CountBadge',
+  importName: 'CountBadge',
+  defaultStyles: { width: 'hug' },
+  props: {
+    value: { type: 'number', defaultValue: 14, description: 'Renders nothing at 0.' },
+    max: { type: 'number', defaultValue: 99, description: 'Above this it reads "99+".' },
+    tone: {
+      type: 'choice',
+      options: ['danger', 'brand'],
+      defaultValue: 'danger',
+      description: 'danger = overdue or owed; brand = new but not late.',
+    },
+    label: { type: 'string', description: 'Accessible name, e.g. "14 pending".' },
+  },
+};
+
+const ringNavMeta = {
+  name: 'DsRingNav',
+  displayName: 'DS Ring Nav',
+  section: SECTION,
+  importPath: './src/design-system/components/RingNav',
+  importName: 'RingNav',
+  /* Stretch, never hug: the strip is a size container and sizes its rings
+     from its own width, so it cannot take its width from them. */
+  defaultStyles: { width: 'stretch' },
+  props: {
+    items: {
+      type: 'object',
+      description:
+        'Array of { id, label, href, target, icon, caption, captionTone, iconTone, segments, count, '
+        + 'countTone, statusIcon, statusTone, ariaLabel, disabled }. A tile with no href is shown '
+        + 'but not pressable. icon / statusIcon are PrimeIcons names. Tones: brand, success, '
+        + 'warning, danger, neutral. segments: any number of { value, tone, color, label }, color any '
+        + 'CSS colour (wins over tone). No sample data: renders nothing until items is set. Plain '
+        + 'anchors: for client-side routing use Elbrit Ring Nav.',
+    },
+    ariaLabel: { type: 'string', defaultValue: 'Shortcuts' },
+    onItemClick: {
+      type: 'eventHandler',
+      argTypes: [
+        { name: 'id', type: 'string' },
+        { name: 'href', type: 'string' },
+      ],
+    },
+  },
+};
+
 const REGISTRY = [
   [Button, buttonMeta],
   [Field, fieldMeta],
@@ -606,6 +689,9 @@ const REGISTRY = [
   [Eyebrow, eyebrowMeta],
   [SectionLabel, sectionLabelMeta],
   [Sheet, sheetMeta],
+  [ProgressRing, progressRingMeta],
+  [CountBadge, countBadgeMeta],
+  [RingNav, ringNavMeta],
 ];
 
 /**

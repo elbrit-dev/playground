@@ -37,7 +37,6 @@ import { Editor } from 'primereact/editor';
 import { InputNumber } from 'primereact/inputnumber';
 import { InputText } from 'primereact/inputtext';
 import { Sidebar } from 'primereact/sidebar';
-import { SplitButton } from 'primereact/splitbutton';
 import { TabPanel, TabView } from 'primereact/tabview';
 import React, { Fragment, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
@@ -96,6 +95,7 @@ import { useSlotId } from './DataSlot';
 import FilterSortSidebar from './FilterSortSidebar';
 import MultiselectFilter from './MultiselectFilter';
 import SingleSelectFilter from './SingleSelectFilter';
+import SyncPill from './views/SyncPill';
 
 /**
  * Match main-table buffer init: deep clone, top-level __editingKey__, then keys on nested object-child arrays.
@@ -2358,15 +2358,6 @@ export default function DataProviderNew({
     }
   }, [dataSource, resetInMemoryTableState, handleSync, workerRef]);
 
-  const syncButtonModel = useMemo(() => [
-    {
-      label: 'Hard Refresh',
-      icon: 'pi pi-sync',
-      command: () => {
-        handleHardRefresh();
-      },
-    },
-  ], [handleHardRefresh]);
 
   const updateSort = useCallback((sortMeta) => {
     setTableSortMeta(sortMeta || []);
@@ -5005,9 +4996,6 @@ export default function DataProviderNew({
   const showBreakdownToggle = headerEnabled && enableReport;
   const showBreakdownControls = headerEnabled && enableBreakdown && dateColumn;
   const showSyncButton = headerEnabled && dataSource; // Show sync button for all query data sources (not offline)
-  const isSyncDisabled = executingQuery || (hasMonthSupport && !isValidMonthRange);
-  const syncIconClass = executingQuery ? 'pi pi-spin pi-spinner' : 'pi pi-refresh';
-  const lastUpdatedText = lastUpdatedAt ? formatLastUpdatedDate(lastUpdatedAt) : 'N/A';
 
   // Check if header should be shown (if any selectors are visible)
   const hasHeaderContent = headerEnabled && (showMonthRangePicker || showBreakdownToggle || showBreakdownControls ||
@@ -5213,18 +5201,10 @@ unstyled
 
         {/* Last Updated at with Sync button - Show when using saved query */}
         {showSyncButton && (
-          <div className="flex-1 min-w-[140px] max-w-full sm:flex-none sm:w-auto">
-            <SplitButton
-unstyled
-              outlined
-              severity="secondary"
-              label={<span style={{ fontSize: 'var(--fs-12)', whiteSpace: 'nowrap' }}>{lastUpdatedText}</span>}
-              icon={syncIconClass}
-              onClick={handleSync}
-              model={syncButtonModel}
-              disabled={isSyncDisabled}
-              style={{ height: 'var(--control-h)', minWidth: 'fit-content' }}
-            />
+          <div className="flex-none">
+            {/* SyncPill, not SplitButton: unstyled SplitButton lost its overlay
+                positioning, so "Hard Refresh" rendered inline under an empty chevron box. */}
+            <SyncPill height="var(--control-h)" />
           </div>
         )}
       </div>

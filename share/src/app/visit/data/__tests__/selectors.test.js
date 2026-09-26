@@ -1388,3 +1388,25 @@ describe('leaveDaysOf', () => {
     expect(leaveDaysOf({ id: 'X' }, week)).toEqual([]);
   });
 });
+
+describe('everyonePicks', () => {
+  it('covers the whole roster once: every top-of-chain person with their branch', async () => {
+    const { everyonePicks, subtreeOf } = await import('../selectors');
+    const team = [
+      { id: 'GM', reportsTo: null },
+      { id: 'A1', reportsTo: 'GM' },
+      { id: 'B1', reportsTo: 'A1' },
+      { id: 'R2', reportsTo: 'OUTSIDE' },
+      { id: 'B2', reportsTo: 'R2' },
+      { id: 'LONE', reportsTo: 'GONE' },
+    ];
+    const picks = everyonePicks(team);
+    expect(picks).toEqual([
+      { id: 'GM', includeSubtree: true },
+      { id: 'R2', includeSubtree: true },
+      { id: 'LONE', includeSubtree: true },
+    ]);
+    const covered = new Set(picks.flatMap((p) => subtreeOf(team, p.id).map((m) => m.id)));
+    expect(covered.size).toBe(team.length);
+  });
+});

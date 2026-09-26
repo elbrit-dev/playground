@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { Sidebar } from 'primereact/sidebar';
-import { Button } from '@/design-system';
-import { InputText } from 'primereact/inputtext';
+import { Button, Field, Icon } from '@/design-system';
 import { Checkbox } from 'primereact/checkbox';
 import { startCase, uniq, filter as lodashFilter, toLower, isNil } from 'lodash';
 import { getDataValue, resolveNestedValues } from '../utils/dataAccessUtils';
@@ -504,9 +503,10 @@ unstyled
                   {uniqueValues.length > 0 && (
                     <>
                       <div className="mb-3 flex items-center gap-2 flex-shrink-0 min-w-0">
-                        <div className="p-inputgroup flex-1 min-w-0">
-                          <span style={{ height: 'var(--control-h)' }} className="p-inputgroup-addon flex-shrink-0">
-                            <input
+                        {/* Select-all, then the search Field. This was a lara
+                            `p-inputgroup`, whose CSS `unstyled` drops — the
+                            addon lost its frame and the pair came apart. */}
+                        <input
                               type="checkbox"
                               title="Select all"
                               checked={filteredValues.length > 0 && filteredValues.every(val => selectedValues.includes(val))}
@@ -517,18 +517,17 @@ unstyled
                                   clearAll();
                                 }
                               }}
-                              className="w-4 h-4 text-brand border-line rounded focus:ring-focus"
+                              aria-label="Select all"
+                              className="w-4 h-4 shrink-0 accent-[var(--color-brand)]"
                             />
-                          </span>
-                          <InputText
-unstyled
-                            value={searchTerm}
-                            onChange={(e) => handleSearchChange(e.target.value)}
-                            placeholder="Search"
-                            style={{ height: 'var(--control-h)', minWidth: 0 }}
-                            className="w-full"
-                          />
-                        </div>
+                        <Field
+                          value={searchTerm}
+                          onChange={(v) => handleSearchChange(v)}
+                          placeholder="Search"
+                          aria-label="Search values"
+                          prefix={<Icon name="search" size="sm" />}
+                          className="min-w-0 flex-1"
+                        />
                         <span className="text-xs text-ds-secondary ml-auto whitespace-nowrap flex-shrink-0">
                           {selectedValues.length}/{filteredValues.length}
                         </span>

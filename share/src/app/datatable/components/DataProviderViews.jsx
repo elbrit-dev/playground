@@ -118,6 +118,10 @@ export default function DataProviderViews({
   // The pill opens the ORIGINAL Filter/Sort sidebar — only the button is
   // restyled. Defaults to on when the search bar is enabled.
   compactHeader,
+  // Hide the provider's control row ENTIRELY — month picker, sync, pills and
+  // anything slotted into the row — for a child that brings its own header
+  // (Secondary Entry). The month then comes from the query's own variables.
+  hideProviderHeader = false,
   // --- A–Z letter rail (provider-owned; jumps to [data-letter] sections in the slot) ---
   showLetterRail = false,
   letterRailField = '',
@@ -335,8 +339,14 @@ export default function DataProviderViews({
     // Hide the engine's controls entirely in compact mode (the pills replace them).
     if (compact) next.showProviderHeader = false;
     if (hideNativeFilterSort) next.hideNativeFilterSort = true;
+    // No row at all: the engine's controls AND the slots, since the engine
+    // still draws the row for slotted content alone.
+    if (hideProviderHeader) {
+      next.showProviderHeader = false;
+      delete next.headerSlots;
+    }
     return next;
-  }, [__internal, headerTop, headerLeft, headerRight, compact, hideNativeFilterSort]);
+  }, [__internal, headerTop, headerLeft, headerRight, compact, hideNativeFilterSort, hideProviderHeader]);
 
   // The whole server-paging trick: `overrides.variables` already flows through
   // DataProvider into the GraphQL request (DataProviderNew builds

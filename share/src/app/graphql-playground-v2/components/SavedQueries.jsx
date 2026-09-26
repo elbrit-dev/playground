@@ -10,7 +10,7 @@ import { InputText } from 'primereact/inputtext';
 import { Skeleton } from 'primereact/skeleton';
 import { Tag } from 'primereact/tag';
 import { Tooltip } from 'primereact/tooltip';
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { usePlaygroundStore } from '../stores/usePlaygroundStore';
 import { useSavedQueriesStore } from '../stores/useSavedQueriesStore';
 
@@ -82,41 +82,36 @@ function TooltipContent({ query, formatRelativeTime }) {
     query.readTransformerCodeUpdatedAt ||
     query.writeTransformerCodeUpdatedAt;
 
+  // Sits on the tooltip's dark surface: on-brand text, labels dimmed, values full strength.
+  const labelStyle = { color: 'var(--ds-text-on-brand)', opacity: 0.7, whiteSpace: 'nowrap' };
+  const valueStyle = { color: 'var(--ds-text-on-brand)', fontWeight: 500, textAlign: 'right', wordBreak: 'break-word' };
+  const rows = [
+    ['Body updated', formatRelativeTime(query.bodyUpdatedAt)],
+    ['Variables', formatRelativeTime(query.variablesUpdatedAt)],
+    ...(transformerUpdatedAt ? [['Transformer', formatRelativeTime(transformerUpdatedAt)]] : []),
+    ...(query.lastUpdatedBy ? [['Updated by', query.lastUpdatedBy]] : []),
+  ];
+
   return (
-    <div style={{ padding: 'var(--space-8)', lineHeight: '1.6', maxWidth: '250px' }}>
-      <div style={{ fontWeight: 600, marginBottom: 'var(--space-8)', paddingBottom: 'var(--space-8)', borderBottom: 'var(--border-w) solid var(--border-on-brand)' }}>
+    <div style={{ padding: 'var(--space-4)', lineHeight: '1.5', minWidth: '180px', maxWidth: '260px', color: 'var(--ds-text-on-brand)' }}>
+      <div style={{ fontWeight: 600, fontSize: 'var(--fs-12)', marginBottom: 'var(--space-6)', paddingBottom: 'var(--space-6)', borderBottom: 'var(--border-w) solid var(--border-on-brand)' }}>
         Query Details
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)', fontSize: 'var(--fs-12)' }}>
-        <div>
-          <span style={{ color: 'var(--ds-text-muted)' }}>Body updated:</span>
-          <span style={{ color: 'var(--surface-card)', marginLeft: 'var(--space-4)' }}>{formatRelativeTime(query.bodyUpdatedAt)}</span>
-        </div>
-        <div>
-          <span style={{ color: 'var(--ds-text-muted)' }}>Variables:</span>
-          <span style={{ color: 'var(--surface-card)', marginLeft: 'var(--space-4)' }}>{formatRelativeTime(query.variablesUpdatedAt)}</span>
-        </div>
-        {transformerUpdatedAt && (
-          <div>
-            <span style={{ color: 'var(--ds-text-muted)' }}>Transformer:</span>
-            <span style={{ color: 'var(--surface-card)', marginLeft: 'var(--space-4)' }}>{formatRelativeTime(transformerUpdatedAt)}</span>
-          </div>
-        )}
-        {query.lastUpdatedBy && (
-          <div>
-            <span style={{ color: 'var(--ds-text-muted)' }}>Last updated by:</span>
-            <span style={{ color: 'var(--surface-card)', marginLeft: 'var(--space-4)', wordBreak: 'break-word', display: 'block', marginTop: 'var(--space-4)' }}>
-              {query.lastUpdatedBy}
-            </span>
-          </div>
-        )}
+      <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 'var(--space-12)', rowGap: 'var(--space-4)', fontSize: 'var(--fs-12)' }}>
+        {rows.map(([label, value]) => (
+          <React.Fragment key={label}>
+            <span style={labelStyle}>{label}</span>
+            <span style={valueStyle}>{value}</span>
+          </React.Fragment>
+        ))}
       </div>
     </div>
   );
 }
 
 // QueryItem component with tooltip
-function QueryItem({ query, isSelected, onQueryClick, onDelete, formatRelativeTime }) {
+function QueryItem({ query, isSelected, onQueryClick, onDelete, onToggleDisabled, formatRelativeTime }) {
+  const isDisabled = query.disabled === true;
   // Check if query has any timestamp data to show
   const hasTimestampData = query.bodyUpdatedAt || query.variablesUpdatedAt || query.transformerCodeUpdatedAt || query.readTransformerCodeUpdatedAt || query.writeTransformerCodeUpdatedAt || query.lastUpdatedBy;
 
@@ -161,7 +156,7 @@ function QueryItem({ query, isSelected, onQueryClick, onDelete, formatRelativeTi
   return (
     <>
       {hasTimestampData && (
-        <Tooltip unstyled target={`.${tooltipTargetId}`}>
+        <Tooltip target={`.${tooltipTargetId}`}>
           <TooltipContent query={query} formatRelativeTime={formatRelativeTime} />
         </Tooltip>
       )}
@@ -174,6 +169,7 @@ unstyled
           }`}
         style={{
           backgroundColor: isSelected ? 'var(--intent-info-wash)' : 'var(--surface-card)',
+          opacity: isDisabled ? 0.6 : 1,
         }}
         onClick={(e) => onQueryClick(query, e)}
       >
@@ -191,27 +187,33 @@ unstyled
               </p>
             )}
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <div className="flex items-center gap-1.5">
-              <Tag
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {/* Fixed width + centred text so LIVE / CLIENT / DISABLED line up down the list */}
+            <Tag
 unstyled
-                value={query.clientSave ? 'Client' : 'Live'}
-                severity={query.clientSave ? 'success' : 'warning'}
-                style={{ fontSize: 'var(--fs-10)', padding: 'var(--space-2) var(--space-6)', minWidth: '3rem', textAlign: 'center' }}
-              />
-            </div>
-            {hasTimestampData && (
-              <span
-                className={`${tooltipTargetId} inline-flex items-center justify-center text-ds-muted hover:text-ds-secondary transition-colors cursor-help flex-shrink-0`}
-                onClick={handleInfoIconClick}
-              >
-                <i className="pi pi-info-circle text-xs"></i>
-              </span>
-            )}
+              value={isDisabled ? 'Disabled' : (query.clientSave ? 'Client' : 'Live')}
+              severity={isDisabled ? 'danger' : (query.clientSave ? 'success' : 'warning')}
+              style={{ fontSize: 'var(--fs-10)', padding: 'var(--space-2) 0', width: '4.25rem', justifyContent: 'center', marginRight: 'var(--space-4)' }}
+            />
+            {/* Keep the slot even without timestamps so the action icons stay in columns */}
+            <span
+              className={`query-card-action ${hasTimestampData ? `${tooltipTargetId} text-ds-muted hover:text-ds-secondary cursor-help` : 'invisible'} transition-colors`}
+              onClick={handleInfoIconClick}
+            >
+              <i className="pi pi-info-circle text-xs"></i>
+            </span>
+            <Button
+unstyled
+              icon={isDisabled ? 'pi pi-play' : 'pi pi-ban'}
+              className="ds-button-text ds-button-sm query-card-action"
+              onClick={(e) => onToggleDisabled(query, e)}
+              tooltip={isDisabled ? 'Enable query' : 'Disable query'}
+              tooltipOptions={{ position: 'top' }}
+            />
             <Button
 unstyled
               icon="pi pi-trash"
-              className="ds-button-text ds-button-sm ds-button-danger"
+              className="ds-button-text ds-button-sm ds-button-danger query-card-action"
               onClick={(e) => onDelete(query.id, query.name, e)}
               tooltip="Delete query"
               tooltipOptions={{ position: 'top' }}
@@ -224,7 +226,7 @@ unstyled
 }
 
 export function SavedQueries() {
-  const { queries, loading, selectedQueryId, setSelectedQueryId, loadQueries, deleteQuery } = useSavedQueriesStore();
+  const { queries, loading, selectedQueryId, setSelectedQueryId, loadQueries, deleteQuery, setQueryDisabled } = useSavedQueriesStore();
   const currentQuery = usePlaygroundStore((state) => state.query);
   const { setQuery, setVariables, setTransformerFunction, setSelectedEnvironment } = usePlaygroundStore();
   const [searchTerm, setSearchTerm] = useState('');
@@ -341,6 +343,42 @@ export function SavedQueries() {
     });
   };
 
+  const handleToggleDisabled = (query, event) => {
+    event.stopPropagation();
+    event.preventDefault();
+
+    const toggle = async () => {
+      try {
+        await setQueryDisabled(query.id, !query.disabled);
+      } catch (error) {
+        console.error('Error toggling query:', error);
+      }
+    };
+
+    // Re-enabling is harmless; disabling cuts the query off everywhere, so confirm.
+    if (query.disabled) {
+      toggle();
+      return;
+    }
+    confirmDialog({
+      message: (
+        <div>
+          <p style={{ marginBottom: 'var(--space-8)' }}>
+            Disable "{query.name}"?
+          </p>
+          <p style={{ fontSize: 'var(--fs-13)', color: 'var(--ds-text-muted)' }}>
+            Data tables will stop index-checking, caching and running it, and it
+            won't be available as a nested query. You can re-enable it any time.
+          </p>
+        </div>
+      ),
+      header: 'Disable Query',
+      acceptLabel: 'Disable',
+      rejectLabel: 'Cancel',
+      accept: toggle,
+    });
+  };
+
   return (
     <div className="h-full flex flex-col bg-sunken border-r border-line-subtle">
       <style dangerouslySetInnerHTML={{
@@ -362,6 +400,18 @@ export function SavedQueries() {
         }
         .saved-query-card .ds-button-text .ds-button-icon {
           margin: 0 !important;
+        }
+        /* Info, disable and delete share one square box so they sit evenly spaced */
+        .saved-query-card .query-card-action,
+        .saved-query-card .ds-button-text.query-card-action {
+          display: inline-flex !important;
+          align-items: center;
+          justify-content: center;
+          width: 1.75rem !important;
+          min-width: 1.75rem !important;
+          height: 1.75rem !important;
+          padding: 0 !important;
+          flex-shrink: 0;
         }
       `}} />
       {/* Search Bar */}
@@ -420,6 +470,7 @@ unstyled
                 isSelected={isSelected}
                 onQueryClick={handleQueryClick}
                 onDelete={handleDeleteQuery}
+                onToggleDisabled={handleToggleDisabled}
                 formatRelativeTime={formatRelativeTime}
               />
             );

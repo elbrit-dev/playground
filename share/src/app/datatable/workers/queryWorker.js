@@ -1058,6 +1058,7 @@ async function executeAndCacheIndexQueries(queries, tokenOverride = null) {
     const indexQueryPromises = queries
         .filter(query => {
             if (query.json != null && query.body) return false; // skip offline
+            if (query.disabled === true) return false;
             if (query.clientSave !== true) {
                 return false;
             }

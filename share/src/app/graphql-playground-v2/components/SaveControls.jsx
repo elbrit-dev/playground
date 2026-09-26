@@ -446,6 +446,12 @@ export function SaveControls() {
     const startIso = start.toISOString().slice(0, 10);
     const endIso = end.toISOString().slice(0, 10);
 
+    // Only keep an active month range in step with the variables. Date variables alone
+    // don't make a month query — otherwise clearing the picker would snap straight back.
+    if (!month) {
+      return;
+    }
+
     if (
       month &&
       Array.isArray(month) &&
@@ -2375,10 +2381,10 @@ export function SaveControls() {
             index: validatedIndexQuery,
             variables: validVariablesString,
             month: month !== null,
-            ...(month && Array.isArray(month) && month[0] && {
-              monthDate: month[0].toISOString(),
-              monthIndex: validatedMonthIndexQuery,
-            }),
+            // saveQuery merges, so a cleared month must blank these or the old ones linger
+            ...(month && Array.isArray(month) && month[0]
+              ? { monthDate: month[0].toISOString(), monthIndex: validatedMonthIndexQuery }
+              : { monthDate: null, monthIndex: '' }),
             ...(currentTransformerCode && {
               transformerCode: currentTransformerCode,
             }),
@@ -2819,7 +2825,20 @@ unstyled
 
         {/* Month Picker (range) */}
         <div className="flex flex-col gap-1.5" style={{ width: '100%', minWidth: '280px', maxWidth: '280px' }}>
-          <h3 className="text-sm font-semibold text-body">Month</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-body">Month</h3>
+            {month && (
+              <button
+                type="button"
+                onClick={() => setMonth(null)}
+                title="Not a month query: variables keep their dates, saved as a plain query"
+                className="inline-flex items-center gap-1 text-xs text-ds-secondary hover:text-body"
+              >
+                <i className="pi pi-times text-10" aria-hidden="true" />
+                Clear
+              </button>
+            )}
+          </div>
           <RangePicker
             mode="month"
             value={month}

@@ -1,11 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button } from '@/design-system';
+import { Button, Field, Icon } from '@/design-system';
 import { Checkbox } from 'primereact/checkbox';
 import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
 import { Dialog } from 'primereact/dialog';
-import { InputText } from 'primereact/inputtext';
 import { Toast } from 'primereact/toast';
 import { useRef } from 'react';
 import ProtectedRoute from '@/components/ProtectedRoute';
@@ -214,32 +213,45 @@ function TokensPageInner() {
       </main>
 
       <Dialog unstyled header={editingIndex >= 0 ? 'Edit Token' : 'Add Token'} visible={dialogVisible} onHide={() => setDialogVisible(false)} style={{ width: '34rem' }}>
+        {/* DS Fields, not bare InputTexts: the labels were raw text-sm (larger
+            than the inputs), and the token's `p-inputgroup` is lara CSS that
+            `unstyled` drops — the eye button fell onto its own line. The
+            Field's suffix puts it inside the input. */}
         <div className="flex flex-col gap-3">
-          <div>
-            <label className="block text-sm mb-1">Name</label>
-            <InputText unstyled value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} className="w-full" placeholder="ERP / UAT / DEV" />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Endpoint</label>
-            <InputText unstyled value={form.endpoint} onChange={(e) => setForm((prev) => ({ ...prev, endpoint: e.target.value }))} className="w-full" placeholder="https://.../api/method/graphql" />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Token</label>
-            <div className="p-inputgroup flex-1 w-full">
-              <InputText
-unstyled
-                type={showToken ? 'text' : 'password'}
-                value={form.token}
-                onChange={(e) => setForm((prev) => ({ ...prev, token: e.target.value }))}
-                className="w-full"
-              />
-              <Button type="default" icon={<i className={`pi ${showToken ? 'pi-eye-slash' : 'pi-eye'}`} />} onClick={() => setShowToken((prev) => !prev)}/>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
+          <Field
+            label="Name"
+            value={form.name}
+            onChange={(v) => setForm((prev) => ({ ...prev, name: v }))}
+            placeholder="ERP / UAT / DEV"
+          />
+          <Field
+            label="Endpoint"
+            value={form.endpoint}
+            onChange={(v) => setForm((prev) => ({ ...prev, endpoint: v }))}
+            placeholder="https://.../api/method/graphql"
+          />
+          <Field
+            label="Token"
+            type={showToken ? 'text' : 'password'}
+            value={form.token}
+            onChange={(v) => setForm((prev) => ({ ...prev, token: v }))}
+            placeholder="key:secret"
+            autoComplete="off"
+            suffix={
+              <button
+                type="button"
+                onClick={() => setShowToken((prev) => !prev)}
+                aria-label={showToken ? 'Hide token' : 'Show token'}
+                className="flex items-center text-ds-secondary hover:text-brand-text"
+              >
+                <Icon name={showToken ? 'eye-slash' : 'eye'} size="sm" />
+              </button>
+            }
+          />
+          <label className="flex cursor-pointer items-center gap-2 type-app-body text-body">
             <Checkbox unstyled checked={Boolean(form.isDefault)} onChange={(e) => setForm((prev) => ({ ...prev, isDefault: e.checked }))} />
-            <span>Set as default</span>
-          </div>
+            Set as default
+          </label>
           <div className="flex justify-end gap-2 mt-2">
             <Button type="default" onClick={() => setDialogVisible(false)}>Cancel</Button>
             <Button onClick={upsertRow}>{editingIndex >= 0 ? 'Update' : 'Add'}</Button>

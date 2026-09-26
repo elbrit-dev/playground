@@ -302,3 +302,54 @@ describe('the rep filter', () => {
     expect(planFilterValues([call({ participants: [] })], 'rep')).toEqual([]);
   });
 });
+
+/* Over a month the plan sheet merges a doctor's visits into one card, so a
+   card can span several days — and then "which day is this card" depends on
+   which end of it you are asking about. */
+describe('sorting cards that cover several days', () => {
+  const visit = (date, time, name) => ({
+    participantId: 'E1', participantName: name ?? 'Anil', plannedDate: date, visitTime: `${date} ${time}`,
+  });
+  const merged = (id, doctor, ...visits) => ({
+    id, doctorId: doctor, doctorName: doctor, doctorCity: 'Erode', hq: 'HQ-Erode',
+    doctorSpecialty: 'CARDIO', doctorCategories: ['C'],
+    plannedDate: visits[0].plannedDate,
+    visitTime: visits[0].visitTime,
+    participants: visits,
+  });
+
+  /* SPREAD was seen twice, on the first and the last day of the window;
+     MIDDLE once, between them. */
+  const SPREAD = merged('SPREAD', 'DR-1', visit('2026-09-01', '09:00:00'), visit('2026-09-23', '16:00:00'));
+  const MIDDLE = merged('MIDDLE', 'DR-2', visit('2026-09-10', '11:00:00'));
+
+  it('leads with the most recent visit, not the oldest one on the card', () => {
+    /* SPREAD's latest is the 23rd, later than MIDDLE's only visit, so it
+       heads a latest-first list. Ranked by the card's `visitTime` — the
+       earliest of its visits, the 1st — it would have come last. */
+    expect(filterPlan([MIDDLE, SPREAD], { sorts: { visitDate: 'desc' } }).map((c) => c.id))
+      .toEqual(['SPREAD', 'MIDDLE']);
+  });
+
+  it('leads with the earliest visit when asked for oldest first', () => {
+    expect(filterPlan([MIDDLE, SPREAD], { sorts: { visitDate: 'asc' } }).map((c) => c.id))
+      .toEqual(['SPREAD', 'MIDDLE']);
+  });
+
+  it('reads the same end for the time-of-day order', () => {
+    /* Ascending compares SPREAD's 09:00 against MIDDLE's 11:00; descending
+       compares SPREAD's 16:00 against the same 11:00. The card leads both
+       lists, and for opposite reasons. */
+    expect(filterPlan([MIDDLE, SPREAD], { sorts: { visitTime: 'asc' } }).map((c) => c.id))
+      .toEqual(['SPREAD', 'MIDDLE']);
+    expect(filterPlan([MIDDLE, SPREAD], { sorts: { visitTime: 'desc' } }).map((c) => c.id))
+      .toEqual(['SPREAD', 'MIDDLE']);
+  });
+
+  it('still puts a card with nothing done at the end', () => {
+    const pending = { ...merged('PEND', 'DR-3', visit('2026-09-05', '10:00:00')), visitTime: null,
+      participants: [{ participantId: 'E1', participantName: 'Anil', plannedDate: '2026-09-05', visitTime: null }] };
+    expect(filterPlan([pending, MIDDLE], { sorts: { visitDate: 'asc' } }).map((c) => c.id))
+      .toEqual(['MIDDLE', 'PEND']);
+  });
+});

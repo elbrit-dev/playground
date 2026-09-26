@@ -118,7 +118,7 @@ function QueryHistoryItem({ query, isSelected, onQueryClick, onDelete, formatRel
   return (
     <>
       {hasTimestampData && (
-        <Tooltip unstyled target={`.${tooltipTargetId}`}>
+        <Tooltip target={`.${tooltipTargetId}`}>
           <TooltipContent query={query} formatRelativeTime={formatRelativeTime} />
         </Tooltip>
       )}

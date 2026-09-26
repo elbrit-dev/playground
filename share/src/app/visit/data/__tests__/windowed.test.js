@@ -5,263 +5,217 @@ vi.mock('@/app/graphql-playground/constants', () => ({
 }));
 
 const { fetchVisitDataset, clearVisitCache } = await import('../liveSource');
+const { planned, happened, visitsByHour } = await import('../selectors');
 
-/* The window is the pagination key: this ERP cannot page by cursor, so a
-   range that comes back short is halved and retried. These drive the real
-   fetchVisitDataset through a stubbed transport and count the requests. */
+/* The visits are COUNTED on the server (elbrit_visit_summary) — a month is
+   ~55,000 visits on production, far too many to download and count here —
+   and the rows behind a list are fetched only when it opens
+   (elbrit_visit_rows). These drive the real fetchVisitDataset through a
+   stubbed ERP and check what it asks for and what it makes of the answers. */
 
-function stubErp({ eventsPerDay = 1, pageSize = 20000 } = {}) {
-  const windows = [];
-  vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
-    const { query, variables } = JSON.parse(init.body);
-    const from = variables?.f?.find((x) => x.operator === 'GTE')?.value ?? '';
-    const to = variables?.f?.find((x) => x.operator === 'LTE')?.value ?? '';
+const days = (from, to) => {
+  const out = [];
+  for (let d = new Date(`${from}T00:00:00Z`); d <= new Date(`${to}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1)) {
+    out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
+};
 
-    if (query.includes('Employees(')) {
-      return { status: 200, json: async () => ({ data: { Employees: { totalCount: 0, edges: [] } } }) };
+function stubErp({ perDay = 1, team = [] } = {}) {
+  const calls = [];
+  vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+    const u = String(url);
+    const body = init?.body ? JSON.parse(init.body) : {};
+    if (u.endsWith('/api/method/elbrit_visit_summary')) {
+      calls.push({ method: 'summary', ...body });
+      const list = days(body.from, body.to);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          message: {
+            employees: ['E1'],
+            days: list,
+            hqs: ['HQ-Erode'],
+            // per day: `perDay` done at 10:00, verified, solo
+            rows: list.map((_, d) => [0, d, 0, 1, 0, 10, perDay]),
+            visits: list.length * perDay,
+          },
+        }),
+      };
     }
-    if (query.includes('RoleProfiles(')) {
-      return { status: 200, json: async () => ({ data: { RoleProfiles: { totalCount: 0, edges: [] } } }) };
+    if (u.endsWith('/api/method/elbrit_visit_rows')) {
+      calls.push({ method: 'rows', ...body });
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          message: {
+            rows: [{
+              eventId: 'EV1', plannedDate: body.from, planOwnerId: 'E1', doctorId: 'L1', doctorName: 'Dr A',
+              doctorCity: '', doctorSpecialty: '', doctorCategories: [], hq: 'HQ-Erode', department: '', pobGiven: false,
+              visitTime: `${body.from} 10:05:00`, distanceKm: null, forceVisit: false, forceVisitReason: '',
+              participantRef: 'E1', participantRefType: 'Employee', participantCount: 1,
+            }],
+          },
+        }),
+      };
     }
-    if (query.includes('LeaveApplications(')) {
-      return { status: 200, json: async () => ({ data: { LeaveApplications: { totalCount: 0, edges: [] } } }) };
+    if (u.includes('get_logged_user')) {
+      return { ok: true, status: 200, json: async () => ({ message: 'viewer@x.org' }) };
     }
-    if (query.includes('Quotations(')) {
-      return { status: 200, json: async () => ({ data: { Quotations: { totalCount: 0, edges: [] } } }) };
-    }
-    if (query.includes('Events(')) {
-      windows.push(`${from.slice(0, 10)}..${to.slice(0, 10)}`);
-      const days = Math.round((new Date(to.slice(0, 10)) - new Date(from.slice(0, 10))) / 86400000) + 1;
-      const total = Math.max(0, days) * eventsPerDay;
-      const edges = Array.from({ length: Math.min(total, pageSize) }, (_, i) => ({
+    const { query } = body;
+    calls.push({ method: 'graphql', query: (query?.match(/query (\w+)/) || [, '?'])[1] });
+    const empty = { totalCount: 0, edges: [] };
+    const employees = {
+      totalCount: team.length,
+      edges: team.map((e) => ({
         node: {
-          name: `EV${from.slice(0, 10)}-${i}`, subject: '', starts_on: `${from.slice(0, 10)} 00:00:00`,
-          custom_employee_id: { name: 'E1' }, custom_doctor: null, custom_hq: null,
-          custom_department: null, custom_pob_given: 0, event_participants: [],
+          name: e.id, employee_name: e.name, designation: { name: 'Business Executive' }, reports_to: { name: null },
+          custom_territory: { name: 'HQ-Erode' }, user_id: { name: e.email ?? null }, custom_role_profile__name: null,
         },
-      }));
-      return { status: 200, json: async () => ({ data: { Events: { totalCount: total, edges } } }) };
-    }
-    return { status: 200, json: async () => ({ data: {} }) };
+      })),
+    };
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { Employees: employees, RoleProfiles: empty, Quotations: empty, LeaveApplications: empty } }),
+    };
   }));
-  return windows;
+  return calls;
 }
 
-const run = () => fetchVisitDataset({
-  anchorDate: '2026-09-30', month: '2026-09', monthTo: '2026-09', gqlToken: 'token a:b',
+const run = (month = '2026-09', extra = {}) => fetchVisitDataset({
+  anchorDate: '2026-09-30', month, monthTo: month, gqlToken: 'token a:b', ...extra,
 });
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('date-window pagination', () => {
-  it('cuts the window into week-sized requests and asks for today on its own', async () => {
-    /* The ERP charges for rows scanned and offers no other lever — no cursor
-       paging with a filter, no aggregates — so a month that FITS is still cut
-       up and run in parallel. Five week shards over September, plus the
-       one-day query wave 1 paints from. */
-    const windows = stubErp({ eventsPerDay: 1 });
-    const out = await run();
-
-    expect(windows).toContain('2026-09-30..2026-09-30');
-    const shards = windows.filter((w) => w !== '2026-09-30..2026-09-30');
-    expect(shards).toHaveLength(5);
-    for (const shard of shards) {
-      const [from, to] = shard.split('..');
-      expect(Math.round((new Date(to) - new Date(from)) / 86400000)).toBeLessThan(7);
-    }
-    expect(out.truncated.visits).toBe(false);
-  });
-
-  it('covers the whole window exactly once, with no gap and no overlap', async () => {
-    // A shard boundary off by a day is a day of visits missing from a total.
-    const windows = stubErp({ eventsPerDay: 1 });
+describe('visits counted on the server', () => {
+  it('asks for the window once, with the Sales roster, and never for raw visit rows', async () => {
+    clearVisitCache();
+    const calls = stubErp({ team: [{ id: 'E1', name: 'Ravi', email: 'ravi@x.org' }] });
     await run();
-
-    const shards = windows
-      .filter((w) => w !== '2026-09-30..2026-09-30')
-      .map((w) => w.split('..'))
-      .sort((a, b) => a[0].localeCompare(b[0]));
-
-    expect(shards[0][0]).toBe('2026-09-01');
-    expect(shards.at(-1)[1]).toBe('2026-09-30');
-    for (let i = 1; i < shards.length; i += 1) {
-      const gap = Math.round((new Date(shards[i][0]) - new Date(shards[i - 1][1])) / 86400000);
-      expect(gap).toBe(1);
-    }
+    const summaries = calls.filter((c) => c.method === 'summary');
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toMatchObject({ from: '2026-09-01', to: '2026-09-30', sales: [['E1', 'ravi@x.org']] });
+    expect(calls.some((c) => c.query === 'VisitsInWindow')).toBe(false);
   });
 
-  it('splits the window and still returns every row when it does not fit', async () => {
-    /* 40 events/day over 30 days against a 100-row page: a single request
-       cannot hold it, so the range halves until each page fits. */
-    const windows = stubErp({ eventsPerDay: 40, pageSize: 100 });
+  it('reads each count line as the visits it stands for', async () => {
+    clearVisitCache();
+    stubErp({ perDay: 40 });
     const out = await run();
-    expect(windows.length).toBeGreaterThan(1);
-    expect(out.truncated.visits).toBe(false);
-    // Nothing lost: 30 days x 40 = 1200 rows, none dropped by the splitting.
-    expect(out.rows).toHaveLength(1200);
+    // 30 days x 40 visits, from 30 lines
+    expect(out.rows).toHaveLength(30);
+    expect(planned(out.rows)).toBe(1200);
+    expect(happened(out.rows)).toBe(1200);
+    expect(visitsByHour(out.rows)[10].verified).toBe(1200);
+    expect(out.countsOnly).toBe(true);
   });
 
-  it('reports truncation only when a SINGLE DAY overflows', async () => {
-    // Nothing left to split, so the screen is told rather than lying.
-    stubErp({ eventsPerDay: 500, pageSize: 100 });
+  it('is never truncated — the server counts the whole window', async () => {
+    clearVisitCache();
+    stubErp({ perDay: 5000 });
     const out = await run();
-    expect(out.truncated.visits).toBe(true);
-  });
-
-  it('keeps visits and POB truncation separate', async () => {
-    const out = await (async () => { stubErp({ eventsPerDay: 1 }); return run(); })();
     expect(out.truncated).toEqual({ visits: false, pob: false });
   });
 });
 
 describe('request caching', () => {
-  /* Changing the month used to re-issue four requests whose answers could not
-     have changed: the 496-row roster, the 441-row role-profile tree, today's
-     leave and today's visits. They sit inside a Promise.all, so the whole
-     screen waited on them. */
-  function countQueries() {
-    const seen = [];
-    vi.stubGlobal('fetch', vi.fn(async (_u, init) => {
-      seen.push((JSON.parse(init.body).query.match(/query (\w+)/) || [, '?'])[1]);
-      const empty = { totalCount: 0, edges: [] };
-      return { status: 200, json: async () => ({ data: {
-        Events: empty, Employees: empty, RoleProfiles: empty, Quotations: empty, LeaveApplications: empty,
-      } }) };
-    }));
-    return seen;
-  }
-  const load = (month) => fetchVisitDataset({
-    anchorDate: '2026-09-23', month, monthTo: month, gqlToken: 'token a:b',
-  });
-
   it('refetches only what the month actually changes', async () => {
     clearVisitCache();
-    const seen = countQueries();
+    const calls = stubErp();
+    await run('2026-09');
+    expect(calls.map((c) => c.query)).toContain('ActiveEmployees');
+    expect(calls.map((c) => c.query)).toContain('RoleProfileTree');
 
-    await load('2026-09');
-    expect(seen).toContain('ActiveEmployees');
-    expect(seen).toContain('RoleProfileTree');
-
-    seen.length = 0;
-    await load('2026-08');
-    await load('2026-07');
-
-    // The roster and the role tree do not vary by month, so they are asked
-    // for once and not again.
-    expect(seen).not.toContain('ActiveEmployees');
-    expect(seen).not.toContain('RoleProfileTree');
-    expect(seen).not.toContain('ApprovedLeaveOn');
+    calls.length = 0;
+    await run('2026-08');
+    await run('2026-07');
+    const asked = calls.map((c) => c.query);
+    expect(asked).not.toContain('ActiveEmployees');
+    expect(asked).not.toContain('RoleProfileTree');
   });
 
   it('keys the cache on the token, so one viewer never sees another roster', async () => {
     clearVisitCache();
-    const seen = countQueries();
-
-    await load('2026-09');
-    seen.length = 0;
-    await fetchVisitDataset({ anchorDate: '2026-09-23', month: '2026-09', monthTo: '2026-09', gqlToken: 'token other:x' });
-
-    // A different token is a different permission scope: serving it the
-    // first roster would be a leak, not a stale read.
-    expect(seen).toContain('ActiveEmployees');
+    const calls = stubErp();
+    await run();
+    calls.length = 0;
+    await run('2026-09', { gqlToken: 'token other:x' });
+    expect(calls.map((c) => c.query)).toContain('ActiveEmployees');
   });
 
   it('does not cache a failure', async () => {
     clearVisitCache();
-    vi.stubGlobal('fetch', vi.fn(async () => ({ status: 500, json: async () => ({ exc_type: 'ServerError' }) })));
-    await expect(load('2026-09')).rejects.toThrow();
-
-    const seen = countQueries();
-    await load('2026-09');
-    // A blip must not keep the screen broken for the whole TTL.
-    expect(seen).toContain('ActiveEmployees');
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500, json: async () => ({ exc_type: 'ServerError' }) })));
+    await expect(run()).rejects.toThrow();
+    const calls = stubErp();
+    await run();
+    expect(calls.map((c) => c.query)).toContain('ActiveEmployees');
   });
 });
 
-/* The screen opens on Today and used to block on a month: 1099 events fetched
-   so that ~50 could be shown. The dataset now arrives in three waves, and what
-   matters about them is that no wave is allowed to look complete. */
 describe('waves', () => {
-  it('emits today, then the window, then the money', async () => {
+  it('today inside the window: the window, then the money — today is not counted twice', async () => {
     clearVisitCache();
-    stubErp({ eventsPerDay: 1 });
+    const calls = stubErp();
     const waves = [];
-    const out = await fetchVisitDataset({
-      anchorDate: '2026-09-30', month: '2026-09', monthTo: '2026-09', gqlToken: 'token a:b',
-      onWave: (d) => waves.push(d),
-    });
+    const out = await run('2026-09', { onWave: (d) => waves.push(d) });
+    expect(waves.map((w) => w.ready)).toEqual([
+      { today: true, window: true, pob: false },
+      { today: true, window: true, pob: true },
+    ]);
+    expect(calls.filter((c) => c.method === 'summary')).toHaveLength(1);
+    expect(planned(out.rows)).toBe(30);
+  });
 
+  it('a past month: today first, then the window, then the money — and today is kept', async () => {
+    clearVisitCache();
+    const calls = stubErp();
+    const waves = [];
+    const out = await run('2026-08', { onWave: (d) => waves.push(d) });
     expect(waves.map((w) => w.ready)).toEqual([
       { today: true, window: false, pob: false },
       { today: true, window: true, pob: false },
       { today: true, window: true, pob: true },
     ]);
-    // The promise still resolves to the whole thing, for callers that want it.
-    expect(out.ready).toEqual({ today: true, window: true, pob: true });
-  });
-
-  it('carries only today in the first wave', async () => {
-    clearVisitCache();
-    stubErp({ eventsPerDay: 1 });
-    const waves = [];
-    await fetchVisitDataset({
-      anchorDate: '2026-09-30', month: '2026-09', monthTo: '2026-09', gqlToken: 'token a:b',
-      onWave: (d) => waves.push(d),
-    });
-
-    // One day at one event a day; the month behind it is thirty.
-    expect(waves[0].rows).toHaveLength(1);
-    expect(waves[1].rows).toHaveLength(30);
-  });
-
-  it('does not count today twice when it falls inside the window', async () => {
-    /* Wave 1 always asks for today on its own — that is what makes the first
-       paint cheap — so the window it lands inside must REPLACE it rather than
-       add to it, or every one of this morning's visits is counted twice. */
-    clearVisitCache();
-    stubErp({ eventsPerDay: 1 });
-    const out = await fetchVisitDataset({
-      anchorDate: '2026-09-30', month: '2026-09', monthTo: '2026-09', gqlToken: 'token a:b',
-    });
-    expect(out.rows).toHaveLength(30);
-  });
-
-  it('keeps today when the window is a past month', async () => {
-    /* The DAY view is a right-now fact whichever month is picked: an August
-       dataset with no rows for today reports the whole team as not reported
-       the moment the reader flips back to Today. */
-    clearVisitCache();
-    stubErp({ eventsPerDay: 1 });
-    const out = await fetchVisitDataset({
-      anchorDate: '2026-09-30', month: '2026-08', monthTo: '2026-08', gqlToken: 'token a:b',
-    });
-    // 31 August days plus the one day of today, which no shard covered.
-    expect(out.rows).toHaveLength(32);
-    expect(out.rows.some((r) => r.plannedDate === '2026-09-30')).toBe(true);
+    expect(waves[0].rows.every((r) => r.plannedDate === '2026-09-30')).toBe(true);
+    expect(calls.filter((c) => c.method === 'summary').map((c) => `${c.from}..${c.to}`).sort()).toEqual([
+      '2026-08-01..2026-08-31',
+      '2026-09-30..2026-09-30',
+    ]);
+    expect(planned(out.rows)).toBe(32);
   });
 
   it('holds the money back rather than reporting it as zero', async () => {
     clearVisitCache();
-    stubErp({ eventsPerDay: 1 });
+    stubErp();
     const waves = [];
-    await fetchVisitDataset({
-      anchorDate: '2026-09-30', month: '2026-09', monthTo: '2026-09', gqlToken: 'token a:b',
-      onWave: (d) => waves.push(d),
-    });
-    // Empty AND flagged not-ready: the consumer needs to tell "no orders" from
-    // "no orders yet", and an empty array alone cannot say which.
+    await run('2026-09', { onWave: (d) => waves.push(d) });
     expect(waves[0].pob).toEqual([]);
     expect(waves[0].ready.pob).toBe(false);
-    expect(waves[2].ready.pob).toBe(true);
+    expect(waves.at(-1).ready.pob).toBe(true);
   });
 
   it('works with no onWave at all', async () => {
-    // The old contract: one promise, everything in it.
     clearVisitCache();
-    stubErp({ eventsPerDay: 1 });
-    const out = await fetchVisitDataset({
-      anchorDate: '2026-09-30', month: '2026-09', monthTo: '2026-09', gqlToken: 'token a:b',
+    stubErp();
+    const out = await run();
+    expect(planned(out.rows)).toBe(30);
+  });
+});
+
+describe('the rows behind a list', () => {
+  it('asks elbrit_visit_rows for exactly that list, with the roster, and attributes the rows', async () => {
+    clearVisitCache();
+    const calls = stubErp({ team: [{ id: 'E1', name: 'Ravi', email: 'ravi@x.org' }] });
+    const out = await run();
+    const rows = await out.loadRows({ mode: 'plan', member: 'E1', from: '2026-09-01', to: '2026-09-30' });
+    expect(calls.find((c) => c.method === 'rows')).toMatchObject({
+      mode: 'plan', member: 'E1', from: '2026-09-01', to: '2026-09-30', sales: [['E1', 'ravi@x.org']],
     });
-    expect(out.rows).toHaveLength(30);
+    expect(rows[0]).toMatchObject({ eventId: 'EV1', employeeId: 'E1', participantId: 'E1', employeeName: 'Ravi' });
   });
 });

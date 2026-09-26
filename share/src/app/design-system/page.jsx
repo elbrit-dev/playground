@@ -25,6 +25,9 @@ import {
   SegmentedControl,
   Select,
   StackedBar,
+  CountBadge,
+  ProgressRing,
+  RingNav,
   StatusPill,
   Switch,
   Tabs,
@@ -365,6 +368,49 @@ export default function DesignSystemPage() {
                 ]}
               />
             </div>
+          </Row>
+          <Row label="RingNav — links to work items">
+            {/* Overdue with a badge, due today, done, two-part, and one with
+                no href — every state a tile has, in one strip. Links are
+                cancelled here so pressing one does not leave the page. */}
+            <div data-surface="app" className="w-[420px] bg-surface">
+              <RingNav
+                onItemClick={(id, href, event) => event.preventDefault()}
+                ariaLabel="Daily tasks"
+                items={[
+                  {
+                    id: 'secondary', label: 'Secondary', href: '#secondary', icon: 'calendar-clock', caption: '5 Aug',
+                    captionTone: 'danger', count: 14, statusIcon: 'pencil',
+                    segments: [{ key: 'd', value: 6, tone: 'success' }, { key: 'o', value: 14, tone: 'danger' }],
+                  },
+                  {
+                    id: 'support', label: 'Support', href: '#support', icon: 'file-check', caption: 'Today', captionTone: 'warning',
+                    count: 120, statusIcon: 'check-square', statusTone: 'neutral',
+                    segments: [{ key: 'o', value: 1, tone: 'danger' }],
+                  },
+                  {
+                    id: 'leave', label: 'Leave', href: '#leave', icon: 'calendar', iconTone: 'success', statusIcon: 'check-square',
+                    statusTone: 'neutral', segments: [{ key: 'd', value: 1, tone: 'success' }],
+                  },
+                  {
+                    id: 'updates', label: 'Updates', href: '#updates', icon: 'megaphone', count: 2, countTone: 'brand',
+                    statusIcon: 'megaphone', statusTone: 'warning',
+                    segments: [{ key: 'a', value: 1, tone: 'danger' }, { key: 'b', value: 1, tone: 'danger' }],
+                  },
+                  { id: 'survey', label: 'Survey', icon: 'comments' },
+                ]}
+              />
+            </div>
+          </Row>
+          <Row label="ProgressRing / CountBadge">
+            <ProgressRing segments={[{ key: 'd', value: 6, tone: 'success' }, { key: 'o', value: 14, tone: 'danger' }]} />
+            <ProgressRing segments={[{ key: 'd', value: 1, tone: 'success' }]} />
+            {/* All zero: the neutral track, no arcs. */}
+            <ProgressRing segments={[{ key: 'd', value: 0, tone: 'success' }]} />
+            <CountBadge value={1} />
+            <CountBadge value={14} />
+            <CountBadge value={140} />
+            <CountBadge value={3} tone="brand" />
           </Row>
           <Row label="SegmentedControl — render">
             <SegmentedControl

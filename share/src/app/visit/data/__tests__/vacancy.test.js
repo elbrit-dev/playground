@@ -14,6 +14,11 @@ const { fetchVisitDataset, clearVisitCache } = await import('../liveSource');
 
 function stub(employees) {
   vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+    /* The visits are counted server-side now; an empty month is enough here. */
+    if (String(_url).endsWith('/elbrit_visit_summary')) {
+      return { ok: true, status: 200, json: async () => ({ message: { employees: [], days: [], hqs: [], rows: [] } }) };
+    }
+    if (String(_url).includes('get_logged_user')) return { ok: true, status: 200, json: async () => ({ message: null }) };
     const { query } = JSON.parse(init.body);
     const empty = { totalCount: 0, edges: [] };
     if (query.includes('Employees(')) {
