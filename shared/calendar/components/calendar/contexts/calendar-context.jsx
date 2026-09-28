@@ -453,8 +453,11 @@ export function CalendarProvider({
 
 		// An empty hierarchy is as good as a failed one for sharing: it has no
 		// managers in it.
-		const failed = errors.employees || errors.roles || !nextRoleEdges?.length;
-		setTeamDataError(failed ? errors.employees || errors.roles || new Error("Role hierarchy came back empty") : null);
+		// A users list of just the logged-in person is the self-only fallback:
+		// it has no managers in it either.
+		const failed =
+			errors.employees || errors.roles || !nextRoleEdges?.length || (nextUsers?.length ?? 0) <= 1;
+		setTeamDataError(failed ? errors.employees || errors.roles || new Error("Team data came back empty") : null);
 		return !failed;
 	}, []);
 

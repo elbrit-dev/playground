@@ -862,7 +862,13 @@ async function fetchEventWindow(filter) {
       throw error;
     }
 
-    if (!connection) return nodes ?? [];
+    // No `Events` in the reply is not "no events": it is another request's
+    // answer or ERP's intermittent empty reply. Returning [] here blanked a
+    // whole week with no error, so let the caller retry.
+    if (!connection?.edges) {
+      if (nodes) return nodes;
+      throw new Error("ERP reply carried no Events");
+    }
 
     nodes = connection.edges.map((edge) => edge.node);
 
@@ -883,20 +889,37 @@ async function fetchEventWindow(filter) {
    when several are in flight (see the Support Report's note on it), so every
    event must start inside the slice it was asked for, or the slice is asked
    again. */
+const SLICE_ATTEMPTS = 4;
+
 async function fetchEventSlice(from, to, attempt = 1) {
-  const nodes = await fetchEventWindow([
-    { fieldname: "starts_on", operator: "GTE", value: from.toISOString() },
-    { fieldname: "starts_on", operator: "LTE", value: to.toISOString() },
-  ]);
-  const foreign = nodes.some((node) => {
-    const start = parseErpDateValue(node?.starts_on);
-    return start && (start < new Date(from.getTime() - DAY_MS) || start > new Date(to.getTime() + DAY_MS));
-  });
-  if (foreign && attempt < 4) {
+  let nodes;
+  let problem = null;
+
+  try {
+    nodes = await fetchEventWindow([
+      { fieldname: "starts_on", operator: "GTE", value: from.toISOString() },
+      { fieldname: "starts_on", operator: "LTE", value: to.toISOString() },
+    ]);
+    const foreign = nodes.some((node) => {
+      const start = parseErpDateValue(node?.starts_on);
+      return start && (start < new Date(from.getTime() - DAY_MS) || start > new Date(to.getTime() + DAY_MS));
+    });
+    if (foreign) problem = new Error("ERP answered this slice with another request's events");
+  } catch (error) {
+    problem = error;
+  }
+
+  if (!problem) return nodes;
+
+  if (attempt < SLICE_ATTEMPTS) {
     await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
     return fetchEventSlice(from, to, attempt + 1);
   }
-  return nodes;
+
+  // Fail the load rather than show a week that is silently empty or holds
+  // the wrong rows: reloadEvents leaves the calendar's current events in
+  // place when this throws.
+  throw problem;
 }
 
 async function inPool(items, limit, run) {
@@ -913,11 +936,20 @@ async function inPool(items, limit, run) {
   return out;
 }
 
+// Slicing is for the bounded views (day/week/month, and the year Sync at 53
+// slices). The agenda view asks for 2025-01-01..2100-12-31 — about 3,960
+// weeks — so a range that long is read as one window instead.
+const MAX_SLICED_RANGE_DAYS = 400;
+
 async function fetchRawEventNodes(startDate, endDate) {
   const slices = [];
-  for (let t = startDate.getTime(); t <= endDate.getTime(); t += SLICE_DAYS * DAY_MS) {
-    const to = Math.min(t + SLICE_DAYS * DAY_MS - 1000, endDate.getTime());
-    slices.push([new Date(t), new Date(to)]);
+  if ((endDate.getTime() - startDate.getTime()) / DAY_MS > MAX_SLICED_RANGE_DAYS) {
+    slices.push([startDate, endDate]);
+  } else {
+    for (let t = startDate.getTime(); t <= endDate.getTime(); t += SLICE_DAYS * DAY_MS) {
+      const to = Math.min(t + SLICE_DAYS * DAY_MS - 1000, endDate.getTime());
+      slices.push([new Date(t), new Date(to)]);
+    }
   }
 
   const carryIn = fetchEventWindow([
