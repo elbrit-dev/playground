@@ -14,6 +14,18 @@ import "../share/src/app/graphql-playground/styles/graphql-playground.css";
 
 import "@calendar/styles/globals.css";
 
+// Local-dev only: set NEXT_PUBLIC_DEV_ERROR_OVERLAY=off in .env to stop logged
+// errors (e.g. from share/) opening the Next.js error overlay. They still print
+// to the console as warnings. Unset/any other value = normal behaviour, and it
+// never applies outside `next dev`.
+if (
+  typeof window !== "undefined" &&
+  process.env.NODE_ENV === "development" &&
+  process.env.NEXT_PUBLIC_DEV_ERROR_OVERLAY === "off"
+) {
+  console.error = (...args) => console.warn("[overlay off]", ...args);
+}
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
