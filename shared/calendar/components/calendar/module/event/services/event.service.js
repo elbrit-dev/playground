@@ -815,10 +815,24 @@ export async function fetchEventsByRange(startDate, endDate, view, options = {})
 // that never loaded or refreshed at all (page 1's rows were discarded with the
 // exception). Rather than walk cursors, ask for a window large enough to hold
 // the whole answer and widen it if ERP reports there is more.
-const INITIAL_EVENT_WINDOW = 500;
-const MAX_EVENT_WINDOW = 8000;
+//
+// THE RANGE IS READ IN WEEK-SIZED SLICES, A FEW AT A TIME. It used to be one
+// request for everything starting on or before the range's END -- no lower
+// bound -- trimmed to the range afterwards, and capped at 8,000 rows. That
+// read all of history to show one month, and once a manager can see their
+// team's Doctor Visit plans (about 9,000 a month for an SM, measured on
+// 28 Sep 2026) the cap cut visits from every view. A slice holds one week:
+// a few hundred rows for a rep, a few thousand for a manager.
+const INITIAL_EVENT_WINDOW = 2000;
+const MAX_EVENT_WINDOW = 20000;
+const SLICE_DAYS = 7;
+const SLICE_CONCURRENCY = 3;
+// Multi-day events (leave, tours) that began before the range but run into
+// it: looked up separately, from this far back, with an ends_on bound.
+const CARRY_IN_DAYS = 45;
+const DAY_MS = 86400000;
 
-async function fetchRawEventNodes(filter) {
+async function fetchEventWindow(filter) {
   let windowSize = INITIAL_EVENT_WINDOW;
   let nodes = null;
 
@@ -856,13 +870,78 @@ async function fetchRawEventNodes(filter) {
 
     if (windowSize >= MAX_EVENT_WINDOW) {
       console.warn(
-        `Event fetch truncated at ${MAX_EVENT_WINDOW} rows — some events are not being shown.`
+        `Event fetch truncated at ${MAX_EVENT_WINDOW} rows in one week — some events are not being shown.`
       );
       return nodes;
     }
 
     windowSize = Math.min(windowSize * 2, MAX_EVENT_WINDOW);
   }
+}
+
+/* One slice, checked: this ERP can hand one request another request's answer
+   when several are in flight (see the Support Report's note on it), so every
+   event must start inside the slice it was asked for, or the slice is asked
+   again. */
+async function fetchEventSlice(from, to, attempt = 1) {
+  const nodes = await fetchEventWindow([
+    { fieldname: "starts_on", operator: "GTE", value: from.toISOString() },
+    { fieldname: "starts_on", operator: "LTE", value: to.toISOString() },
+  ]);
+  const foreign = nodes.some((node) => {
+    const start = parseErpDateValue(node?.starts_on);
+    return start && (start < new Date(from.getTime() - DAY_MS) || start > new Date(to.getTime() + DAY_MS));
+  });
+  if (foreign && attempt < 4) {
+    await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
+    return fetchEventSlice(from, to, attempt + 1);
+  }
+  return nodes;
+}
+
+async function inPool(items, limit, run) {
+  const out = new Array(items.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (next < items.length) {
+        const i = next++;
+        out[i] = await run(items[i]);
+      }
+    })
+  );
+  return out;
+}
+
+async function fetchRawEventNodes(startDate, endDate) {
+  const slices = [];
+  for (let t = startDate.getTime(); t <= endDate.getTime(); t += SLICE_DAYS * DAY_MS) {
+    const to = Math.min(t + SLICE_DAYS * DAY_MS - 1000, endDate.getTime());
+    slices.push([new Date(t), new Date(to)]);
+  }
+
+  const carryIn = fetchEventWindow([
+    { fieldname: "starts_on", operator: "GTE", value: new Date(startDate.getTime() - CARRY_IN_DAYS * DAY_MS).toISOString() },
+    { fieldname: "starts_on", operator: "LT", value: startDate.toISOString() },
+    { fieldname: "ends_on", operator: "GTE", value: startDate.toISOString() },
+  ]).catch((error) => {
+    // Only multi-day events that began earlier ride on this; the range itself
+    // does not depend on it.
+    console.warn("Could not read events carried into this range", error);
+    return [];
+  });
+
+  const [parts, carried] = await Promise.all([
+    inPool(slices, SLICE_CONCURRENCY, ([from, to]) => fetchEventSlice(from, to)),
+    carryIn,
+  ]);
+
+  // A slice boundary and the carry-in can both return one event.
+  const byName = new Map();
+  for (const node of [...carried, ...parts.flat()]) {
+    byName.set(node?.name ?? `${byName.size}`, node);
+  }
+  return [...byName.values()];
 }
 
 async function fetchEventsByRangeUncached(
@@ -876,18 +955,10 @@ async function fetchEventsByRangeUncached(
     includeTravelRequests = true,
   } = {}
 ) {
-  const filter = [
-    {
-      fieldname: "starts_on",
-      operator: "LTE",
-      value: endDate.toISOString(),
-    },
-  ];
-
   // --------------------------------------------
   // 1️⃣ FETCH RAW EVENT NODES (NO MAPPING YET)
   // --------------------------------------------
-  let rawEventNodes = (await fetchRawEventNodes(filter)).filter((node) =>
+  let rawEventNodes = (await fetchRawEventNodes(startDate, endDate)).filter((node) =>
     doesEventOverlapRange(node, startDate, endDate)
   );
   // --------------------------------------------
