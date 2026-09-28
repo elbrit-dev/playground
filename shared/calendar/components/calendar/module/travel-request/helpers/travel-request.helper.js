@@ -1,19 +1,22 @@
 import { roleCodeFromProfile } from "@calendar/lib/meetingRoles";
 
 /**
- * Travel Request — raised from the calendar's Add Event form, but saved only as
- * an ERP "Travel Request" (as a draft), a Task in the Procurement project and
- * one ToDo per GM — no Event. The GM approves by marking their ToDo done, which
- * submits the request. The calendar reads the Travel Requests back and shows
- * each one on its departure date.
+ * Travel Request — raised from the calendar's Add Event form by Sales Managers
+ * and Zonal Sales Managers, but saved only as an ERP "Travel Request" (as a
+ * draft) plus a Task in the Procurement project, assigned to every GM (a ToDo
+ * per GM, ERP's own assignment) — no Event. Only the GM sees that Task; marking
+ * it done completes the Task and submits (approves) the request. The calendar
+ * reads the Travel Requests back and shows each one on its departure date.
  *
  * ERP setup this depends on: a "Purpose of Travel" record named
- * TRAVEL_REQUEST_PURPOSE must exist — purpose_of_travel is mandatory — and the
- * GM needs submit permission on Travel Request.
+ * TRAVEL_REQUEST_PURPOSE must exist — purpose_of_travel is mandatory — a
+ * Project named TRAVEL_REQUEST_PROJECT_NAME, and the GM needs submit
+ * permission on Travel Request.
  */
 
 export const TRAVEL_REQUEST_PURPOSE = "Official";
-export const TRAVEL_REQUEST_PROJECT = "PROJ-2026-2027-0013"; // "Procurement"
+// Matched on Project › project_name; its ID differs between ERP sites.
+export const TRAVEL_REQUEST_PROJECT_NAME = "Procurement";
 
 // ERP is the source of truth: these are its own Travel Itinerary ›
 // mode_of_travel options, shown and stored exactly as ERP has them.
@@ -50,17 +53,18 @@ export function isTravelAttachmentRequired(mode) {
   return normalized === TRAVEL_MODES.FLIGHT || normalized === TRAVEL_MODES.HOTEL;
 }
 
-// SM and GM, like BE/ABM/RBM elsewhere, are read from the role profile prefix
-// ("SM1-…" → "SM", "GM" → "GM"; "Deputy GM" is not GM). ZSM has no role
-// profile of its own, so it is matched on the Employee's designation (`role`
-// on calendar users).
+// Travel requests are raised by Sales Managers and Zonal Sales Managers,
+// matched on the Employee's designation (`role` on calendar users). An "SM…"
+// role profile ("SM1-…" → "SM", as BE/ABM/RBM are read elsewhere) also counts,
+// for an SM whose designation is not filled in. GM is read from the role
+// profile ("GM" → "GM"; "Deputy GM" is not GM).
 // Under `next dev` every login gets it, so it can be tested without an SM or
 // ZSM login.
 const IS_DEV = process.env.NODE_ENV === "development";
 const TRAVEL_REQUEST_ROLES = ["SM"];
-const TRAVEL_REQUEST_DESIGNATIONS = ["Zonal Sales Manager"];
+const TRAVEL_REQUEST_DESIGNATIONS = ["Sales Manager", "Zonal Sales Manager"];
 
-// The GM approves travel requests: each one gets a ToDo per GM. The
+// The GM approves travel requests: each one's Task is assigned to every GM. The
 // "General Manager" designation is a fallback for a GM whose Employee has no
 // role profile set; exact match, so a Deputy is never an approver.
 const TRAVEL_APPROVER_ROLE = "GM";
@@ -71,10 +75,7 @@ const sameDesignation = (a, b) =>
 
 /** `requester`: { roleIds, roles } — role profiles and designations. */
 export function canUseTravelRequest(requester) {
-  if (IS_DEV) {
-    console.info("[travel-request] access check (dev: always allowed)", requester);
-    return true;
-  }
+  if (IS_DEV) return true;
   return (
     requester.roleIds.some((roleId) =>
       TRAVEL_REQUEST_ROLES.includes(roleCodeFromProfile(roleId))
@@ -90,6 +91,25 @@ export function isTravelApprover(employee) {
     roleCodeFromProfile(employee?.roleId) === TRAVEL_APPROVER_ROLE ||
     sameDesignation(employee?.role, TRAVEL_APPROVER_DESIGNATION)
   );
+}
+
+const TRAVEL_REQUEST_REF = /Travel Request:\s*([A-Za-z0-9-]+)/;
+
+// A GM's assignment of a travel request's Procurement Task (see
+// mapTaskAssignmentToApprover). Also one filed against the request itself,
+// from before Tasks were used.
+export function isTravelApprovalTodo(todo) {
+  if (todo?.referenceType === "Travel Request") return true;
+  return (
+    todo?.referenceType === "Task" &&
+    TRAVEL_REQUEST_REF.test(String(todo?.description ?? ""))
+  );
+}
+
+// The travel request an approval ToDo is for.
+export function travelRequestNameFromTodo(todo) {
+  if (todo?.referenceType === "Travel Request") return todo.referenceName;
+  return String(todo?.description ?? "").match(TRAVEL_REQUEST_REF)?.[1] ?? null;
 }
 
 // The logged-in user's role profiles and designations, from both the login
