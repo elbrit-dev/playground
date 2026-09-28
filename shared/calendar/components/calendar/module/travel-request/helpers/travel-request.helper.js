@@ -53,16 +53,20 @@ export function isTravelAttachmentRequired(mode) {
   return normalized === TRAVEL_MODES.FLIGHT || normalized === TRAVEL_MODES.HOTEL;
 }
 
-// Travel requests are raised by Sales Managers and Zonal Sales Managers,
-// matched on the Employee's designation (`role` on calendar users). An "SM…"
-// role profile ("SM1-…" → "SM", as BE/ABM/RBM are read elsewhere) also counts,
-// for an SM whose designation is not filled in. GM is read from the role
-// profile ("GM" → "GM"; "Deputy GM" is not GM).
-// Under `next dev` every login gets it, so it can be tested without an SM or
-// ZSM login.
-const IS_DEV = process.env.NODE_ENV === "development";
-const TRAVEL_REQUEST_ROLES = ["SM"];
-const TRAVEL_REQUEST_DESIGNATIONS = ["Sales Manager", "Zonal Sales Manager"];
+// Travel requests are raised by SM and every role above it, plus Admin:
+//  - an "SM…" role profile ("SM1-…" → "SM", as BE/ABM/RBM are read elsewhere)
+//    or any role above an SM role in ERP's role tree (RoleProfiles' parents),
+//  - Admin (role or role profile "Admin"),
+//  - or, for an Employee with no role profile set, a designation of SM or above.
+// GM is read from the role profile ("GM" → "GM"; "Deputy GM" is not GM).
+const TRAVEL_REQUEST_BASE_ROLE = "SM";
+const TRAVEL_REQUEST_ROLES = ["SM", "ZSM", "GM", "ADMIN"];
+const TRAVEL_REQUEST_DESIGNATIONS = [
+  "Sales Manager",
+  "Zonal Sales Manager",
+  "General Manager",
+  "Admin",
+];
 
 // The GM approves travel requests: each one's Task is assigned to every GM. The
 // "General Manager" designation is a fallback for a GM whose Employee has no
@@ -73,12 +77,40 @@ const TRAVEL_APPROVER_DESIGNATION = "General Manager";
 const sameDesignation = (a, b) =>
   String(a ?? "").trim().toLowerCase() === b.toLowerCase();
 
-/** `requester`: { roleIds, roles } — role profiles and designations. */
-export function canUseTravelRequest(requester) {
-  if (IS_DEV) return true;
+// Every role profile above an SM role in ERP's role tree (`roleEdges`: the
+// calendar's elbritRoleEdges — { node: { role_id, parent_elbrit_role_id__name } }).
+function rolesAboveSm(roleEdges = []) {
+  const parentOf = new Map();
+  roleEdges.forEach(({ node }) => {
+    if (node?.role_id) parentOf.set(node.role_id, node.parent_elbrit_role_id__name);
+  });
+
+  const above = new Set();
+  parentOf.forEach((_, roleId) => {
+    if (roleCodeFromProfile(roleId) !== TRAVEL_REQUEST_BASE_ROLE) return;
+    // Walk up to the root; `seen` guards against a cycle in the data.
+    const seen = new Set([roleId]);
+    let parent = parentOf.get(roleId);
+    while (parent && !seen.has(parent)) {
+      above.add(parent);
+      seen.add(parent);
+      parent = parentOf.get(parent);
+    }
+  });
+  return above;
+}
+
+/**
+ * `requester`: { roleIds, roles } — role profiles and designations.
+ * `roleEdges`: ERP's role tree, for the roles above SM.
+ */
+export function canUseTravelRequest(requester, roleEdges) {
+  const aboveSm = rolesAboveSm(roleEdges);
   return (
-    requester.roleIds.some((roleId) =>
-      TRAVEL_REQUEST_ROLES.includes(roleCodeFromProfile(roleId))
+    requester.roleIds.some(
+      (roleId) =>
+        TRAVEL_REQUEST_ROLES.includes(roleCodeFromProfile(roleId)) ||
+        aboveSm.has(roleId)
     ) ||
     requester.roles.some((role) =>
       TRAVEL_REQUEST_DESIGNATIONS.some((d) => sameDesignation(role, d))

@@ -127,9 +127,12 @@ export function AddEditEventDialog({
 			getAvailableTags(enabledTagIds).filter(
 				(tag) =>
 					tag.id !== TAG_IDS.TRAVEL_REQUEST ||
-					canUseTravelRequest(resolveTravelRequester(users, LOGGED_IN_USER))
+					canUseTravelRequest(
+						resolveTravelRequester(users, LOGGED_IN_USER),
+						elbritRoleEdges
+					)
 			),
-		[enabledTagIds, users]
+		[enabledTagIds, users, elbritRoleEdges]
 	);
 	const isEditing = !!event;
 	const [leaveBalance, setLeaveBalance] = useState(null);
