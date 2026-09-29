@@ -39,7 +39,7 @@ const CSS = `
 }`;
 
 const INITIAL = {
-  sel: null, scExp: {}, months: null, pfy: null, cfy: null, pop: null, exp: {}, bexp: null, bview: "brand", bAll: false, modal: null, drawer: null, dq: "", pq: "",
+  sel: null, scExp: {}, months: null, anchor: null, pfy: null, cfy: null, pop: null, exp: {}, bexp: null, bview: "brand", bAll: false, modal: null, drawer: null, dq: "", pq: "",
   sort: "amt", fTab: "sort", fq: "", fSpec: [], fCat: [], fHq: [], docAll: false, allItems: false, tab: "overview", pmode: "month",
 };
 
@@ -295,11 +295,11 @@ export default function SupportReport({ url, token, className }) {
                     <button type="button" onClick={closePop} aria-label="Done" style={{ height: 30, padding: "0 12px", border: 0, background: "#101828", color: "#fff", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Done</button>
                   </div>
                   <Segmented items={pk.modes} />
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {pk.presets.length ? (<div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     {pk.presets.map((o) => (
                       <button key={o.label} type="button" className="sr-hp" onClick={o.onClick} style={{ height: 30, padding: "0 11px", borderRadius: 999, border: "1px solid #D0D5DD", background: "#fff", color: "#344054", fontSize: 12, fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap" }}>{o.label}</button>
                     ))}
-                  </div>
+                  </div>) : null}
                   {pk.showFy ? (
                     <div style={{ display: "flex", alignItems: "center", justifyContent: pk.fyLocked ? "center" : "space-between" }}>
                       {pk.fyLocked ? null : <button type="button" onClick={pk.fyPrev} aria-label="Previous year" style={yrBtn(pk.fyPrevOp)}>‹</button>}
