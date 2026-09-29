@@ -10,7 +10,6 @@ const STORAGE_KEY = "hd-console-capture";
 const SAVE_DELAY_MS = 300;
 
 const entries = [];
-const listeners = new Set();
 let installed = false;
 let saveTimer = null;
 
@@ -56,10 +55,6 @@ function stringifyArg(arg) {
   }
 }
 
-function notify() {
-  listeners.forEach((listener) => listener(entries.length));
-}
-
 function record(level, args) {
   let message = args.map(stringifyArg).join(" ");
   if (message.length > MAX_MESSAGE_LENGTH) message = `${message.slice(0, MAX_MESSAGE_LENGTH)}… [truncated]`;
@@ -74,7 +69,6 @@ function record(level, args) {
     if (entries.length > MAX_ENTRIES) entries.shift();
   }
   scheduleSave();
-  notify();
 }
 
 export function installConsoleCapture() {
@@ -134,12 +128,6 @@ export function clearCapturedConsoleEntries() {
   } catch {
     // Nothing to clear.
   }
-  notify();
-}
-
-export function subscribeConsoleCapture(listener) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
 }
 
 export function formatConsoleEntries(list = entries) {

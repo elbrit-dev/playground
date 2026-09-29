@@ -32,7 +32,6 @@ import {
   clearCapturedConsoleEntries,
   getCapturedConsoleEntries,
   installConsoleCapture,
-  subscribeConsoleCapture,
 } from "./consoleCapture";
 
 const HELP_SUPPORT_UI_CONTENT = {
@@ -878,9 +877,6 @@ function CreateTicketForm({ content, onSubmit, onCancel, ticketTypes = [], user 
   const [attachmentError, setAttachmentError] = useState("");
   const fileInputRef = useRef(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [includeConsoleLogs, setIncludeConsoleLogs] = useState(true);
-  const [showConsolePreview, setShowConsolePreview] = useState(false);
-  const [consoleEntries, setConsoleEntries] = useState([]);
   const canSubmit = ticketType && subject.trim() && isEmail(raisedBy) && description.trim() && !isSubmitting;
 
   const addFiles = (fileList) => {
@@ -916,8 +912,6 @@ function CreateTicketForm({ content, onSubmit, onCancel, ticketTypes = [], user 
 
   useEffect(() => {
     installConsoleCapture();
-    setConsoleEntries(getCapturedConsoleEntries());
-    return subscribeConsoleCapture(() => setConsoleEntries(getCapturedConsoleEntries()));
   }, []);
 
   useEffect(() => {
@@ -951,7 +945,8 @@ function CreateTicketForm({ content, onSubmit, onCancel, ticketTypes = [], user 
         raisedBy: raisedBy.trim(),
         description: description.trim(),
         attachments,
-        consoleLogs: includeConsoleLogs ? getCapturedConsoleEntries() : [],
+        // Always sent, never shown - requesters are non-technical, agents read it in the ERP.
+        consoleLogs: getCapturedConsoleEntries(),
       });
       if (result === false) return;
       setAttachments([]);
@@ -1095,50 +1090,6 @@ function CreateTicketForm({ content, onSubmit, onCancel, ticketTypes = [], user 
               Attachments upload once the ticket is created, and are linked to it in the ERP.
             </p>
           )}
-        </div>
-
-        <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-          <label className="flex cursor-pointer items-start gap-2">
-            <input
-              type="checkbox"
-              checked={includeConsoleLogs}
-              onChange={(event) => setIncludeConsoleLogs(event.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0 accent-[#0F87F9]"
-            />
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-slate-700">Include browser console errors</span>
-              <span className="block text-[11px] text-slate-500">
-                {consoleEntries.length
-                  ? `${consoleEntries.length} recent error${consoleEntries.length > 1 ? "s" : ""}/warning${consoleEntries.length > 1 ? "s" : ""} captured — attached as a text file to help support debug.`
-                  : "No console errors captured in this session."}
-              </span>
-            </span>
-            {consoleEntries.length ? (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.preventDefault();
-                  setShowConsolePreview((current) => !current);
-                }}
-                className="shrink-0 text-[11px] font-bold text-[#0F87F9] hover:underline"
-              >
-                {showConsolePreview ? "Hide" : "Preview"}
-              </button>
-            ) : null}
-          </label>
-          {showConsolePreview && consoleEntries.length ? (
-            <ul className="mt-2 max-h-48 overflow-auto rounded-md border border-slate-200 bg-white p-2 font-mono text-[11px] leading-5">
-              {consoleEntries.map((entry, index) => (
-                <li key={`${entry.at}-${index}`} className="border-b border-slate-100 py-1 last:border-0">
-                  <span className={entry.level === "error" ? "font-bold text-red-600" : "font-bold text-amber-600"}>
-                    {entry.level.toUpperCase()}
-                  </span>
-                  {entry.count > 1 ? <span className="text-slate-400"> x{entry.count}</span> : null}{" "}
-                  <span className="whitespace-pre-wrap break-words text-slate-700">{entry.message}</span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
         </div>
 
         <div className="flex flex-col-reverse gap-2 @min-[640px]:flex-row @min-[640px]:items-center @min-[640px]:justify-end @min-[640px]:gap-3">
@@ -2144,13 +2095,11 @@ export default function HelpSupportExperience({
       }
 
       // Console log is a .txt, which the user-facing validator rejects, so it
-      // bypasses validateAttachment. Failure is non-fatal - the ticket exists.
-      // Either way the buffer is reset, so the next ticket only carries errors
-      // raised after this one (including when the user opted out).
+      // bypasses validateAttachment. It is silent: a failed upload is not the
+      // requester's concern and the ticket already exists. The buffer resets
+      // either way so the next ticket only carries errors raised after this one.
       if (consoleLogs.length) {
-        await uploadHDTicketAttachment(buildConsoleLogFile(consoleLogs), created.id, graphqlConfig).catch((error) => {
-          toast.error("Could not attach console errors", { description: error?.message });
-        });
+        await uploadHDTicketAttachment(buildConsoleLogFile(consoleLogs), created.id, graphqlConfig).catch(() => null);
       }
       clearCapturedConsoleEntries();
 
