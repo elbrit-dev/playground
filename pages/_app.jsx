@@ -14,6 +14,11 @@ import "../share/src/app/graphql-playground/styles/graphql-playground.css";
 
 import "@calendar/styles/globals.css";
 
+import { installConsoleCapture } from "../components/features/help-support/consoleCapture";
+
+// Buffer console errors from every page so Help Desk tickets can include them.
+installConsoleCapture();
+
 // Local-dev only: set NEXT_PUBLIC_DEV_ERROR_OVERLAY=off in .env to stop logged
 // errors (e.g. from share/) opening the Next.js error overlay. They still print
 // to the console as warnings. Unset/any other value = normal behaviour, and it
