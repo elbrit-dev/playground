@@ -301,10 +301,10 @@ export default function SupportReport({ url, token, className }) {
                     ))}
                   </div>
                   {pk.showFy ? (
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <button type="button" onClick={pk.fyPrev} aria-label="Previous year" style={yrBtn(pk.fyPrevOp)}>‹</button>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: pk.fyLocked ? "center" : "space-between" }}>
+                      {pk.fyLocked ? null : <button type="button" onClick={pk.fyPrev} aria-label="Previous year" style={yrBtn(pk.fyPrevOp)}>‹</button>}
                       <span style={{ fontSize: 14, fontWeight: 600 }}>{pk.fyLabel}</span>
-                      <button type="button" onClick={pk.fyNext} aria-label="Next year" style={yrBtn(pk.fyNextOp)}>›</button>
+                      {pk.fyLocked ? null : <button type="button" onClick={pk.fyNext} aria-label="Next year" style={yrBtn(pk.fyNextOp)}>›</button>}
                     </div>
                   ) : null}
                   <div style={{ display: "grid", gridTemplateColumns: `repeat(${pk.cols},minmax(0,1fr))`, gap: 6 }}>
@@ -366,9 +366,9 @@ export default function SupportReport({ url, token, className }) {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 2 }}><div style={h14}>Value by month</div><div style={s12}>{trend.sub}</div></div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <button type="button" onClick={trend.fyPrev} aria-label="Previous year" style={yrBtn(trend.fyPrevOp, 30)}>‹</button>
+                    {trend.fyLocked ? null : <button type="button" onClick={trend.fyPrev} aria-label="Previous year" style={yrBtn(trend.fyPrevOp, 30)}>‹</button>}
                     <span style={{ fontSize: 13, fontWeight: 600, minWidth: 78, textAlign: "center" }}>{trend.fyLabel}</span>
-                    <button type="button" onClick={trend.fyNext} aria-label="Next year" style={yrBtn(trend.fyNextOp, 30)}>›</button>
+                    {trend.fyLocked ? null : <button type="button" onClick={trend.fyNext} aria-label="Next year" style={yrBtn(trend.fyNextOp, 30)}>›</button>}
                   </div>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(12,minmax(0,1fr))", gap: L.barGap, alignItems: "end", height: L.chartH, borderBottom: "1px solid #EAECF0" }}>

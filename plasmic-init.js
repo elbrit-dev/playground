@@ -486,7 +486,7 @@ PLASMIC.registerComponent(SummaryCard, {
       defaultValue: false,
       hidden: (props) => props.variant === "secondary" || !props.total,
       description:
-        "Primary total card only. On, the Inc.Primary / Target row pins to the top while the page scrolls through the opened card, so the headline figures stay in view. Off (the default), it scrolls with the card as normal.",
+        "Primary total card only. On, once the Inc.Primary / Target row scrolls up to the pin line it stays pinned there for the rest of the page - card open or closed - so the headline figures stay in view while the sections below scroll. Scroll back up and it drops back into the card. Off (the default), it scrolls with the card as normal.",
     },
     stickyTop: {
       type: "number",
