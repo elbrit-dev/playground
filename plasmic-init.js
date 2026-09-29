@@ -482,7 +482,7 @@ PLASMIC.registerComponent(SummaryCard, {
     },
     stickyKpis: {
       type: "boolean",
-      displayName: "Sticky Inc.Primary / Target",
+      displayName: "Sticky Inc.Primary & Target",
       defaultValue: false,
       hidden: (props) => props.variant === "secondary" || !props.total,
       description:
@@ -493,7 +493,7 @@ PLASMIC.registerComponent(SummaryCard, {
       displayName: "Sticky offset (px)",
       hidden: (props) => props.variant === "secondary" || !props.total || !props.stickyKpis,
       description:
-        "Leave empty (the default) and the row pins just under the Section Page header when the card sits in one - it follows that header's real height (about 66px on desktop, about 100px on a phone where the chips wrap), plus the header's own sticky offset. Outside a Section Page, empty means the very top. Type a number to override it in px.",
+        "Leave empty (the default) - normally you do not need this. Empty, the row pins just under the Section Page header when the card sits in one - it follows that header's real height (about 66px on desktop, about 100px on a phone where the chips wrap), plus the header's own sticky offset. Outside a Section Page, empty means the very top. Type a number (e.g. 64) to override it in px; anything taller than the screen is ignored.",
     },
     defaultExpanded: {
       type: "boolean",
