@@ -1,6 +1,7 @@
 import { graphqlRequest } from "@calendar/lib/graphql-client";
+import { AUTH_CONFIG } from "@calendar/components/auth/calendar-users";
 import {
-  EMPLOYEES_QUERY, DOCTOR_QUERY, DOCTORS_BY_ROLE_QUERY, HQ_TERRITORIES_QUERY,
+  EMPLOYEES_QUERY, DOCTOR_QUERY, HQ_TERRITORIES_QUERY,
   ITEMS_QUERY
 } from "@calendar/components/calendar/module/event/graphql/events.query";
 import { ERP_DOCTOR_FIELDS } from "@calendar/components/calendar/module/event/graphql/field-config";
@@ -274,28 +275,72 @@ export async function fetchDoctorsByTerritory(territory) {
 
   return mapDoctors(data);
 }
+function getErpBaseUrl() {
+  const { erpUrl } = AUTH_CONFIG;
+
+  if (!erpUrl) {
+    throw new Error("Missing ERP auth configuration");
+  }
+
+  return erpUrl
+    .replace(/(\/api(?:\/method)?\/graphql|\/graphql)\/?$/i, "")
+    .replace(/\/$/, "");
+}
+
+const ROLE_DOCTOR_FIELDS = JSON.stringify([
+  "name", "lead_name", "city", "custom_latitude", "custom_longitude",
+  "custom_doctor_code", "custom_speciality", "custom_specialty", "email_id",
+  "custom_category", "custom_category1", "custom_category2", "custom_category3",
+  "territory",
+]);
+
 // Doctors mapped (Lead.custom_role_profile) to one of `roleIds` AT `territory`:
 // the mapping row itself must carry that HQ, since one doctor is often mapped to
 // several roles in different HQs (DR-13189: Dausa for Elbrit, Jaipur for Aura).
+//
+// REST, not GraphQL: GraphQL silently ignores a `role_profile_list` filter (it
+// is a child-table field) and returns unrelated Leads, and it can't list Leads
+// by name either. REST joins the Role Profile Multiselect child table once, so
+// the role and HQ conditions both apply to the same mapping row. Notes are not
+// read here — the visit dialog loads them per doctor via fetchDoctorById.
 export async function fetchDoctorsByRoles(roleIds, territory) {
   if (!roleIds?.length || !territory) return [];
-  const roles = new Set(roleIds);
-  const data = await graphqlRequest(DOCTORS_BY_ROLE_QUERY, {
-    first: MAX_ROWS,
-    filter: [
-      {
-        fieldname: "role_profile_list",
-        operator: "IN",
-        value: [...roles].join(","),
-      },
-    ],
+  const { authToken } = AUTH_CONFIG;
+  if (!authToken) {
+    throw new Error("Missing ERP auth configuration");
+  }
+
+  const params = new URLSearchParams({
+    fields: ROLE_DOCTOR_FIELDS,
+    filters: JSON.stringify([
+      ["Role Profile Multiselect", "role_profile_list", "in", roleIds],
+      ["Role Profile Multiselect", "hq", "=", territory],
+    ]),
+    limit_page_length: String(MAX_ROWS),
   });
-  const edges = (data?.Leads?.edges ?? []).filter(({ node }) =>
-    (node.custom_role_profile ?? []).some(
-      (row) =>
-        roles.has(row?.role_profile_list__name) && row?.hq__name === territory
-    )
-  );
+  const response = await fetch(`${getErpBaseUrl()}/api/resource/Lead?${params}`, {
+    headers: {
+      Accept: "application/json",
+      Authorization: `token ${authToken}`,
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  const json = await response.json();
+
+  // Reshape REST rows into the GraphQL node shape mapDoctors reads.
+  const edges = (json?.data ?? []).map((row) => ({
+    node: {
+      ...row,
+      custom_specialty__name: row.custom_specialty,
+      custom_category__name: row.custom_category,
+      custom_category1__name: row.custom_category1,
+      custom_category2__name: row.custom_category2,
+      custom_category3__name: row.custom_category3,
+      territory__name: row.territory,
+    },
+  }));
   return mapDoctors({ Leads: { edges } });
 }
 export async function searchDoctors({
