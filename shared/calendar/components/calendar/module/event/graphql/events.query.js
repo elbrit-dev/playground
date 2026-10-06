@@ -216,11 +216,7 @@ query Items(
   }
 }
 `;
-export const DOCTOR_QUERY = `
-query Doctors($first: Int,$filter: [DBFilterInput]) {
-  Leads(first: $first,filter: $filter) {
-    edges {
-      node {
+const DOCTOR_FIELDS = `
         name
         lead_name
         city
@@ -249,6 +245,31 @@ query Doctors($first: Int,$filter: [DBFilterInput]) {
         custom_category2__name
         custom_category1__name
         territory__name:${ERP_DOCTOR_FIELDS.territory}
+`;
+
+export const DOCTOR_QUERY = `
+query Doctors($first: Int,$filter: [DBFilterInput]) {
+  Leads(first: $first,filter: $filter) {
+    edges {
+      node {
+${DOCTOR_FIELDS}      }
+    }
+  }
+}
+`
+
+// Doctors mapped to any of the given role profiles. `role_profile_list` is not
+// a Lead field, so ERP resolves the filter against the Role Profile Multiselect
+// child table; the rows are read back to match the HQ of each mapping.
+export const DOCTORS_BY_ROLE_QUERY = `
+query DoctorsByRole($first: Int,$filter: [DBFilterInput]) {
+  Leads(first: $first,filter: $filter) {
+    edges {
+      node {
+${DOCTOR_FIELDS}        custom_role_profile {
+          role_profile_list__name
+          hq__name
+        }
       }
     }
   }

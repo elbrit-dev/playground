@@ -1,6 +1,6 @@
 import { graphqlRequest } from "@calendar/lib/graphql-client";
 import {
-  EMPLOYEES_QUERY, DOCTOR_QUERY, HQ_TERRITORIES_QUERY,
+  EMPLOYEES_QUERY, DOCTOR_QUERY, DOCTORS_BY_ROLE_QUERY, HQ_TERRITORIES_QUERY,
   ITEMS_QUERY
 } from "@calendar/components/calendar/module/event/graphql/events.query";
 import { ERP_DOCTOR_FIELDS } from "@calendar/components/calendar/module/event/graphql/field-config";
@@ -273,6 +273,30 @@ export async function fetchDoctorsByTerritory(territory) {
   });
 
   return mapDoctors(data);
+}
+// Doctors mapped (Lead.custom_role_profile) to one of `roleIds` AT `territory`:
+// the mapping row itself must carry that HQ, since one doctor is often mapped to
+// several roles in different HQs (DR-13189: Dausa for Elbrit, Jaipur for Aura).
+export async function fetchDoctorsByRoles(roleIds, territory) {
+  if (!roleIds?.length || !territory) return [];
+  const roles = new Set(roleIds);
+  const data = await graphqlRequest(DOCTORS_BY_ROLE_QUERY, {
+    first: MAX_ROWS,
+    filter: [
+      {
+        fieldname: "role_profile_list",
+        operator: "IN",
+        value: [...roles].join(","),
+      },
+    ],
+  });
+  const edges = (data?.Leads?.edges ?? []).filter(({ node }) =>
+    (node.custom_role_profile ?? []).some(
+      (row) =>
+        roles.has(row?.role_profile_list__name) && row?.hq__name === territory
+    )
+  );
+  return mapDoctors({ Leads: { edges } });
 }
 export async function searchDoctors({
   search,
