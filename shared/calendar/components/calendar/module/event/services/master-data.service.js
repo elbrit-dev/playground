@@ -273,11 +273,15 @@ function getErpBaseUrl() {
     .replace(/\/$/, "");
 }
 
+// `modified` must be selected. A child-table filter makes ERP query DISTINCT
+// rows while still sorting by Lead.modified, and MariaDB refuses to sort a
+// DISTINCT result by a column it does not return: without this field every
+// mapped-doctor read came back HTTP 500 and the DR list showed no doctors.
 const ROLE_DOCTOR_FIELDS = JSON.stringify([
   "name", "lead_name", "city", "custom_latitude", "custom_longitude",
   "custom_doctor_code", "custom_speciality", "custom_specialty", "email_id",
   "custom_category", "custom_category1", "custom_category2", "custom_category3",
-  "territory",
+  "territory", "modified",
 ]);
 
 // Doctors mapped (Lead.custom_role_profile) to one of `roleIds` AT `territory`:
@@ -294,26 +298,35 @@ const ROLE_DOCTOR_FIELDS = JSON.stringify([
 // read here — the visit dialog loads them per doctor via fetchDoctorById.
 const ROLE_CHUNK = 80; // an SM's team runs to hundreds of roles; keeps each URL short
 
+// Paged: the join returns one row per mapping, so an RBM's HQ runs past a
+// single page (RBM-VASC-CH-CHE at HQ-Chennai: 1,356 rows), and a one-page read
+// silently dropped every doctor after row 1,000.
 async function fetchMappedLeads(filters) {
   const { authToken } = AUTH_CONFIG;
   if (!authToken) {
     throw new Error("Missing ERP auth configuration");
   }
-  const params = new URLSearchParams({
-    fields: ROLE_DOCTOR_FIELDS,
-    filters: JSON.stringify(filters),
-    limit_page_length: String(MAX_ROWS),
-  });
-  const response = await fetch(`${getErpBaseUrl()}/api/resource/Lead?${params}`, {
-    headers: {
-      Accept: "application/json",
-      Authorization: `token ${authToken}`,
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
+  const rows = [];
+  for (let start = 0; ; start += MAX_ROWS) {
+    const params = new URLSearchParams({
+      fields: ROLE_DOCTOR_FIELDS,
+      filters: JSON.stringify(filters),
+      limit_start: String(start),
+      limit_page_length: String(MAX_ROWS),
+    });
+    const response = await fetch(`${getErpBaseUrl()}/api/resource/Lead?${params}`, {
+      headers: {
+        Accept: "application/json",
+        Authorization: `token ${authToken}`,
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const page = (await response.json())?.data ?? [];
+    rows.push(...page);
+    if (page.length < MAX_ROWS) return rows;
   }
-  return (await response.json())?.data ?? [];
 }
 
 export async function fetchDoctorsByRoles(roleIds, territory, { allRoles = false } = {}) {
