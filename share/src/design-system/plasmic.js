@@ -31,7 +31,7 @@ import { ListRow } from './components/ListRow';
 import { Metric } from './components/Metric';
 import { ProgressBar } from './components/ProgressBar';
 import { SectionLabel } from './components/SectionLabel';
-import { Sheet } from './components/Sheet';
+import { StudioSheet } from './components/StudioSheet';
 import { Select } from './components/Select';
 import { StackedBar } from './components/StackedBar';
 import { StatusPill } from './components/StatusPill';
@@ -214,6 +214,7 @@ const segmentedControlMeta = {
     value: { type: 'string' },
     defaultValue: { type: 'string' },
     shape: { type: 'choice', options: ['default', 'pill'], defaultValue: 'default' },
+    block: { type: 'boolean', defaultValue: false, description: 'Fill the row; every segment the same width.' },
     ariaLabel: { type: 'string', defaultValue: 'View' },
     onChange: {
       type: 'eventHandler',
@@ -570,8 +571,8 @@ const sheetMeta = {
   name: 'DsSheet',
   displayName: 'DS Sheet',
   section: SECTION,
-  importPath: './src/design-system/components/Sheet',
-  importName: 'Sheet',
+  importPath: './src/design-system/components/StudioSheet',
+  importName: 'StudioSheet',
   props: {
     open: { type: 'boolean', defaultValue: true },
     title: { type: 'string', defaultValue: 'Working today' },
@@ -688,7 +689,7 @@ const REGISTRY = [
   [DisclosureRow, disclosureRowMeta],
   [Eyebrow, eyebrowMeta],
   [SectionLabel, sectionLabelMeta],
-  [Sheet, sheetMeta],
+  [StudioSheet, sheetMeta],
   [ProgressRing, progressRingMeta],
   [CountBadge, countBadgeMeta],
   [RingNav, ringNavMeta],

@@ -1,0 +1,32 @@
+/* BackGuard — the app's single owner of the back gesture.
+
+   One stack, one history-state key, one popstate listener. See backStack.js
+   for the mechanism and why "press back again" is the only exit that works.
+
+     AppExitGuard                 mount ONCE in the app shell: the root
+     useBackLayer(open, onBack)   while this is open, back closes it
+     useExitGuard({ isRoot })     the app root: back again to leave
+     ExitHint                     what the first press at the root answers with
+     setFallback(fn)              app-level rules for unclaimed presses
+     holdBase()                   an overlay with its own history entry is up
+     claimPop()                   from a router's pre-pop hook (Next pages:
+                                  router.beforePopState(() => !claimPop())) */
+
+export { useBackLayer } from './useBackLayer';
+export { useExitGuard } from './useExitGuard';
+export { ExitHint } from './ExitHint';
+export {
+  pushLayer,
+  pushBase,
+  holdBase,
+  releaseLayer,
+  setFallback,
+  rearmTop,
+  collapseHistory,
+  backLeavesApp,
+  claimPop,
+  isUnderPath,
+  olderDocumentBehind,
+  BACK_LAYER_FLAG,
+} from './backStack';
+export { AppExitGuard } from './AppExitGuard';
