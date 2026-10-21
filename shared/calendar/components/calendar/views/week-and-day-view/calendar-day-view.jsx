@@ -4,6 +4,8 @@ import { AnimatePresence,motion } from "framer-motion";
 import { useEffect, useMemo, useRef, startTransition } from "react";
 import { LOGGED_IN_USER } from "@calendar/components/auth/calendar-users";
 import { isEmployeeOnApprovedLeave } from "@calendar/lib/calendar/leaveDay";
+import { HOLIDAY_STYLES } from "@calendar/lib/calendar/holidays";
+import { cn } from "@calendar/lib/utils";
 import { DayPicker } from "@calendar/components/ui/day-picker";
 import { ScrollArea } from "@calendar/components/ui/scroll-area";
 import { useCalendar } from "@calendar/components/calendar/contexts/calendar-context";
@@ -19,8 +21,10 @@ export function CalendarDayView({
 	singleDayEvents,
 	multiDayEvents
 }) {
-	const { selectedDate, setSelectedDate, users, use24HourFormat, allEvents } =
+	const { selectedDate, setSelectedDate, users, use24HourFormat, allEvents, holidaysByDate } =
 		useCalendar();
+	// The holiday on this day from the user's ERP Holiday List, e.g. "Diwali".
+	const holiday = holidaysByDate?.[format(selectedDate, "yyyy-MM-dd")];
 	const scrollAreaRef = useRef(null);
 	// Own approved leave on this day blocks the click-to-add slots, same rule
 	// as the header's Add Event button.
@@ -103,11 +107,19 @@ export function CalendarDayView({
 					<div className="relative z-20 flex border-b">
 						<div className="w-18"></div>
 						<span
-							className="flex-1 border-l py-2 text-center text-xs font-medium text-t-quaternary">
+							className={cn(
+								"flex-1 border-l py-2 text-center text-xs font-medium text-t-quaternary",
+								holiday && HOLIDAY_STYLES.wash
+							)}>
 							{format(selectedDate, "EE")}{" "}
 							<span className="font-semibold text-t-secondary">
 								{format(selectedDate, "d")}
 							</span>
+							{holiday ? (
+								<span className={cn("block truncate px-2 text-[11px] font-medium", HOLIDAY_STYLES.text)}>
+									{holiday}
+								</span>
+							) : null}
 						</span>
 					</div>
 				</div>
@@ -130,7 +142,7 @@ export function CalendarDayView({
 						</div>
 
 						{/* Day grid */}
-						<div className="relative flex-1 border-l">
+						<div className={cn("relative flex-1 border-l", holiday && HOLIDAY_STYLES.wash)}>
 							<div className="relative">
 								{hours.map((hour, index) => (
 									<div key={hour} className="relative" style={{ height: "96px" }}>

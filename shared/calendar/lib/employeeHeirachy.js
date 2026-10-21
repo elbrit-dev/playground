@@ -1,4 +1,5 @@
 import { LOGGED_IN_USER } from "@calendar/components/auth/calendar-users";
+import { roleCodeFromProfile } from "@calendar/lib/meetingRoles";
 
 // The host passes LOGGED_IN_USER.roleId from the Employee `role_id` field, which
 // can be stale and differs from `custom_role_profile` — the field the role
@@ -20,6 +21,21 @@ export function resolveLoggedInRoleId(users = []) {
   if (matchByEmail?.roleId) return matchByEmail.roleId;
 
   return LOGGED_IN_USER.roleId ?? null;
+}
+
+// Admin, IT, GM and CEO sit outside every reporting chain (root role profiles
+// with no children), so no upward share reaches them and the hierarchy treats
+// them like a BE. They still see everyone's Other Work, and can pick anyone in
+// the calendar's employee filter to do it. "Deputy GM" is not GM.
+const ALL_OTHER_WORK_ROLE_CODES = ["ADMIN", "IT", "GM", "CEO"];
+
+export function seesAllOtherWork(users = []) {
+  if (LOGGED_IN_USER?.role === "Admin" || LOGGED_IN_USER?.roleId === "Admin") {
+    return true;
+  }
+  return [resolveLoggedInRoleId(users), LOGGED_IN_USER?.roleId].some((roleId) =>
+    ALL_OTHER_WORK_ROLE_CODES.includes(roleCodeFromProfile(roleId))
+  );
 }
 
 export function resolveVisibleRoleIds(
@@ -225,6 +241,35 @@ export function resolveSuperiorShareUserIdsUpTo(
     .map((user) => user.email);
 }
 
+// Seats below an SM, by role profile prefix. ERP shares a new Event of theirs
+// up to and including their SM itself (Server Script "Elbrit Event Upline
+// Share", After Insert), from the whole tree — including the managers in
+// another department that this browser cannot see.
+const SERVER_SHARED_SEAT_CODES = ["BE", "ABM", "RBM", "SRBM", "KAM"];
+
+// The managers a NEW Event still needs the app to share with, given that ERP
+// has already shared it up to the SM: only those above the SM. `null` when ERP
+// shares nothing for this seat (an SM, or a seat outside the sales tree) — the
+// caller then shares with the whole chain itself, as before.
+// A chain with no SM in sight belongs to a sales seat whose managers are
+// hidden by Department permissions: ERP covers all of them, so nothing is left.
+export function resolveSuperiorShareUserIdsAboveSm(elbritEdges = [], users = [], roleId) {
+  if (!roleId) return null;
+  const ownCode = roleCodeFromProfile(roleId);
+  if (ownCode === "SM") return null;
+  const chain = resolveSuperiorRoleIds(elbritEdges, roleId);
+  const smAt = chain.findIndex((id) => roleCodeFromProfile(id) === "SM");
+  let above;
+  if (smAt !== -1) above = chain.slice(smAt + 1);
+  else if (SERVER_SHARED_SEAT_CODES.includes(ownCode)) above = [];
+  else return null;
+
+  const aboveRoleIds = new Set(above);
+  return users
+    .filter((user) => user.email && user.roleId && aboveRoleIds.has(user.roleId))
+    .map((user) => user.email);
+}
+
 export function resolveVisibleEmployeeIds(elbritEdges, users) {
   // ✅ ADMIN (roleId === "Admin") → see ALL users
   if (LOGGED_IN_USER?.roleId === "Admin") {
@@ -246,3 +291,38 @@ export function resolveVisibleEmployeeIds(elbritEdges, users) {
 }
 
 
+
+// The DR Tour Plan HQ of each seat the user plans for -- their own and every
+// seat under them (an admin: every seat) -- read from the seat's Role Profile
+// (custom_territory), never the Employee record: HR's Employee HQ can disagree
+// (E00985's says Kumbakonam, his seat and all its doctor mappings say Tanjore),
+// and a vacant seat has no employee at all but still has an HQ and doctors.
+// -> Map(roleId -> hq), seats without an HQ left out
+export function resolveSeatHqs(elbritEdges = [], roleId) {
+  const isAdmin = LOGGED_IN_USER?.role === "Admin" || LOGGED_IN_USER?.roleId === "Admin";
+  const roles = new Set(resolveVisibleRoleIds(elbritEdges, roleId));
+  const seats = new Map();
+  elbritEdges.forEach(({ node }) => {
+    if (node?.role_id && node.hq && (isAdmin || roles.has(node.role_id))) {
+      seats.set(node.role_id, node.hq);
+    }
+  });
+  return seats;
+}
+
+// The HQs a user books DR Tour Plans against: their own seat's and those of
+// every seat under them (resolveSeatHqs). A BE has one, an ABM their BEs', an
+// RBM / SM their team's, an admin every one. `fallbackHq` is the user's own HQ
+// when no seat carries one.
+// -> [{ doctype: "Territory", value, label }], sorted
+export function resolveOwnHqOptions(employees = [], elbritEdges = [], roleId, fallbackHq = null) {
+  const hqs = new Set(resolveSeatHqs(elbritEdges, roleId).values());
+  if (!hqs.size && fallbackHq) hqs.add(fallbackHq);
+  // Real HQs only ("HQ-Erode"): a manager's own territory can be a region
+  // ("Tn-Coimbatore"), which no doctor is mapped to. Kept as-is when there is
+  // no HQ- name at all, rather than offering nothing.
+  const real = [...hqs].filter((hq) => /^HQ-/i.test(hq));
+  return (real.length ? real : [...hqs])
+    .sort((a, b) => a.localeCompare(b))
+    .map((hq) => ({ doctype: "Territory", value: hq, label: hq }));
+}

@@ -1,16 +1,17 @@
 "use client";;
 import { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { endOfYear, startOfYear } from "date-fns";
+import { endOfYear, isSunday, parseISO, startOfYear } from "date-fns";
 import { useLocalStorage } from "@calendar/components/calendar/hooks";
 import { fetchEventsByRange } from "@calendar/components/calendar/module/event/services/event.service";
 import { invalidateCalendarData } from "@calendar/lib/calendar/invalidate";
 import { useCalendarLiveSync } from "@calendar/lib/calendar/useCalendarLiveSync";
 import { resolveCalendarRange } from "@calendar/lib/calendar/range";
-import { isLeafRole, resolveLoggedInRoleId, resolveVisibleEmployeeIds, resolveVisibleRoleIds } from "@calendar/lib/employeeHeirachy";
+import { isLeafRole, resolveLoggedInRoleId, resolveVisibleEmployeeIds, resolveVisibleRoleIds, seesAllOtherWork } from "@calendar/lib/employeeHeirachy";
 import { useEmployeeResolvers } from "@calendar/lib/employeeResolver";
 import { fetchCalendarBootstrapData } from "@calendar/components/calendar/contexts/calendar-context/bootstrapping";
 import { fetchHQTerritories } from "@calendar/components/calendar/module/event/services/master-data.service";
 import { getCached } from "@calendar/lib/data-cache";
+import { fetchEmployeeHolidayList } from "@calendar/components/calendar/module/leave/services/leave.service";
 import { AUTH_CONFIG } from "@calendar/components/auth/calendar-users";
 import { LOGGED_IN_USER } from "@calendar/components/auth/calendar-users";
 import {
@@ -175,6 +176,31 @@ export function CalendarProvider({
 	const [showOnlyTodoList, setShowOnlyTodoList] = useState(false);
 	const [agendaVisitFilter, setAgendaVisitFilter] = useState(VISIT_FILTER.ALL);
 	const [territoryDoctors, setTerritoryDoctors] = useState([]);
+	// The logged-in employee's holidays from their ERP Holiday List, as
+	// { "yyyy-MM-dd": "Diwali" }, shown on the calendar's days. Sundays are
+	// left out: they are off anyway, so a holiday on one is not shown.
+	const [holidaysByDate, setHolidaysByDate] = useState({});
+	const holidayEmployeeId = LOGGED_IN_USER.id;
+	useEffect(() => {
+		if (!holidayEmployeeId) return undefined;
+		let alive = true;
+		fetchEmployeeHolidayList(holidayEmployeeId)
+			.then((list) => {
+				if (!alive) return;
+				const byDate = {};
+				list.forEach((holiday) => {
+					if (isSunday(parseISO(holiday.date))) return;
+					byDate[holiday.date] = byDate[holiday.date]
+						? `${byDate[holiday.date]}, ${holiday.name}`
+						: holiday.name;
+				});
+				setHolidaysByDate(byDate);
+			})
+			.catch((err) => console.warn("Holiday list could not be loaded", err));
+		return () => {
+			alive = false;
+		};
+	}, [holidayEmployeeId]);
 	const updateSettings = (newPartialSettings) => {
 		setSettings({
 			...settings,
@@ -573,6 +599,10 @@ export function CalendarProvider({
 		if (usersLoading || elbritRoleLoading) return false;
 		return isLeafRole(elbritRoleEdges, resolveLoggedInRoleId(users));
 	}, [elbritRoleEdges, elbritRoleLoading, users, usersLoading]);
+	const canSeeAllOtherWork = useMemo(() => {
+		if (usersLoading) return false;
+		return seesAllOtherWork(users);
+	}, [users, usersLoading]);
 	const visibleEmployeeOptions = useMemo(() => {
 		if (!employeeOptions.length) return [];
 		if (!allowedEmployeeIds.length && !visibleRoleIds.length) return employeeOptions;
@@ -594,6 +624,7 @@ export function CalendarProvider({
 			visibleRoleIds,
 			allowedEmployeeIds,
 			isCurrentUserLeaf,
+			canSeeAllOtherWork,
 			usersLoading,
 			elbritRoleLoading,
 			employeeRoleMap,
@@ -605,6 +636,7 @@ export function CalendarProvider({
 		visibleRoleIds,
 		allowedEmployeeIds,
 		isCurrentUserLeaf,
+		canSeeAllOtherWork,
 		selectedUserId,
 		selectedColors,
 		selectedStatuses,
@@ -678,6 +710,7 @@ export function CalendarProvider({
 		setShowOnlyApprovedLeaves, showOnlyTodoList, setShowOnlyTodoList,
 		agendaVisitFilter, setAgendaVisitFilter,
 		enableGoogleCalendarSync,
+		holidaysByDate,
 	};
 
 	return (

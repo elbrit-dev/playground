@@ -1,0 +1,228 @@
+"use client";
+
+import React, { useEffect, useState } from "react";
+import {
+  getPushSubscriptionState,
+  subscribeToPush,
+  unsubscribeFromPush,
+  onPushSubscriptionChange,
+  getOneSignalDeviceId,
+} from "@/lib/onesignal";
+
+// The OneSignal subscription id can take a moment to exist after opt-in
+// (the SDK has to register with the push service first).
+const waitForDeviceId = async (tries = 20, intervalMs = 500) => {
+  for (let i = 0; i < tries; i++) {
+    const id = await getOneSignalDeviceId();
+    if (id) return id;
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  return null;
+};
+
+/**
+ * "Show notifications" label + toggle switch reflecting the live push
+ * subscription status. Toggling ON re-triggers the native browser permission
+ * popup when the user skipped it at login (allowed because the click is a
+ * user gesture while permission is still "default"), then registers the
+ * device for push. Toggling OFF opts the device out of push delivery —
+ * browser permission stays granted, so toggling back ON later is instant.
+ * If the user previously clicked "Block" on the popup, browsers never allow
+ * re-opening it, so the toggle shows settings instructions instead.
+ */
+const PushNotificationToggle = ({
+  email,
+  label = "Show notifications",
+  deniedMessage = "Notifications are blocked for this site. Enable them from the lock icon in your browser's address bar (Site settings → Notifications → Allow), then try again.",
+  sdkErrorMessage = "The notification service couldn't start on this page — usually the domain isn't authorized in OneSignal (Settings → Push & In-App → Web → Site URL). Check the browser console for a red OneSignal error.",
+  braveErrorMessage = "Brave blocks push notifications by default. Open Brave Settings → Privacy and security → turn ON \"Use Google services for push messaging\", restart Brave, then try again — or use Chrome instead.",
+  hideWhenUnsupported = true,
+  activeColor = "#2c5282",
+  inactiveColor = "#cbd5e0",
+  labelColor,
+  fontSize = 14,
+  toggleHeight = 24,
+  className,
+  onChange,
+  ...rest
+}) => {
+  // null while the OneSignal SDK is still initializing.
+  const [subState, setSubState] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [showDeniedHelp, setShowDeniedHelp] = useState(false);
+  const [sdkFailed, setSdkFailed] = useState(false);
+  const stateArrivedRef = useRef(false);
+
+  const enabled = !!subState && subState.permission === "granted" && subState.optedIn;
+
+  useEffect(() => {
+    let mounted = true;
+    const apply = (state) => {
+      if (!mounted || !state) return;
+      stateArrivedRef.current = true;
+      setSdkFailed(false);
+      setSubState(state);
+      console.log("PushNotificationToggle: state", state);
+      if (state.permission === "granted" && state.optedIn) setShowDeniedHelp(false);
+    };
+    getPushSubscriptionState().then(apply);
+    const off = onPushSubscriptionChange(apply);
+    // If the SDK never reports back (init failed — e.g. domain not authorized
+    // in the OneSignal dashboard), surface that instead of a silently
+    // disabled toggle.
+    const failTimer = setTimeout(() => {
+      if (mounted && !stateArrivedRef.current) {
+        console.warn("PushNotificationToggle: OneSignal SDK did not initialize within 8s — is this domain authorized in the OneSignal dashboard?");
+        setSdkFailed(true);
+      }
+    }, 8000);
+    return () => {
+      mounted = false;
+      clearTimeout(failTimer);
+      off();
+    };
+  }, []);
+
+  // The device's OneSignal subscription id, once it has one. (It used to be
+  // attached to the user's Novu subscriber here; Novu is gone from the app.)
+  const registerDevice = async () => {
+    const deviceId = await waitForDeviceId();
+    return deviceId || null;
+  };
+
+  const handleToggle = async () => {
+    if (busy || !subState) return;
+
+    if (enabled) {
+      setBusy(true);
+      try {
+        const state = await unsubscribeFromPush();
+        if (state) setSubState(state);
+        if (typeof onChange === "function") onChange(false, null);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    if (subState.permission === "denied") {
+      setShowDeniedHelp(true);
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const state = await subscribeToPush();
+      if (state) setSubState(state);
+      if (state?.permission === "granted" && state?.optedIn) {
+        setShowDeniedHelp(false);
+        const deviceId = await registerDevice();
+        if (typeof onChange === "function") onChange(true, deviceId);
+      } else if (state?.permission === "denied") {
+        setShowDeniedHelp(true);
+      }
+      // Popup dismissed again → stays off, no message needed.
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (subState && !subState.supported && hideWhenUnsupported) return null;
+
+  const loading = !subState;
+  const disabled = loading || busy || (subState && !subState.supported);
+  const trackWidth = Math.round(toggleHeight * 1.83);
+  const knobSize = toggleHeight - 4;
+
+  const trackStyle = {
+    position: "relative",
+    flexShrink: 0,
+    width: `${trackWidth}px`,
+    height: `${toggleHeight}px`,
+    borderRadius: `${toggleHeight / 2}px`,
+    border: "none",
+    padding: 0,
+    background: enabled ? activeColor : inactiveColor,
+    cursor: disabled ? "default" : "pointer",
+    opacity: loading || busy ? 0.6 : 1,
+    transition: "background 0.2s ease, opacity 0.2s ease",
+  };
+
+  const knobStyle = {
+    position: "absolute",
+    top: "2px",
+    left: enabled ? `${trackWidth - knobSize - 2}px` : "2px",
+    width: `${knobSize}px`,
+    height: `${knobSize}px`,
+    borderRadius: "50%",
+    background: "#ffffff",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+    transition: "left 0.2s ease",
+  };
+
+  return (
+    <div
+      className={className}
+      style={{ display: "flex", flexDirection: "column", gap: "8px" }}
+      {...rest}
+    >
+      {/* space-between so the label stays left and the toggle pins to the
+          right edge at whatever width the container is given in Plasmic. */}
+      <div
+        onClick={handleToggle}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "12px",
+          cursor: disabled ? "default" : "pointer",
+          userSelect: "none",
+        }}
+      >
+        <span
+          style={{
+            fontSize: `${fontSize}px`,
+            fontWeight: 500,
+            color: labelColor || "inherit",
+          }}
+        >
+          {label}
+        </span>
+        {/* No onClick of its own — its keyboard/click events bubble to the row
+            handler above, so it never double-fires. */}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          aria-label={label}
+          disabled={disabled}
+          style={trackStyle}
+        >
+          <span style={knobStyle} />
+        </button>
+      </div>
+      {(showDeniedHelp || (sdkFailed && !subState)) && (
+        <div
+          style={{
+            padding: "10px 12px",
+            borderRadius: "8px",
+            background: "#fff5f5",
+            border: "1px solid #feb2b2",
+            color: "#742a2a",
+            fontSize: "12px",
+            lineHeight: 1.5,
+            maxWidth: "320px",
+          }}
+        >
+          {showDeniedHelp
+            ? deniedMessage
+            : typeof navigator !== "undefined" && navigator.brave
+            ? braveErrorMessage
+            : sdkErrorMessage}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default PushNotificationToggle;

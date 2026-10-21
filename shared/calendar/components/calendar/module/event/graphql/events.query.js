@@ -142,6 +142,10 @@ query RoleProfiles($first: Int) {
         name
         is_group
       }
+      # The seat's HQ -- the DR Tour Plan HQ, vacant seats included.
+      custom_territory {
+        name
+      }
     }
     }
   }
@@ -154,12 +158,18 @@ export function normalizeRoleProfiles(data) {
 					node: {
 						lft: node?.custom_department?.lft ?? null,
 						rgt: node?.custom_department?.rgt ?? null,
-						role_id: node?.role_id ?? null,
+						// Trimmed: the role_profile FIELD is typed by hand and can carry a
+						// stray space ("ABM4-VASC-CO-SAL " on 2026-10-08) while employees
+						// and child roles link to the clean doc name. Untrimmed, that ABM
+						// matched no node, resolved no roles, and the DR Tour Plan showed
+						// no doctors.
+						role_id: node?.role_id?.trim() || null,
 						sales_team__name:
 							node?.custom_department?.department_name ?? null,
 						parent_elbrit_role_id__name:
-							node?.parent_role_id?.name ?? null,
+							node?.parent_role_id?.name?.trim() || null,
 						is_group: node?.is_group ?? false,
+						hq: node?.custom_territory?.name?.trim() || null,
 					},
 				})) ?? [],
 		},
@@ -185,6 +195,14 @@ query GetEmployees($first: Int!, $filters: [DBFilterInput!]) {
         name
         }
         role_id:${ERP_EMPLOYEE_FIELDS.roleId}
+        # The employee's HQ ("HQ-Erode"): fsl_hq, else custom_territory -- the
+        # same rule the doctor popup uses (doctor-peek/lib/scope.js). Flat
+        # __name, not the nested link, so a Territory the viewer cannot read
+        # never fails the whole roster. Without these every employee's HQ was
+        # empty: a BE got theirs only when their login saw exactly one
+        # Territory, and a manager's team HQs never resolved at all.
+        fsl_hq__name
+        custom_territory__name
       }
     }
   }

@@ -1,0 +1,778 @@
+import React from "react";
+import { Check, Link, RotateCcw } from "lucide-react";
+
+/**
+ * ApprovalCard — a summary card for the secondary approval flow, with 4 variants.
+ *
+ * Variants (the `variant` prop):
+ *   - "select"         : a CHECKBOX for bulk selection (pair with a page-level "Select all").
+ *   - "toggle"         : an on/off TOGGLE SWITCH for selecting one at a time.
+ *   - "actions"        : per-card REJECT / APPROVE buttons for approving one-off.
+ *   - "select-actions" : BOTH — a checkbox (bulk select) AND Reject / Approve buttons.
+ *
+ * Selection ("select" + "toggle" + "select-actions" share this):
+ *   `checked` is a Plasmic *writable state* bound to a page state variable, and
+ *   `onCheckedChange(checked, value)` hands back BOTH the new flag AND this card's
+ *   `value` (its id) so you can maintain a selected-items array + a "Select all".
+ *
+ * Actions ("actions" + "select-actions"):
+ *   `onApprove(value)` / `onReject(value)` fire with this card's id. Approve is a direct
+ *   one-tap action; Reject only SIGNALS intent (the page opens a reason sheet and writes
+ *   the status/reason on confirm — the card itself never writes anything).
+ *
+ * Revisit (`showRevisit`) — the ERP's third action:
+ *   Turn `showRevisit` on to add a third button that sends the slice BACK to the start of
+ *   the chain. Like Reject it only SIGNALS intent — `onRevisit(value)` fires and the page
+ *   collects the required reason, then calls the ERP `operational_tracker_decision` method
+ *   with action "revisit" (a plain status write does NOT work — the server only restarts
+ *   the chain when the previous state ended in "Rejected", which that method stages).
+ *   ERP allows Revisit from TWO states, so the button has its own availability rule, wider
+ *   than Approve/Reject's: status ends with "Approval Waiting" OR with "Approved and
+ *   Waiting for Verification". That second state is APPROVED-toned, so a decided card that
+ *   is merely awaiting verification stays dimmed but KEEPS its Revisit button — only
+ *   Approve/Reject go away. Per the ERP workflow only the state's OWN role may revisit
+ *   (MIS, who verifies, may not) — set `viewerRole` to have the card enforce that, or drive
+ *   it yourself with `canRevisit` (true/false wins over every derived rule).
+ *   The server records the reason back onto `reason_for_rejection`, prefixed
+ *   "Revisit (from <state>): …" — pass that same field as `rejectionReason` and the card
+ *   recognises the prefix, shows a violet "Revisited" chip and renders the note in the
+ *   waiting state (where a plain rejection note would be hidden).
+ *
+ * Card-body click (`onCardClick`):
+ *   When wired, clicking the card body fires `onCardClick(value)` — use it to open the
+ *   slice's detail view. Wiring it turns OFF the old click-anywhere-to-select fallback,
+ *   so only the checkbox selects. The checkbox, toggle, buttons and 🔗 badge all swallow
+ *   their own clicks, so they never trigger navigation.
+ *
+ * Status & state:
+ *   `status` + `statusTone` ("waiting" amber / "approved" green / "rejected" red) render a
+ *   pill near the title (plus a "Revisited" chip when the reason carries the revisit
+ *   prefix). `statusTone` defaults to "auto": the tone is derived from the
+ *   status TEXT (contains "reject" → rejected, "approved" → approved, else waiting), so the
+ *   pill colours itself correctly without the page having to wire it. Pass an explicit tone
+ *   to override. `rejectionReason` shows a red inline note, but only when the tone is
+ *   "rejected". A decided card locks ITSELF: whenever the tone is approved/rejected the
+ *   card dims and hides its checkbox and Reject/Approve buttons (still navigable) — driven
+ *   by `lockWhenDecided` (on by default; turn off to keep buttons after a decision). `locked`
+ *   forces that same locked look manually. Both differ from `disabled`, which fully blocks a
+ *   pending card (no navigation either).
+ *
+ * Attachments badge (top-right):
+ *   Bind `links` to any number of file URLs/paths (bare strings or { label, url }).
+ *   A 🔗 icon appears with a count of the links present (or an explicit `linkCount`).
+ *   Clicking it fires `onLinkClick(links, value)` where `links` is [{ label, url }]
+ *   for each present file — open them, or show them in a dialog.
+ *
+ * Controlled/uncontrolled:
+ *   When `checked` is provided (the normal Plasmic case) the card is controlled;
+ *   otherwise it falls back to internal state so it works standalone.
+ */
+
+const STYLE_ID = "elbrit-approval-card-styles";
+
+function ensureStyles() {
+  if (typeof document === "undefined" || document.getElementById(STYLE_ID)) return;
+  const el = document.createElement("style");
+  el.id = STYLE_ID;
+  el.textContent = `
+    .eac-card {
+      box-sizing: border-box;
+      display: flex; flex-direction: column; gap: 12px;
+      width: 100%; max-width: 100%;
+      padding: 14px; border-radius: 12px;
+      border: 1px solid var(--eac-border, #e5e7eb);
+      background: var(--eac-bg, #ffffff);
+      font: 400 13px/1.4 inherit; color: #1f2937;
+      transition: border-color .12s ease, box-shadow .12s ease, background .12s ease;
+    }
+    .eac-card.eac-clickable { cursor: pointer; }
+    .eac-card.eac-clickable:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
+    .eac-card.eac-selected {
+      border-color: var(--eac-accent, #2563eb);
+      background: color-mix(in srgb, var(--eac-accent, #2563eb) 6%, #fff);
+    }
+    .eac-card.eac-disabled { opacity: 0.55; cursor: not-allowed; }
+    .eac-card.eac-disabled.eac-clickable:hover { box-shadow: none; }
+    /* locked = already-decided slice: dimmed (lighter than disabled), controls hidden,
+       but the card body stays navigable if onCardClick is wired. */
+    .eac-card.eac-locked { opacity: 0.65; }
+
+    .eac-header { display: flex; align-items: center; gap: 10px; }
+    .eac-title {
+      flex: 1 1 auto; min-width: 0;
+      font-weight: 700; font-size: 15px; color: #111827;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .eac-header-right { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; }
+
+    /* checkbox */
+    .eac-check {
+      flex: 0 0 auto; box-sizing: border-box;
+      width: 20px; height: 20px; border-radius: 5px;
+      border: 2px solid var(--eac-check-border, #cbd5e1);
+      background: #fff; color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .12s ease, border-color .12s ease;
+    }
+    .eac-check:focus-visible { outline: 2px solid var(--eac-accent, #2563eb); outline-offset: 2px; }
+    .eac-check.eac-on { background: var(--eac-accent, #2563eb); border-color: var(--eac-accent, #2563eb); }
+
+    /* toggle switch */
+    .eac-toggle {
+      flex: 0 0 auto; box-sizing: border-box; position: relative;
+      width: 40px; height: 22px; border-radius: 999px;
+      background: var(--eac-toggle-off, #cbd5e1); border: none; padding: 0;
+      cursor: pointer; transition: background .12s ease;
+    }
+    .eac-toggle:focus-visible { outline: 2px solid var(--eac-accent, #2563eb); outline-offset: 2px; }
+    .eac-toggle.eac-on { background: var(--eac-accent, #2563eb); }
+    .eac-toggle-knob {
+      position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+      border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+      transition: transform .14s ease;
+    }
+    .eac-toggle.eac-on .eac-toggle-knob { transform: translateX(18px); }
+
+    /* attachments link + badge */
+    .eac-link {
+      flex: 0 0 auto; position: relative; box-sizing: border-box;
+      width: 28px; height: 28px; border-radius: 8px; border: none;
+      background: transparent; color: #64748b; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; padding: 0;
+      transition: background .12s ease, color .12s ease;
+    }
+    .eac-link:hover { background: #f1f5f9; color: #334155; }
+    .eac-link:focus-visible { outline: 2px solid var(--eac-accent, #2563eb); outline-offset: 2px; }
+    .eac-badge {
+      position: absolute; top: -5px; right: -5px;
+      min-width: 17px; height: 17px; padding: 0 4px; box-sizing: border-box;
+      border-radius: 999px; background: #111827; color: #fff;
+      font-size: 10px; font-weight: 700; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* attachments dropdown (2+ links) */
+    .eac-link-wrap { position: relative; flex: 0 0 auto; }
+    .eac-menu {
+      position: absolute; top: calc(100% + 6px); right: 0; z-index: 20;
+      min-width: 180px; max-width: 280px; box-sizing: border-box;
+      padding: 6px; border-radius: 10px;
+      border: 1px solid var(--eac-border, #e5e7eb); background: #fff;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .eac-menu-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; border-radius: 7px;
+      color: #334155; font-size: 12px; font-weight: 500;
+      text-decoration: none; cursor: pointer;
+      transition: background .12s ease, color .12s ease;
+    }
+    .eac-menu-item:hover {
+      background: color-mix(in srgb, var(--eac-accent, #2563eb) 8%, #fff);
+      color: var(--eac-accent, #2563eb);
+    }
+    .eac-menu-item-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+
+    /* metric columns */
+    .eac-cols { display: flex; align-items: flex-start; gap: 14px; }
+    .eac-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+    .eac-col-head { font-weight: 600; font-size: 13px; color: var(--eac-heading, #2563eb); }
+    /* Rows wrap instead of clip: if a value can't fit beside its label it drops to
+       the next line (the number itself stays whole) — values are never hidden. */
+    .eac-row { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; row-gap: 1px; }
+    .eac-row-label { flex: 0 0 auto; color: #6b7280; font-size: 11px; }
+    .eac-row-value { color: #374151; font-size: 12px; font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+    /* action buttons */
+    .eac-hr { height: 1px; background: var(--eac-border, #e5e7eb); margin: 0; }
+    .eac-actions { display: flex; justify-content: space-between; gap: 12px; }
+    .eac-btn {
+      flex: 0 0 auto; box-sizing: border-box; min-width: 96px;
+      padding: 9px 18px; border-radius: 8px; border: none;
+      font: 600 14px/1 inherit; color: #fff; cursor: pointer;
+      transition: filter .12s ease, opacity .12s ease;
+    }
+    .eac-btn:hover { filter: brightness(0.95); }
+    .eac-btn:active { filter: brightness(0.9); }
+    .eac-btn:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+    .eac-btn:disabled { opacity: 0.5; cursor: not-allowed; filter: none; }
+
+    /* three actions (Reject | Revisit | Approve): equal columns instead of
+       space-between, so they still fit a ~360px phone. The two-button row is
+       left exactly as it was. */
+    .eac-actions.eac-actions-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .eac-actions-3 .eac-btn {
+      min-width: 0; padding: 9px 8px; font-size: 13px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    /* a lone Revisit (card already approved, awaiting verification) sits right */
+    .eac-actions.eac-actions-1 { justify-content: flex-end; }
+
+    /* status chip (near the title) — tone drives the colour */
+    .eac-status {
+      align-self: flex-start; box-sizing: border-box;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 10px 3px 8px; border-radius: 999px;
+      font-size: 11px; font-weight: 600; line-height: 1.3; white-space: nowrap;
+      max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+    }
+    .eac-status-dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .eac-status-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .eac-status-waiting  { background: #fef3c7; color: #b45309; }
+    .eac-status-approved { background: #dcfce7; color: #15803d; }
+    .eac-status-rejected { background: #fee2e2; color: #b91c1c; }
+
+    /* status row: the pill + the "Revisited" chip sit side by side and wrap */
+    .eac-status-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .eac-chip-revisit {
+      box-sizing: border-box; display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 9px; border-radius: 999px;
+      background: #ede9fe; color: #6d28d9;
+      font-size: 11px; font-weight: 600; line-height: 1.3; white-space: nowrap;
+    }
+
+    /* inline rejection reason (only when tone = rejected) */
+    .eac-reason {
+      box-sizing: border-box; padding: 9px 11px; border-radius: 8px;
+      background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;
+      font-size: 12px; line-height: 1.4; word-break: break-word;
+    }
+    .eac-reason-label { font-weight: 700; }
+    /* revisit note — shown in ANY tone (a revisited slice is back to "waiting") */
+    .eac-reason-revisit { background: #f5f3ff; border-color: #ddd6fe; color: #5b21b6; }
+    .eac-reason-from { display: block; margin-top: 3px; font-size: 11px; opacity: 0.85; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .eac-card, .eac-check, .eac-toggle, .eac-toggle-knob, .eac-link, .eac-btn { transition: none; }
+    }
+  `;
+  document.head.appendChild(el);
+}
+
+// Format a quantity: numbers get Indian grouping + the unit; strings pass through.
+function fmtQty(qty, unit) {
+  if (qty === null || qty === undefined || qty === "") return unit ? `0 ${unit}` : "0";
+  if (typeof qty === "number" && isFinite(qty)) {
+    const n = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 }).format(qty);
+    return unit ? `${n} ${unit}` : n;
+  }
+  return unit ? `${qty} ${unit}` : String(qty);
+}
+
+// Resolve an ERP file path into an openable URL.
+//  - empty / null            → null (link is hidden)
+//  - already absolute (http) → used as-is
+//  - relative "/private/..." → prefixed with baseUrl (the ERP site origin)
+// encodeURI keeps "/" ":" etc. but turns spaces into %20 so paths like
+// "export_2026-06-13 (3).xlsx" open correctly.
+function resolveFileUrl(path, baseUrl) {
+  if (path === null || path === undefined) return null;
+  const p = String(path).trim();
+  if (!p) return null;
+  if (/^https?:\/\//i.test(p)) return encodeURI(p);
+  const base = (baseUrl || "").replace(/\/+$/, "");
+  const rel = p.startsWith("/") ? p : `/${p}`;
+  return encodeURI(`${base}${rel}`);
+}
+
+// Derive a readable label from a file path/URL: the last path segment, decoded.
+// e.g. "/private/files/export_2026-06-13 (1).xlsx" -> "export_2026-06-13 (1).xlsx"
+function fileLabelFromUrl(u) {
+  const s = String(u).split(/[?#]/)[0];
+  const seg = s.split("/").filter(Boolean).pop() || s;
+  try {
+    return decodeURIComponent(seg);
+  } catch {
+    return seg;
+  }
+}
+
+// Normalize the `links` prop into a clean [{ label, url }] array.
+// Accepts a single value or an array; each entry can be:
+//   - a bare string  ("/private/files/x.xlsx" or "https://...")
+//   - an object      ({ url|href|link|value, label|name|title })
+// Relative paths get merged with baseUrl; empties are dropped; labels fall back
+// to the file name so callers never have to supply one.
+function normalizeLinks(links, baseUrl) {
+  const arr = Array.isArray(links) ? links : links === null || links === undefined ? [] : [links];
+  return arr
+    .map((item) => {
+      const isObj = item && typeof item === "object";
+      const rawUrl = isObj ? item.url ?? item.href ?? item.link ?? item.value : item;
+      const url = resolveFileUrl(rawUrl, baseUrl);
+      if (!url) return null;
+      const label = (isObj ? item.label ?? item.name ?? item.title : null) || fileLabelFromUrl(rawUrl);
+      return { label, url };
+    })
+    .filter(Boolean);
+}
+
+// Format a monetary value: numbers get currency symbol + Indian grouping + 2dp; strings pass through.
+function fmtValue(val, currency) {
+  const sym = currency ?? "₹";
+  if (val === null || val === undefined || val === "") return `${sym}0.00`;
+  if (typeof val === "number" && isFinite(val)) {
+    const n = new Intl.NumberFormat("en-IN", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(val);
+    return `${sym}${n}`;
+  }
+  return String(val);
+}
+
+// Derive the status-pill tone from the status TEXT, used when the caller leaves
+// statusTone at "auto" (the default) or empty. Order matters: "reject" wins over
+// "approved", and the completed "Approved" state wins over "Approval Waiting".
+//   "ABM Rejected"                              -> rejected (red)
+//   "ABM Approved and Waiting for Verification" -> approved (green)
+//   "ABM Approval Waiting"                      -> waiting  (amber)
+function deriveTone(status) {
+  const s = String(status || "").toLowerCase();
+  if (s.includes("reject")) return "rejected";
+  if (s.includes("approved")) return "approved";
+  return "waiting"; // "approval waiting", "pending", empty, or anything else
+}
+
+// The two ERP states a slice can be revisited FROM. Approve/Reject only apply to the
+// first; Revisit also applies while the slice sits with MIS for verification.
+const AWAITING_APPROVAL = "approval waiting";
+const AWAITING_VERIFICATION = "approved and waiting for verification";
+
+// The role that OWNS a state — the first word of the status text.
+//   "ABM Approval Waiting"                      -> "ABM"
+//   "ABM Approved and Waiting for Verification" -> "ABM"
+// Per the ERP workflow, only this role may Revisit (the MIS verifier may not), so it's
+// what `viewerRole` is checked against.
+function stateRole(status) {
+  const s = String(status || "").trim();
+  return s ? s.split(/\s+/)[0] : "";
+}
+
+// Recognise the note the ERP writes back onto reason_for_rejection after a revisit:
+//   "Revisit (from ABM Approved and Waiting for Verification): fix the closing qty"
+// Returns { fromState, text } so the card can show the note (and a chip) even though the
+// slice is back to a "waiting" tone, where a plain rejection note stays hidden.
+const REVISIT_NOTE = /^\s*revisit\s*\(\s*from\s+([^)]*)\)\s*:\s*/i;
+
+function parseRevisitNote(reason) {
+  if (reason === null || reason === undefined) return null;
+  const s = String(reason);
+  const m = s.match(REVISIT_NOTE);
+  if (!m) return null;
+  return { fromState: (m[1] || "").trim(), text: s.slice(m[0].length).trim() };
+}
+
+export default function ApprovalCard({
+  // variant
+  variant = "select",          // "select" | "toggle" | "actions" | "select-actions"
+
+  // identity / selection (select + toggle + select-actions)
+  value,                       // id/object handed back on selection / actions (bind to the row's key)
+  checked,                     // controlled selected state (Plasmic writable state) — simple single-card use
+  onCheckedChange,             // (checked: boolean, value: any) => void
+  selectOnCardClick = false,   // OFF by default: only the checkbox toggles. Turn ON to also toggle on card-body click (IGNORED once onCardClick is wired)
+  onCardClick,                 // (value) => void — card-body click (open detail). When wired, body no longer selects.
+
+  // actions variant (actions + select-actions)
+  onApprove,                   // (value) => void — direct one-tap approve
+  onReject,                    // (value) => void — SIGNALS reject intent (page opens a reason sheet; card writes nothing)
+  approveLabel = "Approve",
+  rejectLabel = "Reject",
+  approveColor = "#2563eb",
+  rejectColor = "#ef4444",
+
+  // revisit — the ERP's third action: send the slice back to the start of the chain.
+  // Availability is WIDER than approve/reject (see the header note), so it survives the
+  // auto-lock on an approved-and-awaiting-verification card.
+  showRevisit = false,         // add the third button (actions + select-actions)
+  onRevisit,                   // (value) => void — SIGNALS revisit intent; the page collects the required reason and calls operational_tracker_decision
+  revisitLabel = "Revisit",
+  revisitColor = "#7c3aed",
+  canRevisit,                  // OPTIONAL hard override (true/false). Leave unset to derive from `status` (+ `viewerRole`).
+  viewerRole,                  // OPTIONAL role of the logged-in user ("ABM"/"RBM"/"MIS"…). When set, Revisit shows only if it matches the state's own role — ERP does NOT enforce this server-side.
+  revisitReason,               // OPTIONAL explicit revisit note. Normally leave empty: the card detects the "Revisit (from …):" prefix on `rejectionReason`.
+
+  // attachments badge — `links` holds ANY number of files. Each entry can be a
+  // "/private/files/..." path or full URL, given as a bare string OR { label, url }.
+  // Build it in Plasmic from whatever row fields you have, e.g.
+  //   [currentItem.custom_transformed_data, currentItem.custom_ecubix_data]
+  // The badge holds them all and hands them back on click. Set fileBaseUrl to the
+  // ERP origin so relative paths become openable links.
+  links,
+  fileBaseUrl = "",
+  linkCount,                   // OPTIONAL: force the badge number; auto-counted from `links` if omitted
+  openInNewTab = true,         // badge click opens the file(s) in a new tab (1 → direct, 2+ → dropdown menu)
+  onLinkClick,                 // (links, value) => void — also fired on badge click for custom wiring
+
+  disabled = false,           // temporarily block a PENDING card (dim, no selection/buttons, no navigation)
+  locked = false,             // already-decided slice: dim, no checkbox, no Approve/Reject (still navigable; a legal Revisit survives)
+  lockWhenDecided = true,     // auto-lock once the status is decided (tone approved/rejected). Set false to keep buttons after a decision.
+
+  // content
+  title = "Sai Radha Pharma",
+  status,                     // status chip text (e.g. "ABM Approval Waiting")
+  statusTone = "auto",        // "auto" (derive from status text) | "waiting" (amber) | "approved" (green) | "rejected" (red)
+  rejectionReason,            // ERP reason_for_rejection. Red inline note when the tone is "rejected"; if it carries the "Revisit (from …):" prefix it renders as a violet revisit note in ANY tone
+  currency = "₹",
+  leftLabel = "Sales",
+  leftQty,
+  leftQtyUnit = "Nos",
+  leftValue,
+  rightLabel = "Closing",
+  rightQty,
+  rightQtyUnit = "Nos",
+  rightValue,
+
+  // theming
+  accentColor = "#2563eb",
+  headingColor = "#2563eb",
+
+  className,
+  style,
+}) {
+  ensureStyles();
+
+  // Effective pill tone: an explicit tone wins; "auto" (default) or empty derives it
+  // from the status text so the colour is always right without page-level wiring.
+  const tone = statusTone && statusTone !== "auto" ? statusTone : deriveTone(status);
+
+  // Effective locked state: an explicit `locked` still wins, but the card also locks
+  // ITSELF once the status is decided (approved/rejected) — so after Approve/Reject the
+  // buttons disappear on their own, no page wiring needed. Only "waiting" stays actionable.
+  const isDecided = tone === "approved" || tone === "rejected";
+  const isLocked = locked || (lockWhenDecided && isDecided);
+
+  const isToggle = variant === "toggle";
+  const isActions = variant === "actions";
+  const isSelectActions = variant === "select-actions";
+  // checkbox shows for "select" (the default / unknown fallback) AND "select-actions".
+  const showCheckbox = !isToggle && !isActions;
+  // Reject / Approve / Revisit buttons show for "actions" AND "select-actions".
+  const showActions = isActions || isSelectActions;
+  const selectable = showCheckbox || isToggle;
+
+  // Per-action availability. Approve/Reject keep the original rule (visible until the card
+  // locks). Revisit gets its own, WIDER rule because ERP allows it from two states — one of
+  // which ("… Approved and Waiting for Verification") reads as approved and would otherwise
+  // be locked away. An explicit `canRevisit` beats every derived rule.
+  const lowerStatus = String(status || "").trim().toLowerCase();
+  const awaitingApproval = lowerStatus.endsWith(AWAITING_APPROVAL);
+  const awaitingVerification = lowerStatus.endsWith(AWAITING_VERIFICATION);
+  // No status text to go on (standalone / Studio preview): fall back to the lock.
+  const revisitableState = lowerStatus ? awaitingApproval || awaitingVerification : !isLocked;
+  // Only the state's OWN role may revisit; the MIS verifier may not. Unset viewerRole =
+  // the page is doing the gating, so don't second-guess it.
+  const revisitRoleOk =
+    !viewerRole || !lowerStatus ||
+    String(viewerRole).trim().toUpperCase() === stateRole(status).toUpperCase();
+  const revisitAllowed =
+    canRevisit === undefined || canRevisit === null
+      ? revisitableState && revisitRoleOk
+      : Boolean(canRevisit);
+
+  // `disabled` greys the buttons out rather than removing them (as it always has for
+  // Approve/Reject), so Revisit follows the same rule and stays visible-but-dead.
+  const showApproveReject = showActions && !isLocked;
+  const showRevisitBtn = showActions && showRevisit && revisitAllowed;
+  const actionCount = (showApproveReject ? 2 : 0) + (showRevisitBtn ? 1 : 0);
+
+  // The revisit note ERP leaves behind on reason_for_rejection (or an explicit override).
+  // Its presence is also what marks the card "Revisited" — there is no ERP status for it.
+  const revisitNote = revisitReason
+    ? { fromState: "", text: String(revisitReason) }
+    : parseRevisitNote(rejectionReason);
+
+  // `checked` is just true/false — bind it to your control (a Select All boolean, or the
+  // card's own checked state). The card fires onCheckedChange AUTOMATICALLY whenever
+  // `checked` flips — from a click OR from being set outside (Select All) — so you wire
+  // the value handling ONCE (Add element / Remove elements) and Select All only flips the
+  // boolean; it never passes any value. The ref dedupes so a click + the resulting prop
+  // update don't both fire.
+  const controlled = checked !== undefined && checked !== null;
+  const [internal, setInternal] = React.useState(Boolean(checked));
+  React.useEffect(() => {
+    if (controlled) setInternal(Boolean(checked));
+  }, [controlled, checked]);
+  const isChecked = controlled ? Boolean(checked) : internal;
+
+  const lastEmitted = React.useRef(Boolean(checked));
+  React.useEffect(() => {
+    if (!controlled) return;
+    const c = Boolean(checked);
+    if (c !== lastEmitted.current) {
+      lastEmitted.current = c;
+      onCheckedChange?.(c, value);
+    }
+  }, [controlled, checked, value, onCheckedChange]);
+
+  const toggle = React.useCallback(() => {
+    if (disabled || isLocked) return;
+    const next = !isChecked;
+    if (!controlled) setInternal(next);
+    lastEmitted.current = next;
+    onCheckedChange?.(next, value);
+  }, [disabled, isLocked, isChecked, controlled, onCheckedChange, value]);
+
+  // Attachments dropdown (only used when there are 2+ links). We can't reliably
+  // window.open several tabs from one click — browsers block all but the first —
+  // so for multiple files we show a menu of native <a target="_blank"> links, and
+  // each opens on its own click (never blocked).
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const linkWrapRef = React.useRef(null);
+  React.useEffect(() => {
+    if (!menuOpen) return;
+    const onDocClick = (e) => {
+      if (linkWrapRef.current && !linkWrapRef.current.contains(e.target)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [menuOpen]);
+
+  const openOneLink = React.useCallback((url) => {
+    if (typeof window !== "undefined" && url) window.open(url, "_blank", "noopener,noreferrer");
+  }, []);
+
+  // Card-body click. If onCardClick is wired, the body opens the detail (navigation) and
+  // no longer toggles selection — even on a locked card (disabled still blocks everything).
+  // If it's NOT wired, the body falls back to click-to-select (select/toggle only), which
+  // is suppressed when disabled or locked. The checkbox, toggle, buttons and 🔗 badge all
+  // stopPropagation, so they never trigger this handler.
+  const canNavigate = !!onCardClick && !disabled;
+  const canBodySelect = !onCardClick && selectable && selectOnCardClick && !disabled && !isLocked;
+  const handleCardBodyClick =
+    canNavigate || canBodySelect
+      ? () => {
+          if (onCardClick) onCardClick(value);
+          else toggle();
+        }
+      : undefined;
+
+  const cardClass = [
+    "eac-card",
+    handleCardBodyClick ? "eac-clickable" : "",
+    selectable && isChecked ? "eac-selected" : "",
+    disabled ? "eac-disabled" : "",
+    isLocked ? "eac-locked" : "",
+    className || "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const cssVars = {
+    "--eac-accent": accentColor,
+    "--eac-heading": headingColor,
+    ...style,
+  };
+
+  // Normalize `links` into [{ label, url }]. This is what the badge click hands back —
+  // clicking the 🔗 passes ALL links plus this card's `value` to onLinkClick.
+  const fileLinks = normalizeLinks(links, fileBaseUrl);
+
+  // Badge count: an explicit numeric linkCount wins; otherwise derive it from the
+  // number of file links present (so you don't have to set a count by hand).
+  const badgeCount = typeof linkCount === "number" ? linkCount : fileLinks.length;
+  const hasBadge = badgeCount > 0;
+
+  const column = (label, qty, unit, val) => (
+    <div className="eac-col">
+      <span className="eac-col-head">{label}</span>
+      <div className="eac-row">
+        <span className="eac-row-label">Qty</span>
+        <span className="eac-row-value">{fmtQty(qty, unit)}</span>
+      </div>
+      <div className="eac-row">
+        <span className="eac-row-label">Value</span>
+        <span className="eac-row-value">{fmtValue(val, currency)}</span>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className={cardClass} style={cssVars} onClick={handleCardBodyClick}>
+      <div className="eac-header">
+        {showCheckbox && !isLocked ? (
+          <span
+            role="checkbox"
+            aria-checked={isChecked}
+            aria-disabled={disabled || undefined}
+            tabIndex={disabled ? -1 : 0}
+            className={`eac-check ${isChecked ? "eac-on" : ""}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggle();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                toggle();
+              }
+            }}
+          >
+            {isChecked ? <Check size={14} strokeWidth={3} /> : null}
+          </span>
+        ) : null}
+
+        <span className="eac-title" title={typeof title === "string" ? title : undefined}>
+          {title}
+        </span>
+
+        <div className="eac-header-right">
+          {hasBadge ? (
+            <div className="eac-link-wrap" ref={linkWrapRef}>
+              <button
+                type="button"
+                className="eac-link"
+                aria-label={`${badgeCount} attached document${badgeCount === 1 ? "" : "s"}`}
+                aria-haspopup={fileLinks.length > 1 ? "menu" : undefined}
+                aria-expanded={fileLinks.length > 1 ? menuOpen : undefined}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onLinkClick?.(fileLinks, value);
+                  if (!openInNewTab) return;
+                  if (fileLinks.length === 1) {
+                    openOneLink(fileLinks[0].url);
+                  } else if (fileLinks.length > 1) {
+                    setMenuOpen((v) => !v);
+                  }
+                }}
+              >
+                <Link size={17} strokeWidth={2.25} />
+                <span className="eac-badge">{badgeCount}</span>
+              </button>
+
+              {openInNewTab && menuOpen && fileLinks.length > 1 ? (
+                <div className="eac-menu" role="menu" onClick={(e) => e.stopPropagation()}>
+                  {fileLinks.map((l, i) => (
+                    <a
+                      key={i}
+                      role="menuitem"
+                      className="eac-menu-item"
+                      href={l.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={l.label}
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      <Link size={13} strokeWidth={2.25} />
+                      <span className="eac-menu-item-text">{l.label}</span>
+                    </a>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {isToggle && !isLocked ? (
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isChecked}
+              aria-disabled={disabled || undefined}
+              disabled={disabled}
+              className={`eac-toggle ${isChecked ? "eac-on" : ""}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggle();
+              }}
+            >
+              <span className="eac-toggle-knob" />
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {status || revisitNote ? (
+        <div className="eac-status-row">
+          {status ? (
+            <div className={`eac-status eac-status-${tone}`}>
+              <span className="eac-status-dot" aria-hidden="true" />
+              <span className="eac-status-text">{status}</span>
+            </div>
+          ) : null}
+          {revisitNote ? (
+            <span
+              className="eac-chip-revisit"
+              title={revisitNote.fromState ? `Sent back from ${revisitNote.fromState}` : undefined}
+            >
+              <RotateCcw size={11} strokeWidth={2.5} />
+              Revisited
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="eac-cols">
+        {column(leftLabel, leftQty, leftQtyUnit, leftValue)}
+        {column(rightLabel, rightQty, rightQtyUnit, rightValue)}
+      </div>
+
+      {/* A revisit note wins over the plain rejection note and shows in ANY tone — a
+          revisited slice is back to "waiting", where the red note would be hidden. */}
+      {revisitNote ? (
+        <div className="eac-reason eac-reason-revisit">
+          <span className="eac-reason-label">Sent back for revisit:</span> {revisitNote.text}
+          {revisitNote.fromState ? (
+            <span className="eac-reason-from">from {revisitNote.fromState}</span>
+          ) : null}
+        </div>
+      ) : tone === "rejected" && rejectionReason ? (
+        <div className="eac-reason">
+          <span className="eac-reason-label">Reason:</span> {rejectionReason}
+        </div>
+      ) : null}
+
+      {actionCount > 0 ? (
+        <>
+          <div className="eac-hr" aria-hidden="true" />
+          <div className={`eac-actions eac-actions-${actionCount}`}>
+            {showApproveReject ? (
+              <button
+                type="button"
+                className="eac-btn eac-btn-reject"
+                style={{ background: rejectColor }}
+                disabled={disabled}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onReject?.(value);
+                }}
+              >
+                {rejectLabel}
+              </button>
+            ) : null}
+            {showRevisitBtn ? (
+              <button
+                type="button"
+                className="eac-btn eac-btn-revisit"
+                style={{ background: revisitColor }}
+                disabled={disabled}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRevisit?.(value);
+                }}
+              >
+                {revisitLabel}
+              </button>
+            ) : null}
+            {showApproveReject ? (
+              <button
+                type="button"
+                className="eac-btn eac-btn-approve"
+                style={{ background: approveColor }}
+                disabled={disabled}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onApprove?.(value);
+                }}
+              >
+                {approveLabel}
+              </button>
+            ) : null}
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}

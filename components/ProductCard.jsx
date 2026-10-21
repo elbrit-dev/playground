@@ -1,0 +1,320 @@
+import React, { useCallback, useMemo, useState } from "react";
+
+/**
+ * ProductCard — ONE catalogue card, for ONE brand.
+ *
+ * This is deliberately a single card, not a list: you place it (or repeat it in
+ * Plasmic Studio) and bind each instance its own brand's rows. It renders the
+ * brand title, "N variants", the variant pills (10 / 20 / 40), and the
+ * MRP / PTR / PTS row for whichever pill is selected.
+ *
+ * The `children` slot renders below the price row — that's the place to add the
+ * per-warehouse stock chips (or anything else) separately in Studio.
+ *
+ * DATA (`data` prop) — the rows of THIS brand only (its variants). Tolerant of
+ * shape: array of nodes, array of edges, { edges:[{node}] }, or a single row
+ * object. Each row uses (defaults, overridable): item_name, brand__name,
+ * custom_last_mrp / custom_last_ptr / custom_last_pts.
+ */
+
+/** Unwrap connection/edge shapes down to a flat array of rows. */
+function normalizeRows(data) {
+  if (data == null) return [];
+  if (Array.isArray(data)) {
+    if (data.length === 0) return [];
+    const looksLikeEdges = data.some((d) => d && typeof d === "object" && d.node);
+    return looksLikeEdges ? data.map((d) => d?.node ?? d).filter(Boolean) : data.filter(Boolean);
+  }
+  if (typeof data !== "object") return [];
+  if (Array.isArray(data.edges)) return data.edges.map((e) => e?.node ?? e).filter(Boolean);
+  if (Array.isArray(data.nodes)) return data.nodes.filter(Boolean);
+  // A single row object.
+  return [data];
+}
+
+/**
+ * Read a field whether the row is flattened ("brand__name") or nested
+ * ({ brand: { name } }), tolerating a scalar Link value at the parent.
+ */
+function readField(row, key) {
+  if (!row || !key) return undefined;
+  if (row[key] != null) return row[key];
+  const parts = String(key).includes("__") ? String(key).split("__") : String(key).split(".");
+  let cursor = row;
+  for (const part of parts) {
+    if (cursor == null) return undefined;
+    if (typeof cursor !== "object") return cursor;
+    cursor = cursor[part];
+  }
+  return cursor;
+}
+
+function toNumber(value) {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function formatMoney(value) {
+  const n = toNumber(value);
+  if (n == null) return "—";
+  return `₹ ${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatInt(value) {
+  const n = toNumber(value);
+  if (n == null) return "—";
+  return Math.round(n).toLocaleString("en-IN");
+}
+
+/** "ROZULA CV 10" with brand "ROZULA" -> "CV 10"; falls back to the full name. */
+function variantLabel(itemName, brand) {
+  const name = String(itemName ?? "").trim();
+  const b = String(brand ?? "").trim();
+  if (!name) return "";
+  if (b && name.toUpperCase().startsWith(b.toUpperCase())) {
+    const rest = name.slice(b.length).trim();
+    if (rest) return rest;
+  }
+  return name;
+}
+
+/**
+ * Sort key for a human-pleasing variant pill order.
+ *
+ * Primary grouping: variants that lead with the number ("10", "10F", "100")
+ * all come before variants that lead with a word ("CV 10", "Combo 10") — the
+ * alpha-prefixed group sits together at the end rather than interleaving by
+ * size. Within each group, sort by pack size ascending, and within the same
+ * size, plain number ("10") before letter-suffixed ("10F").
+ *
+ * Doesn't assume any fixed prefix/suffix length or wording: it just takes the
+ * first number in the label and looks at what's around it.
+ */
+function parseVariantSortKey(label) {
+  const s = String(label ?? "").trim();
+  const match = s.match(/\d+/);
+  if (!match) return { group: 2, size: Infinity, kind: 3, label: s };
+
+  const size = Number(match[0]);
+  const before = s.slice(0, match.index).trim();
+  const after = s.slice(match.index + match[0].length).trim();
+
+  const group = before ? 1 : 0;               // 0 = numeric-leading, 1 = alpha-leading
+  const kind = before ? 2 : (after ? 1 : 0);  // tie-break within the same group+size
+  return { group, size, kind, label: s };
+}
+
+function compareVariantSortKeys(a, b) {
+  if (a.group !== b.group) return a.group - b.group;
+  if (a.size !== b.size) return a.size - b.size;
+  if (a.kind !== b.kind) return a.kind - b.kind;
+  return a.label.localeCompare(b.label);
+}
+
+export default function ProductCard({
+  data,
+  brand,
+  brandField = "brand__name",
+  variantNameField = "item_name",
+  priceFields,
+  totalStock,
+  totalStockField,
+  clickable = true,
+  onCardClick,
+  onVariantChange,
+  // Single-product variant of the same card: the card is ONE product instead of
+  // a brand with several variants. Title becomes the item name, the variant
+  // pills and the "N variants" count disappear, and the brand moves to a small
+  // line underneath. Everything else (prices, stock, extras, click) is the same.
+  // Off by default — the brand-based card is untouched.
+  singleProduct = false,
+  showBrandLine = true,
+  // Code-only render hook (not a Studio prop): receives the SELECTED variant's row
+  // and renders below the price row — used by CatalogLetterGroup for warehouse
+  // chips that follow the active pill. The children slot stays static below it.
+  renderExtras,
+  children,
+  className,
+}) {
+  const rows = useMemo(() => normalizeRows(data), [data]);
+
+  const resolvedPriceFields = useMemo(() => {
+    const fallback = [
+      { field: "custom_last_mrp", label: "MRP" },
+      { field: "custom_last_ptr", label: "PTR" },
+      { field: "custom_last_pts", label: "PTS" },
+    ];
+    const list = Array.isArray(priceFields) && priceFields.length > 0 ? priceFields : fallback;
+    return list
+      .map((pf) => {
+        if (typeof pf === "string") return { field: pf, label: pf };
+        if (!pf || !pf.field) return null;
+        return { field: String(pf.field), label: String(pf.label ?? pf.field) };
+      })
+      .filter(Boolean);
+  }, [priceFields]);
+
+  // The brand this card belongs to — the heading in brand mode, the small line
+  // under the product name in single-product mode.
+  const brandName = useMemo(() => {
+    const explicit = String(brand ?? "").trim();
+    if (explicit) return explicit;
+    return String(readField(rows[0], brandField) ?? "—").trim() || "—";
+  }, [brand, rows, brandField]);
+
+  const [activeIndex, setActiveIndex] = useState(0);
+  // Single-product mode always shows the first row; there are no pills to pick.
+  const active = singleProduct
+    ? (rows[0] ?? null)
+    : (rows[Math.min(activeIndex, Math.max(rows.length - 1, 0))] ?? null);
+
+  const title = useMemo(() => {
+    if (!singleProduct) return brandName;
+    const name = String(readField(active, variantNameField) ?? "").trim();
+    return name || brandName;
+  }, [singleProduct, brandName, active, variantNameField]);
+
+  // Direct value wins over reading a column off the selected variant.
+  const totalValue = totalStock ?? (totalStockField && active ? readField(active, totalStockField) : null);
+  const showTotal = toNumber(totalValue) != null;
+
+  // Display order for the pills only — indices still point into `rows`, so
+  // activeIndex/selectVariant/active are all untouched by the reorder.
+  const sortedVariants = useMemo(() => {
+    return rows
+      .map((row, index) => ({
+        row,
+        index,
+        label: variantLabel(readField(row, variantNameField), brandName),
+      }))
+      .sort((a, b) => compareVariantSortKeys(parseVariantSortKey(a.label), parseVariantSortKey(b.label)));
+  }, [rows, variantNameField, brandName]);
+
+  const selectVariant = useCallback(
+    (index) => {
+      setActiveIndex(index);
+      if (onVariantChange) {
+        const row = rows[index];
+        onVariantChange({
+          index,
+          variant: variantLabel(readField(row, variantNameField), brandName),
+          row,
+        });
+      }
+    },
+    [onVariantChange, rows, variantNameField, brandName],
+  );
+
+  const fire = useCallback(() => {
+    if (!clickable || !onCardClick) return;
+    // Payload shape is identical in both modes, so the same handler (e.g. opening
+    // the Product Stock Sheet) works either way. `brand` is always the brand.
+    onCardClick({
+      brand: brandName,
+      variant: active ? variantLabel(readField(active, variantNameField), brandName) : null,
+      row: active,
+      variants: rows,
+    });
+  }, [clickable, onCardClick, brandName, active, variantNameField, rows]);
+
+  return (
+    <div
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={fire}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                fire();
+              }
+            }
+          : undefined
+      }
+      className={`rounded-2xl border border-gray-100 bg-white p-4 shadow-sm ${
+        clickable
+          ? "cursor-pointer transition-all duration-150 ease-out hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-lg active:translate-y-0 active:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-200"
+          : ""
+      } ${className ?? ""}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="truncate text-lg font-extrabold uppercase tracking-tight text-[#1e2a5a]">
+            {title}
+          </h3>
+          {singleProduct ? (
+            showBrandLine && brandName && brandName !== title ? (
+              <p className="mt-0.5 truncate text-xs text-gray-400">{brandName}</p>
+            ) : null
+          ) : rows.length > 0 ? (
+            <p className="mt-0.5 text-xs text-gray-400">
+              {rows.length} {rows.length === 1 ? "variant" : "variants"}
+            </p>
+          ) : null}
+        </div>
+        {showTotal ? (
+          <div className="shrink-0 text-right">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+              Global stock
+            </p>
+            <p className="text-lg font-bold text-[#1e2a5a]">{formatInt(totalValue)}</p>
+          </div>
+        ) : null}
+      </div>
+
+      {/* No variant pills in single-product mode — the card IS one product. */}
+      {!singleProduct && rows.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {sortedVariants.map(({ index, label }) => {
+            const selected = index === Math.min(activeIndex, rows.length - 1);
+            return (
+              <button
+                key={`${label}-${index}`}
+                type="button"
+                aria-pressed={selected}
+                onClick={(e) => {
+                  // Don't let picking a variant count as clicking the card.
+                  e.stopPropagation();
+                  selectVariant(index);
+                }}
+                className={`rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors ${
+                  selected
+                    ? "bg-[#1e2a5a] text-white"
+                    : "border border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+                }`}
+              >
+                {label || "—"}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {active && resolvedPriceFields.length > 0 ? (
+        <div
+          className="mt-3 grid gap-2 rounded-xl bg-gray-50 px-3 py-2.5"
+          style={{ gridTemplateColumns: `repeat(${resolvedPriceFields.length}, minmax(0, 1fr))` }}
+        >
+          {resolvedPriceFields.map((pf) => (
+            <div key={pf.field} className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                {pf.label}
+              </p>
+              <p className="truncate text-sm font-bold text-slate-800">
+                {formatMoney(readField(active, pf.field))}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {typeof renderExtras === "function" && active ? (
+        <div className="mt-3">{renderExtras(active)}</div>
+      ) : null}
+
+      {children ? <div className="mt-3">{children}</div> : null}
+    </div>
+  );
+}

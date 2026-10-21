@@ -1,6 +1,6 @@
 "use client";;
 import { cva } from "class-variance-authority";
-import { isToday, startOfDay, isSunday, isSameMonth } from "date-fns";
+import { format, isToday, startOfDay, isSunday, isSameMonth } from "date-fns";
 import { motion } from "framer-motion";
 import { useMemo, useCallback } from "react";
 import { isBefore } from "date-fns";
@@ -17,6 +17,7 @@ import { Button } from "@calendar/components/ui/button";
 import { Plus } from "lucide-react";
 import { LOGGED_IN_USER } from "@calendar/components/auth/calendar-users";
 import { isEmployeeOnApprovedLeave } from "@calendar/lib/calendar/leaveDay";
+import { HOLIDAY_STYLES } from "@calendar/lib/calendar/holidays";
 
 export const dayCellVariants = cva("text-white", {
   variants: {
@@ -52,7 +53,9 @@ export function DayCell({
 }) {
   const { day, currentMonth, date } = cell;
   const isMobile = useMediaQuery("(max-width: 768px)");
-  const { setEventListDate, isEventListOpen, setSelectedDate, activeDate, setActiveDate, setMobileLayer, mobileLayer, allEvents } = useCalendar();
+  const { setEventListDate, isEventListOpen, setSelectedDate, activeDate, setActiveDate, setMobileLayer, mobileLayer, allEvents, holidaysByDate } = useCalendar();
+  // The holiday on this day from the user's ERP Holiday List, e.g. "Diwali".
+  const holiday = currentMonth ? holidaysByDate?.[format(date, "yyyy-MM-dd")] : undefined;
   const isSelected =
     activeDate &&
     startOfDay(activeDate).getTime() === startOfDay(date).getTime();
@@ -136,6 +139,7 @@ export function DayCell({
         "flex h-full flex-col gap-1 border-l border-t transition-colors",
         isSunday(date) && "border-l-0",
         currentMonth && !isSelected && "lg:hover:bg-muted/40",
+        holiday && !isSelected && HOLIDAY_STYLES.wash,
         isSelected &&
         "ring-1 ring-inset ring-gray-400 dark:ring-gray-600 bg-gray-50/60 dark:bg-gray-900/40"
       )}
@@ -151,12 +155,24 @@ export function DayCell({
           className={cn(
             "h-6 px-1 text-[8px] lg:text-xs font-semibold lg:px-2",
             !currentMonth && "opacity-20",
+            holiday && HOLIDAY_STYLES.text,
             isToday(date) &&
             "flex w-6 translate-x-1 items-center justify-center rounded-full bg-primary px-0 font-bold text-primary-foreground"
           )}
         >
           {day}
         </motion.span>
+        {holiday ? (
+          <span
+            title={holiday}
+            className={cn(
+              "block truncate px-1 text-[7px] font-medium leading-tight lg:px-2 lg:text-[11px]",
+              HOLIDAY_STYLES.text
+            )}
+          >
+            {holiday}
+          </span>
+        ) : null}
         <motion.div
           className={cn(
             "flex gap-0 px-0  lg:h-max-content overflow-hidden lg:flex-col lg:gap-1 w-full",
@@ -238,6 +254,7 @@ export function DayCell({
     currentMonth,
     cellEvents,
     isLeaveDay,
+    holiday,
     showMobileMore,
     showDesktopMore,
     showMoreCount,

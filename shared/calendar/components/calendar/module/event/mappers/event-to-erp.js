@@ -3,6 +3,8 @@ import { COLOR_HEX_MAP, DEFAULT_COLORS } from "@calendar/components/calendar/con
 import { LOGGED_IN_USER } from "@calendar/components/auth/calendar-users";
 import { TAG_IDS } from "@calendar/components/calendar/constants";
 import { ERP_EVENT_FIELDS } from "@calendar/components/calendar/module/event/graphql/field-config";
+import { otherWorkStatus } from "@calendar/lib/calendar/otherWork";
+import { isBackdatedVisit } from "@calendar/lib/calendar/visit";
 
 /**
  * Maps form values to an ERP Event document
@@ -22,6 +24,7 @@ export function mapFormToErpEvent(values, options = {}) {
   } = options;
   const isDoctorVisitPlan =
     values.tags === TAG_IDS.DOCTOR_VISIT_PLAN;
+  const isOtherWork = values.tags === TAG_IDS.OTHER;
 
   const isUpdate = Boolean(erpName);
   // The visit time already on record for the person saving, if any.
@@ -324,10 +327,27 @@ export function mapFormToErpEvent(values, options = {}) {
   // it so the event never ends before it begins. Mirrors the calendar-state
   // clamp in buildCalendarEvent (add-edit-event-dialog).
   const startDate = values.startDate ? new Date(values.startDate) : null;
-  const resolvedEndDate =
-    startDate && computedEndDate && computedEndDate < startDate
-      ? startDate
+  // A backdated visit ends on its planned day (same clock time), not on the
+  // day it was entered; ERP moves its visit time there too (Event Backdate
+  // Stamp server script).
+  const visitEndDate =
+    startDate &&
+    computedEndDate &&
+    computedEndDate !== fallbackEndDate &&
+    isBackdatedVisit(values.startDate)
+      ? new Date(
+          startDate.getFullYear(),
+          startDate.getMonth(),
+          startDate.getDate(),
+          computedEndDate.getHours(),
+          computedEndDate.getMinutes(),
+          computedEndDate.getSeconds()
+        )
       : computedEndDate;
+  const resolvedEndDate =
+    startDate && visitEndDate && visitEndDate < startDate
+      ? startDate
+      : visitEndDate;
 
   const isBirthday = values.tags === "Birthday";
   const doctorId = resolveDoctorLinkId(values.doctor);
@@ -359,9 +379,13 @@ export function mapFormToErpEvent(values, options = {}) {
       COLOR_HEX_MAP[resolvedColor] ??
       COLOR_HEX_MAP.blue,
     all_day: isBirthday || values.allDay ? 1 : 0,
-    event_type: "Private",
-    status:
-      isDoctorVisitPlan && allEmployeeParticipantsVisited
+    // Other Work is Public so ERP returns it to admin / IT / GM / CEO, who sit
+    // outside every reporting chain and so get no upward share. The calendar's
+    // own filter still keeps it from colleagues (see filterCalendarEvents).
+    event_type: isOtherWork ? "Public" : "Private",
+    status: isOtherWork
+      ? otherWorkStatus(values.startDate)
+      : isDoctorVisitPlan && allEmployeeParticipantsVisited
         ? "Completed"
         : "Open",
     docstatus: 0,
